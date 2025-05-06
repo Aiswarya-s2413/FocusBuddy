@@ -9,6 +9,9 @@ import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+
 logger = logging.getLogger(__name__)
 
 class SignupView(APIView):
@@ -154,12 +157,31 @@ class LogoutView(APIView):
         print("Clearing cookies:", request.COOKIES)
         
         return response
+
+
 class UpdateProfileView(APIView):
-    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def put(self, request):
         try:
+            # Get token from cookies
+            access_token = request.COOKIES.get('access')
+            
+            if not access_token:
+                return Response(
+                    {"error": "Authentication credentials were not provided."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            try:
+                # Validate token
+                AccessToken(access_token)
+            except (InvalidToken, TokenError) as e:
+                return Response(
+                    {"error": "Invalid or expired token."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
             user = request.user
             new_name = request.data.get('name')
             
@@ -181,7 +203,8 @@ class UpdateProfileView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.error(f"Error updating profile: {str(e)}")
             return Response(
-                {"error": str(e)},
+                {"error": "An error occurred while updating profile"},
                 status=status.HTTP_400_BAD_REQUEST
             )

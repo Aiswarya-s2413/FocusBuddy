@@ -41,7 +41,8 @@ INSTALLED_APPS = [
     'rest_framework',      
     'corsheaders', 
     'userapp',
-    'adminapp'
+    'focusadminapp',
+    'focusmentorapp',
 ]
 
 MIDDLEWARE = [

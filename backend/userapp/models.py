@@ -42,3 +42,59 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+class Mentor(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='mentor_profile')
+    expertise_level = models.CharField(
+        max_length=20,
+        choices=[
+            ('beginner', 'Beginner'),
+            ('intermediate', 'Intermediate'),
+            ('advanced', 'Advanced'),
+            ('expert', 'Expert')
+        ],
+        default='intermediate'
+    )
+    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    availability = models.JSONField(
+        default=dict,
+        help_text="JSON field to store availability schedule"
+    )
+    rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
+    total_sessions = models.IntegerField(default=0)
+    total_students = models.IntegerField(default=0)
+    is_available = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-rating', '-total_sessions']
+
+    def __str__(self):
+        return f"{self.user.name}'s Mentor Profile"
+
+    def save(self, *args, **kwargs):
+        # Ensure the associated user is marked as a mentor
+        if not self.user.is_mentor:
+            self.user.is_mentor = True
+            self.user.save()
+        super().save(*args, **kwargs)
+
+    @property
+    def full_profile(self):
+        """Returns a dictionary with both user and mentor information"""
+        return {
+            'id': self.user.id,
+            'name': self.user.name,
+            'email': self.user.email,
+            'subjects': self.user.subjects,
+            'bio': self.user.bio,
+            'experience': self.user.experience,
+            'expertise_level': self.expertise_level,
+            'hourly_rate': float(self.hourly_rate),
+            'availability': self.availability,
+            'rating': float(self.rating),
+            'total_sessions': self.total_sessions,
+            'total_students': self.total_students,
+            'is_available': self.is_available
+        }
+

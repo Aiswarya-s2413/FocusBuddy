@@ -67,10 +67,6 @@ export const updateProfile = createAsyncThunk(
   'user/updateProfile',
   async (name, { rejectWithValue, getState }) => {
     try {
-      // We don't need the token from state since we're using HttpOnly cookies
-      
-      console.log('Updating profile with name:', name);
-      
       const response = await axios.put(
         'http://localhost:8000/api/user/update-profile/',
         { name },
@@ -78,12 +74,13 @@ export const updateProfile = createAsyncThunk(
           withCredentials: true,
           headers: {
             'Content-Type': 'application/json',
-            // No need to set Authorization header as JWT is in HttpOnly cookies
+            // Add X-CSRFToken header if you're using CSRF protection
+            'X-CSRFToken': document.cookie.split('; ')
+              .find(row => row.startsWith('csrftoken='))
+              ?.split('=')[1]
           }
         }
       );
-      
-      console.log('Profile update response:', response.data);
       
       // Update user in localStorage
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
