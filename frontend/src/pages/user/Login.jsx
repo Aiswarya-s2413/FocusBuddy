@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Mail, KeyRound, Eye, EyeOff } from "lucide-react";
@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardContent, CardFooter } from "../../components/ui/card";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser } from "../../store/userSlice"; 
+import { clearMessage } from "../../store/userSlice";
 
 const Login = () => {
   const dispatch = useDispatch();
@@ -18,19 +19,59 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  const getErrorMessage = (error) => {
+    if (!error) return "";
+    
+    console.log('Error response:', error); // Debug log
+    
+    // Handle different error cases
+    if (error.non_field_errors && Array.isArray(error.non_field_errors)) {
+      const errorMessage = error.non_field_errors[0];
+      if (errorMessage.toLowerCase().includes('invalid credentials') || 
+          errorMessage.toLowerCase().includes('unverified user')) {
+        return "Incorrect email or password. Please try again.";
+      }
+      return errorMessage;
+    }
+    
+    // Handle error object
+    if (error.error) {
+      if (typeof error.error === 'string') {
+        if (error.error.toLowerCase().includes('invalid credentials') || 
+            error.error.toLowerCase().includes('unverified user')) {
+          return "Incorrect email or password. Please try again.";
+        }
+        if (error.error.toLowerCase().includes('user is blocked')) {
+          return "Your account has been blocked by admin. Please contact support for assistance.";
+        }
+        return error.error;
+      }
+    }
+    
+    // Handle message field
+    if (error.message) {
+      return error.message;
+    }
+    
+    // Handle detail field (common in DRF)
+    if (error.detail) {
+      return error.detail;
+    }
+    
+    return "An error occurred. Please try again.";
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    // Dispatch the login action
     dispatch(loginUser({ email, password }));
   };
 
-  // Redirect to dashboard if login is successful
-  React.useEffect(() => {
+  useEffect(() => {
     if (message && !error) {
-      navigate("/settings"); // Navigate to the dashboard upon success
+      navigate("/settings");
+      dispatch(clearMessage()); 
     }
-  }, [message, error, navigate]);
+  }, [message, error, navigate, dispatch]);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -55,7 +96,7 @@ const Login = () => {
                   className="pl-10"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)} // Handle input change
+                  onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
             </div>
@@ -70,7 +111,7 @@ const Login = () => {
                   placeholder="••••••••"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)} // Handle input change
+                  onChange={(e) => setPassword(e.target.value)}
                 />
                 <button
                   type="button"
@@ -89,13 +130,13 @@ const Login = () => {
             <Button
               type="submit"
               className="w-full bg-purple-600 hover:bg-purple-700"
-              disabled={loading} // Disable button while loading
+              disabled={loading}
             >
-              {loading ? "Logging in..." : "Log In"} {/* Show loading state */}
+              {loading ? "Logging in..." : "Log In"}
             </Button>
             {error && (
               <div className="text-red-500 text-sm mt-2">
-                {error.message || "An error occurred. Please try again."}
+                {getErrorMessage(error)}
               </div>
             )}
           </form>

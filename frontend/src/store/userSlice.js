@@ -53,10 +53,12 @@ export const loginUser = createAsyncThunk(
       localStorage.setItem('user', JSON.stringify(response.data.user));
       return response.data;
     } catch (error) {
+      console.log('Login error:', error.response?.data); // Debug log
       if (error.response) {
+        // Return the error response data directly
         return rejectWithValue(error.response.data);
       } else {
-        return rejectWithValue({ message: 'Network error, please try again later.' });
+        return rejectWithValue({ non_field_errors: ['Network error, please try again later.'] });
       }
     }
   }
@@ -107,6 +109,9 @@ const userSlice = createSlice({
       state.message = '';
       state.error = null;
     },
+    clearMessage: (state) => {
+      state.message = '';
+    }
   },
   extraReducers: (builder) => {
     // SIGNUP
@@ -166,6 +171,6 @@ const userSlice = createSlice({
   },
 });
 
-export const { logout } = userSlice.actions;
+export const { logout, clearMessage } = userSlice.actions;
 
 export default userSlice.reducer;

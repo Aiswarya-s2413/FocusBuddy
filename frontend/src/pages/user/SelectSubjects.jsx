@@ -12,6 +12,16 @@ const SelectSubjects = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Get email from localStorage
+  const email = localStorage.getItem("email");
+
+  // Redirect if no email is found
+  useEffect(() => {
+    if (!email) {
+      navigate('/signup');
+    }
+  }, [email, navigate]);
+
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
@@ -43,19 +53,23 @@ const SelectSubjects = () => {
     }
 
     try {
-      const email = localStorage.getItem("email");
       const response = await axios.post("http://localhost:8000/api/user/select-subjects/", {
         email,
         subjects: selectedSubjects,
       });
 
       if (response.status === 200) {
+        localStorage.removeItem("email"); // Clear email from localStorage after successful submission
         navigate("/login");
       }
     } catch (err) {
       setError(err.response?.data?.error || "Failed to save subjects. Please try again.");
     }
   };
+
+  if (!email) {
+    return null; // Don't render anything while redirecting
+  }
 
   if (loading) {
     return (

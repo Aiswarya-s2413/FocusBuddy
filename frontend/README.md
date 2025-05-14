@@ -16,3 +16,4 @@ If you are developing a production application, we recommend using TypeScript wi
 //otp timer
 //logout pop up
 //admin side bar
+//prevent url access of some pages

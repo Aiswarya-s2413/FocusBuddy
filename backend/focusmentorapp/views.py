@@ -4,12 +4,20 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import logout
-from .serializers import MentorSignupSerializer, MentorLoginSerializer, MentorProfileSerializer
-from userapp.models import User
+from .serializers import (
+    MentorSignupSerializer, MentorLoginSerializer, MentorProfileSerializer,
+    MentorOtpVerifySerializer, MentorSubjectSelectionSerializer,
+    MentorForgotPasswordSerializer, MentorVerifyForgotPasswordOTPSerializer,
+    MentorResetPasswordSerializer
+)
+from userapp.models import User, Subject
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import logging
+from django.core.mail import send_mail
+from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +45,8 @@ class MentorSignupView(APIView):
             # Generate tokens for the new user
             refresh = RefreshToken.for_user(user)
             response = Response({
-                "message": "Signup successful",
-                "user": {
-                    "id": user.id,
-                    "name": user.name,
-                    "email": user.email,
-                    "is_mentor": user.is_mentor,
-                    "subjects": user.subjects,
-                    "bio": user.bio,
-                    "experience": user.experience
-                }
+                "message": "Signup successful. Please check your email for OTP verification.",
+                "user": serializer.to_representation(user)
             }, status=status.HTTP_201_CREATED)
             
             # Set tokens in cookies
@@ -212,3 +212,108 @@ class MentorRefreshTokenView(APIView):
                 {"error": "An error occurred while refreshing token"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+class MentorOtpVerifyView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = MentorOtpVerifySerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            otp = serializer.validated_data['otp']
+            try:
+                user = User.objects.get(email=email, otp=otp, is_mentor=True)
+                
+                # Check if OTP has expired (1 minute)
+                if user.otp_created_at and (timezone.now() - user.otp_created_at).total_seconds() > 60:
+                    user.otp = None
+                    user.otp_created_at = None
+                    user.save()
+                    return Response({"error": "OTP has expired. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+                
+                user.is_verified = True
+                user.otp = None  # Clear the OTP after successful verification
+                user.otp_created_at = None
+                user.save()
+                return Response({"message": "OTP verified"}, status=status.HTTP_200_OK)
+            except User.DoesNotExist:
+                return Response({"error": "Invalid Email or OTP"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MentorSelectSubjectsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        try:
+            subjects = Subject.objects.all()
+            # Create a simple list of subjects with id and name
+            subject_list = [{'id': subject.id, 'name': subject.name} for subject in subjects]
+            return Response(subject_list, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error fetching subjects: {str(e)}")
+            return Response(
+                {"error": "Failed to fetch subjects"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def post(self, request):
+        serializer = MentorSubjectSelectionSerializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                user = User.objects.get(email=serializer.validated_data['email'], is_verified=True, is_mentor=True)
+                subject_ids = serializer.validated_data['subjects']
+                subjects = Subject.objects.filter(id__in=subject_ids)
+                user.subjects.set(subjects)
+                return Response({"message": "Subjects added successfully"}, status=status.HTTP_200_OK)
+            except User.DoesNotExist:
+                return Response({"error": "Mentor not found or not verified"}, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                logger.error(f"Error saving subjects: {str(e)}")
+                return Response(
+                    {"error": "Failed to save subjects"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MentorForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = MentorForgotPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            try:
+                send_mail(
+                    subject="Your FocusBuddy Password Reset OTP",
+                    message=f"Hello {user.name}, your OTP for password reset is {user.otp}",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+                return Response({"message": "OTP has been sent to your email"}, status=status.HTTP_200_OK)
+            except Exception as e:
+                logger.error(f"Failed to send OTP email: {str(e)}")
+                return Response(
+                    {"error": "Failed to send OTP email. Please try again."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MentorVerifyForgotPasswordOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = MentorVerifyForgotPasswordOTPSerializer(data=request.data)
+        if serializer.is_valid():
+            return Response({"message": "OTP verified successfully"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MentorResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = MentorResetPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({"message": "Password reset successfully"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

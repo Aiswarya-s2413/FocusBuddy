@@ -8,6 +8,57 @@ class Subject(models.Model):
     def __str__(self):
         return self.name
 
+class Task(models.Model):
+    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='tasks')
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    estimated_minutes = models.IntegerField()
+    estimated_pomodoros = models.IntegerField()
+    completed_pomodoros = models.IntegerField(default=0)
+    is_completed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.title} - {self.user.name}"
+
+    def save(self, *args, **kwargs):
+        # Calculate estimated pomodoros (25 minutes per pomodoro)
+        if not self.estimated_pomodoros:
+            self.estimated_pomodoros = (self.estimated_minutes + 24) // 25  # Round up
+        super().save(*args, **kwargs)
+
+class PomodoroSession(models.Model):
+    SESSION_TYPES = [
+        ('focus', 'Focus'),
+        ('short_break', 'Short Break'),
+        ('long_break', 'Long Break'),
+    ]
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='sessions')
+    session_type = models.CharField(max_length=20, choices=SESSION_TYPES)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField(null=True, blank=True)
+    duration_minutes = models.IntegerField()
+    is_completed = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.task.title} - {self.session_type} Session"
+
+class PomodoroSettings(models.Model):
+    user = models.OneToOneField('User', on_delete=models.CASCADE, related_name='pomodoro_settings')
+    focus_duration = models.IntegerField(default=25)  # in minutes
+    short_break_duration = models.IntegerField(default=5)  # in minutes
+    long_break_duration = models.IntegerField(default=15)  # in minutes
+    sessions_before_long_break = models.IntegerField(default=4)
+    auto_start_next_session = models.BooleanField(default=False)
+    play_sound_when_session_ends = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Pomodoro Settings - {self.user.name}"
+
 class UserManager(BaseUserManager):
     def create_user(self,email,name,password=None,**extra_fields):
         if not email:
@@ -29,10 +80,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=15)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    is_mentor = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
     otp = models.CharField(max_length=6, blank=True, null=True)
+    otp_created_at = models.DateTimeField(null=True, blank=True)
     is_verified = models.BooleanField(default=False)
     subjects = models.ManyToManyField(Subject, related_name='users', blank=True)
+    bio = models.TextField(blank=True, null=True)
+    experience = models.IntegerField(default=0)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['name']

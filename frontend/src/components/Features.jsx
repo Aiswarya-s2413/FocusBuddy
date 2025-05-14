@@ -63,7 +63,7 @@ const Features = () => {
             <FeatureCard
               icon={<Heart className="w-6 h-6 text-rose-500" />}
               title="Mentoring"
-              description="Access and connect with mentors through pre-scheduled meetings."
+              description="Access and connect with mentors through pre-scheduled meetings to level up youself."
               color="hover:bg-focusbuddy-pink/20"
             />
           </div>

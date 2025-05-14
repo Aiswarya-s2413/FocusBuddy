@@ -12,7 +12,7 @@ const AdminLogin = () => {
   const navigate = useNavigate();
 
   // Get admin state from Redux
-  const { loading, error, message, isAuthenticated } = useSelector(
+  const { loading, error, message, isAuthenticated, admin } = useSelector(
     (state) => state.admin
   );
 
@@ -39,12 +39,12 @@ const AdminLogin = () => {
     dispatch(clearMessage());
   }, [dispatch]);
 
-  // Redirect to users page if already authenticated
+  // If admin is already authenticated, redirect to /admin/users
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/admin/users", { replace: true });
+    if (admin) {
+      navigate('/admin/users');
     }
-  }, [isAuthenticated, navigate]);
+  }, [admin]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

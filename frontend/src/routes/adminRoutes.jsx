@@ -4,10 +4,15 @@ import AdminUsers from "../pages/admin/AdminUsers";
 import { useSelector } from "react-redux";
 
 const ProtectedAdminRoute = ({ children }) => {
-  const { isAuthenticated } = useSelector((state) => state.admin);
-  if (!isAuthenticated) {
+  const { admin } = useSelector((state) => state.admin);
+
+  console.log('ProtectedAdminRoute - Admin:', admin);
+
+  if (!admin) {
+    console.log('Redirecting to /admin/login');
     return <Navigate to="/admin/login" replace />;
   }
+
   return children;
 };
 
@@ -23,7 +28,14 @@ const AdminRoutes = () => {
           </ProtectedAdminRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/admin/users" replace />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedAdminRoute>
+            <Navigate to="/admin/users" replace />
+          </ProtectedAdminRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/admin/login" replace />} />
     </Routes>
   );

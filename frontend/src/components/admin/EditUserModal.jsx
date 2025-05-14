@@ -4,7 +4,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
-import axiosInstance from "../../utils/axios";
+import { adminAxios } from '../../utils/axios';
 import { toast } from "react-hot-toast";
 
 const EditUserModal = ({ isOpen, onClose, user, onUserUpdated }) => {
@@ -48,7 +48,7 @@ const EditUserModal = ({ isOpen, onClose, user, onUserUpdated }) => {
       };
       console.log("Sending update request with data:", updateData);
 
-      const response = await axiosInstance.put(`/admin/users/${user.id}/edit/`, updateData);
+      const response = await adminAxios.put(`/users/${user.id}/edit/`, updateData);
       console.log("Received response:", response.data);
       
       if (response.data && response.data.user) {

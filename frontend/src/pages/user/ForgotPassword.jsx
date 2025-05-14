@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Mail, KeyRound, Eye, EyeOff } from "lucide-react";
@@ -19,6 +19,35 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [passwordsMatch, setPasswordsMatch] = useState(true);
+  const [passwordError, setPasswordError] = useState("");
+  const [timeLeft, setTimeLeft] = useState(60); // 60 seconds timer
+  const [canResend, setCanResend] = useState(false);
+
+  // Timer effect
+  useEffect(() => {
+    let timer;
+    if (step === 2 && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            setCanResend(true);
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [step, timeLeft]);
+
+  // Reset timer when moving to OTP step
+  useEffect(() => {
+    if (step === 2) {
+      setTimeLeft(60);
+      setCanResend(false);
+    }
+  }, [step]);
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
@@ -57,11 +86,20 @@ const ForgotPassword = () => {
     }
   };
 
+  const isOnlySymbolsOrSpaces = (str) => /^[^a-zA-Z0-9]*$/.test(str) || /^\s*$/.test(str);
+
   const handlePasswordChange = (e) => {
     const value = e.target.value;
     setNewPassword(value);
     if (confirmPassword) {
       setPasswordsMatch(value === confirmPassword);
+    }
+    if (value.length < 6) {
+      setPasswordError("Password must be at least 6 characters.");
+    } else if (isOnlySymbolsOrSpaces(value)) {
+      setPasswordError("Password cannot be only symbols or spaces.");
+    } else {
+      setPasswordError("");
     }
   };
 
@@ -75,7 +113,7 @@ const ForgotPassword = () => {
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    if (!passwordsMatch) {
+    if (!passwordsMatch || passwordError) {
       return;
     }
     setLoading(true);
@@ -92,6 +130,23 @@ const ForgotPassword = () => {
       }
     } catch (err) {
       setError(err.response?.data?.error || "Failed to reset password. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.post("http://localhost:8000/api/user/forgot-password/", { email });
+      if (response.status === 200) {
+        setMessage("New OTP has been sent to your email");
+        setTimeLeft(60);
+        setCanResend(false);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to resend OTP. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -149,6 +204,21 @@ const ForgotPassword = () => {
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                 />
+                <div className="flex justify-between items-center mt-2">
+                  <p className="text-sm text-gray-600">
+                    Time remaining: {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                  </p>
+                  {canResend && (
+                    <button
+                      type="button"
+                      onClick={handleResendOTP}
+                      className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                      disabled={loading}
+                    >
+                      Resend OTP
+                    </button>
+                  )}
+                </div>
               </div>
               <Button
                 type="submit"
@@ -183,6 +253,7 @@ const ForgotPassword = () => {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700" htmlFor="confirmPassword">
@@ -211,7 +282,7 @@ const ForgotPassword = () => {
               <Button
                 type="submit"
                 className="w-full bg-purple-600 hover:bg-purple-700"
-                disabled={loading || !passwordsMatch}
+                disabled={loading || !passwordsMatch || !!passwordError}
               >
                 {loading ? "Resetting Password..." : "Reset Password"}
               </Button>

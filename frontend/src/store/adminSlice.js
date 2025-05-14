@@ -1,12 +1,12 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axiosInstance from '../utils/axios';
+import { adminAxios } from '../utils/axios';
 
 // Admin Login
 export const adminLogin = createAsyncThunk(
   'admin/login',
   async (credentials, { rejectWithValue }) => {
     try {
-      const response = await axiosInstance.post('/admin/login/', credentials);
+      const response = await adminAxios.post('/admin/login/', credentials);
       return response.data;
     } catch (error) {
       if (error.response) {
@@ -23,7 +23,7 @@ export const adminLogout = createAsyncThunk(
   'admin/logout',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await axiosInstance.post('/admin/logout/');
+      const response = await adminAxios.post('/admin/logout/');
       return response.data;
     } catch (error) {
       if (error.response) {
@@ -40,7 +40,7 @@ export const checkAuthStatus = createAsyncThunk(
   'admin/checkAuth',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await axiosInstance.get('/admin/check-auth/');
+      const response = await adminAxios.get('/admin/check-auth/');
       return response.data;
     } catch (error) {
       // Don't treat 401 as an error, just return not authenticated

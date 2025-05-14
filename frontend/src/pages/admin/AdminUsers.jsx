@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Search, Edit2, Ban, CheckCircle, X, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
-import axiosInstance from "../../utils/axios";
+import { adminAxios } from '../../utils/axios';
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
@@ -33,8 +33,8 @@ const AdminUsers = () => {
     try {
       setLoading(true);
       setIsSearching(true);
-      const response = await axiosInstance.get(
-        `/admin/users/?search=${query}&page=${page}&page_size=${pagination.page_size}`
+      const response = await adminAxios.get(
+        `/users/?search=${query}&page=${page}&page_size=${pagination.page_size}`
       );
       setUsers(response.data.users);
       setPagination(response.data.pagination);
@@ -80,7 +80,7 @@ const AdminUsers = () => {
 
   const handleBlockUser = async (userId) => {
     try {
-      const response = await axiosInstance.post(`/admin/users/${userId}/block/`);
+      const response = await adminAxios.post(`/users/${userId}/block/`);
       setUsers(users.map(user => 
         user.id === userId ? { ...user, is_active: !user.is_active } : user
       ));
@@ -114,7 +114,7 @@ const AdminUsers = () => {
   const handleLogout = async () => {
     try {
       // Try to call the logout endpoint
-      await axiosInstance.post('/admin/logout/');
+      await adminAxios.post('/logout/');
     } catch (error) {
       console.error('Logout error:', error);
       // Even if the API call fails, we'll still proceed with the logout
@@ -125,6 +125,11 @@ const AdminUsers = () => {
       navigate('/admin/login');
     }
   };
+
+  // After fetching users:
+  // Filter out mentors and sort by latest
+  const onlyUsers = users?users.filter(user => !user.is_mentor):[];
+  const sortedUsers = onlyUsers.sort((a, b) => new Date(b.date_joined) - new Date(a.date_joined));
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -175,7 +180,7 @@ const AdminUsers = () => {
         <div className="text-center py-8 text-red-500">
           <p>{error}</p>
         </div>
-      ) : users.length === 0 ? (
+      ) : users&&users.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-lg text-gray-500">
             {searchQuery ? "No users found matching your search." : "No users found."}
@@ -205,7 +210,7 @@ const AdminUsers = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
+                {sortedUsers.map((user) => (
                   <tr key={user.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{user.name}</div>
@@ -267,7 +272,7 @@ const AdminUsers = () => {
           </div>
 
           {/* Pagination Controls */}
-          <div className="mt-4 flex items-center justify-between">
+          {pagination && <div className="mt-4 flex items-center justify-between">
             <div className="text-sm text-gray-700">
               Showing {((pagination.current_page - 1) * pagination.page_size) + 1} to{" "}
               {Math.min(pagination.current_page * pagination.page_size, pagination.total_users)} of{" "}
@@ -298,7 +303,7 @@ const AdminUsers = () => {
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
-          </div>
+          </div>}
         </>
       )}
 

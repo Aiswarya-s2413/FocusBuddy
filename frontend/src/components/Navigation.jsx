@@ -31,8 +31,8 @@ const Navigation = () => {
           <div className="hidden md:flex items-center space-x-8">
             <nav className="flex items-center space-x-6">
               <Link to="/journal" className="text-gray-600 hover:text-gray-900">Journal</Link>
-              <a href="#features" className="text-gray-600 hover:text-gray-900">Features</a>
-              <a href="#" className="text-gray-600 hover:text-gray-900">How It Works</a>
+              <a href="#features" className="text-gray-600 hover:text-gray-900" onClick={e => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); }}>Features</a>
+              <a href="#" className="text-gray-600 hover:text-gray-900" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); }}>How It Works</a>
               <a href="#" className="text-gray-600 hover:text-gray-900">Pricing</a>
             </nav>
 
@@ -61,8 +61,8 @@ const Navigation = () => {
           <div className="md:hidden mt-4 py-4 border-t border-gray-100 animate-fade-in bg-white rounded-lg shadow-lg">
             <nav className="flex flex-col space-y-4">
               <Link to="/journal" className="text-gray-600 hover:text-gray-900 py-2">Journal</Link>
-              <a href="#features" className="text-gray-600 hover:text-gray-900 py-2">Features</a>
-              <a href="#" className="text-gray-600 hover:text-gray-900 py-2">How It Works</a>
+              <a href="#features" className="text-gray-600 hover:text-gray-900 py-2" onClick={e => { e.preventDefault(); setIsMobileMenuOpen(false); setTimeout(() => { document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); }, 100); }}>Features</a>
+              <a href="#" className="text-gray-600 hover:text-gray-900 py-2" onClick={e => { e.preventDefault(); setIsMobileMenuOpen(false); setTimeout(() => { document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); }, 100); }}>How It Works</a>
               <a href="#" className="text-gray-600 hover:text-gray-900 py-2">Pricing</a>
             </nav>
             <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col space-y-3">

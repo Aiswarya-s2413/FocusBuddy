@@ -1,51 +1,49 @@
 import axios from 'axios';
 
-// Create axios instance with default config
-const axiosInstance = axios.create({
-  baseURL: 'http://localhost:8000/api',
+const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+// Axios instance (used internally if needed)
+const instance = axios.create({
+  baseURL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add a request interceptor
-axiosInstance.interceptors.request.use(
-  (config) => {
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+// User Axios instance
+export const userAxios = axios.create({
+  baseURL: `${baseURL}/api/user/`,
+  withCredentials: true, 
+});
 
-// Add a response interceptor
-axiosInstance.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+// Admin Axios instance
+export const adminAxios = axios.create({
+  baseURL: `${baseURL}/admin/`,
+  withCredentials: true, 
+});
+
+// Token refresh logic (ONLY for admin if needed)
+adminAxios.interceptors.response.use(
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // If the error is 401 and we haven't tried to refresh the token yet
-    // AND this is not a refresh token request itself
-    if (error.response?.status === 401 && 
-        !originalRequest._retry && 
-        !originalRequest.url.includes('/admin/refresh/')) {
-      
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url.includes('/admin/refresh/')
+    ) {
       originalRequest._retry = true;
 
       try {
-        // Try to refresh the token
-        const response = await axiosInstance.post('/admin/refresh/');
-        
-        // If refresh successful, retry the original request
-        return axiosInstance(originalRequest);
+        // This should trigger the backend to check the refresh token from the cookie
+        await adminAxios.post('/refresh/');
+
+        // Retry original request (cookies still attached automatically)
+        return adminAxios(originalRequest);
       } catch (refreshError) {
-        // If refresh fails, redirect to login
-        if (!window.location.pathname.includes('/admin/login')) {
-          window.location.href = '/admin/login';
-        }
+        window.location.href = '/admin/login';
         return Promise.reject(refreshError);
       }
     }
@@ -53,5 +51,3 @@ axiosInstance.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-export default axiosInstance; 

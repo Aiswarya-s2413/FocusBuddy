@@ -7,12 +7,21 @@ import { Button } from "../../components/ui/button";
 import { Card, CardHeader, CardContent, CardFooter } from "../../components/ui/card";
 import { Mail, Phone, User, Eye, EyeOff } from "lucide-react";
 import { Link } from "react-router-dom";
+import axios from "axios";
+
+const initialErrors = {
+  name: "",
+  email: "",
+  phone: "",
+  password: "",
+  confirmPassword: ""
+};
 
 const Signup = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const { loading, error } = useSelector((state) => state.user);
+  const { error } = useSelector((state) => state.user);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -22,45 +31,132 @@ const Signup = () => {
     confirmPassword: "",
   });
 
+  const [formErrors, setFormErrors] = useState(initialErrors);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordsMatch, setPasswordsMatch] = useState(true);
+  const [isContinuingSignup, setIsContinuingSignup] = useState(false);
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Validation helpers
+  const isOnlySymbolsOrSpaces = (str) => /^[^a-zA-Z0-9]*$/.test(str) || /^\s*$/.test(str);
+  const isValidEmail = (email) => /@gmail\.com$/.test(email);
+  const isValidPhone = (phone) => /^\d{10}$/.test(phone);
+
+  const validateField = (id, value) => {
+    let error = "";
+    if (!value || value.trim() === "") {
+      error = "This field is required.";
+    } else if (isOnlySymbolsOrSpaces(value)) {
+      error = "Cannot be only symbols or spaces.";
+    } else {
+      switch (id) {
+        case "name":
+          if (value.trim().length < 4) error = "Name must be at least 4 letters.";
+          break;
+        case "email":
+          if (!isValidEmail(value)) error = "Email must be a valid @gmail.com address.";
+          break;
+        case "phone":
+          if (!isValidPhone(value)) error = "Phone must be exactly 10 digits.";
+          break;
+        case "password":
+          if (value.length < 6) error = "Password must be at least 6 characters.";
+          break;
+        case "confirmPassword":
+          if (value !== formData.password) error = "Passwords do not match.";
+          break;
+        default:
+          break;
+      }
+    }
+    return error;
+  };
 
   const handleChange = (e) => {
     const { id, value } = e.target;
     setFormData((prev) => ({ ...prev, [id]: value }));
 
+    // Validate on change
+    setFormErrors((prev) => ({ ...prev, [id]: validateField(id, value) }));
+
     if (id === "password" || id === "confirmPassword") {
       const password = id === "password" ? value : formData.password;
       const confirm = id === "confirmPassword" ? value : formData.confirmPassword;
       setPasswordsMatch(password === confirm || confirm === "");
+      setFormErrors((prev) => ({
+        ...prev,
+        confirmPassword: confirm && password !== confirm ? "Passwords do not match." : ""
+      }));
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
+    dispatch({ type: 'user/setError', payload: null }); // Clear any existing error
 
-    if (formData.password !== formData.confirmPassword) {
-      setPasswordsMatch(false);
+    // Validate all fields before submission
+    let hasErrors = false;
+    const newErrors = {};
+    Object.keys(formData).forEach(key => {
+      const error = validateField(key, formData[key]);
+      if (error) {
+        newErrors[key] = error;
+        hasErrors = true;
+      }
+    });
+    
+    if (hasErrors) {
+      setFormErrors(newErrors);
+      setIsLoading(false);
       return;
     }
 
-    const { name, email, phone, password } = formData;
-
-    dispatch(signupUser({ name, email, phone, password }))
-      .then((res) => {
-        if (res.meta.requestStatus === "fulfilled") {
-          // Store email in localStorage for OTP verification
-          localStorage.setItem("email", email);
-          navigate("/verify-otp", { state: { email } });
-        } else if (res.meta.requestStatus === "rejected") {
-          // Handle rejected case
-          console.error("Signup failed:", res.payload);
-        }
-      })
-      .catch((error) => {
-        console.error("Error during signup:", error);
+    try {
+      console.log("Attempting signup with data:", {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone
       });
+
+      const signupResponse = await axios.post("http://localhost:8000/api/user/signup/", {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        password: formData.password,
+      });
+      
+      console.log("Signup response:", signupResponse.data);
+      
+      if (signupResponse.status === 201) {
+        setMessage(signupResponse.data.message);
+        localStorage.setItem("email", formData.email);
+        navigate("/verify-otp");
+      }
+    } catch (err) {
+      console.log("Signup error details:", {
+        status: err.response?.status,
+        data: err.response?.data,
+        headers: err.response?.headers
+      });
+      
+      if (err.response?.data?.email) {
+        // Handle email-specific errors
+        const emailError = Array.isArray(err.response.data.email) 
+          ? err.response.data.email[0] 
+          : err.response.data.email;
+        dispatch({ type: 'user/setError', payload: emailError });
+      } else {
+        const errorMessage = err.response?.data?.error || 
+                           (typeof err.response?.data === 'string' ? err.response?.data : 
+                           "An error occurred during signup");
+        dispatch({ type: 'user/setError', payload: errorMessage });
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -72,10 +168,11 @@ const Signup = () => {
           </h2>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             <div className="space-y-2">
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">Your Name</label>
               <Input id="name" type="text" placeholder="" required value={formData.name} onChange={handleChange} />
+              {formErrors.name && <p className="text-sm text-red-500">{formErrors.name}</p>}
             </div>
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email Address</label>
@@ -83,6 +180,7 @@ const Signup = () => {
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-5 w-5" />
                 <Input id="email" type="email" placeholder="" className="pl-10" required value={formData.email} onChange={handleChange} />
               </div>
+              {formErrors.email && <p className="text-sm text-red-500">{formErrors.email}</p>}
             </div>
             <div className="space-y-2">
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone Number</label>
@@ -90,6 +188,7 @@ const Signup = () => {
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-5 w-5" />
                 <Input id="phone" type="tel" placeholder="" className="pl-10" required value={formData.phone} onChange={handleChange} />
               </div>
+              {formErrors.phone && <p className="text-sm text-red-500">{formErrors.phone}</p>}
             </div>
             <div className="space-y-2">
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
@@ -110,6 +209,7 @@ const Signup = () => {
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {formErrors.password && <p className="text-sm text-red-500">{formErrors.password}</p>}
             </div>
             <div className="space-y-2">
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">Confirm Password</label>
@@ -131,7 +231,7 @@ const Signup = () => {
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
-              {!passwordsMatch && <p className="text-sm text-red-500">Passwords do not match</p>}
+              {formErrors.confirmPassword && <p className="text-sm text-red-500">{formErrors.confirmPassword}</p>}
               {error && (
                 <p className="text-sm text-red-500">
                   {typeof error === 'object' ? error.message || Object.values(error)[0] : error}
@@ -141,9 +241,9 @@ const Signup = () => {
             <Button
               type="submit"
               className="w-full bg-purple-600 hover:bg-purple-700"
-              disabled={loading}
+              disabled={isLoading}
             >
-              {loading ? "Signing up..." : "Sign Up"}
+              {isLoading ? "Signing up..." : "Sign Up"}
             </Button>
           </form>
         </CardContent>
