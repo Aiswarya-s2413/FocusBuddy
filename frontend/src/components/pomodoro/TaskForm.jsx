@@ -3,11 +3,12 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { useToast } from "../ui/use-toast";
-import { Task } from '../../hooks/usePomodoro';
+import { Textarea } from "../ui/textarea"; // You'll need to import this component
 
 export const TaskForm = ({ onTaskSubmit }) => {
   const { toast } = useToast();
   const [taskTitle, setTaskTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [estimatedTime, setEstimatedTime] = useState('');
 
   const handleSubmit = (e) => {
@@ -32,23 +33,25 @@ export const TaskForm = ({ onTaskSubmit }) => {
       return;
     }
 
-    const estimatedPomodoros = Math.ceil(timeInMinutes / 25);
-
+    // Now match the backend expected format with snake_case keys
     const newTask = {
-      id: Date.now().toString(),
       title: taskTitle,
-      estimatedPomodoros,
-      completedPomodoros: 0
+      description: description, // Added description field
+      estimated_minutes: timeInMinutes, // Changed to match backend field name
+      // No need to send estimated_pomodoros, backend treats it as read-only
+      // No need to send completed_pomodoros, backend treats it as read-only
     };
 
     onTaskSubmit(newTask);
 
+    // Reset form
     setTaskTitle('');
+    setDescription('');
     setEstimatedTime('');
 
     toast({
       title: "Task added",
-      description: `${taskTitle} added with ${estimatedPomodoros} estimated pomodoro session(s).`
+      description: `${taskTitle} added with an estimated time of ${timeInMinutes} minutes.`
     });
   };
 
@@ -64,6 +67,17 @@ export const TaskForm = ({ onTaskSubmit }) => {
             placeholder="What are you working on?"
             value={taskTitle}
             onChange={(e) => setTaskTitle(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="task-description">Description (Optional)</Label>
+          <Textarea
+            id="task-description"
+            placeholder="Add details about this task"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
           />
         </div>
 

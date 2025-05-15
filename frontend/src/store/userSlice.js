@@ -67,7 +67,7 @@ export const loginUser = createAsyncThunk(
 // UPDATE PROFILE
 export const updateProfile = createAsyncThunk(
   'user/updateProfile',
-  async (name, { rejectWithValue, getState }) => {
+  async (name, { rejectWithValue, getState, dispatch }) => {
     try {
       const response = await axios.put(
         'http://localhost:8000/api/user/update-profile/',
@@ -76,7 +76,6 @@ export const updateProfile = createAsyncThunk(
           withCredentials: true,
           headers: {
             'Content-Type': 'application/json',
-            // Add X-CSRFToken header if you're using CSRF protection
             'X-CSRFToken': document.cookie.split('; ')
               .find(row => row.startsWith('csrftoken='))
               ?.split('=')[1]
@@ -92,11 +91,66 @@ export const updateProfile = createAsyncThunk(
       return response.data;
     } catch (error) {
       console.error('Profile update error:', error.response?.data || error.message);
+      
+      // Check if error is due to expired token
+      if (error.response?.status === 401 && 
+          error.response?.data?.code === 'token_not_valid') {
+        try {
+          // Try to refresh the token
+          await dispatch(refreshToken()).unwrap();
+          
+          // Retry the original request with the new token
+          const retryResponse = await axios.put(
+            'http://localhost:8000/api/user/update-profile/',
+            { name },
+            { 
+              withCredentials: true,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.cookie.split('; ')
+                  .find(row => row.startsWith('csrftoken='))
+                  ?.split('=')[1]
+              }
+            }
+          );
+          
+          // Update user in localStorage
+          const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+          const updatedUser = { ...currentUser, ...retryResponse.data.user };
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          
+          return retryResponse.data;
+        } catch (refreshError) {
+          // If refresh fails, user needs to login again
+          console.error('Token refresh failed:', refreshError);
+          // You might want to dispatch a logout action here
+          return rejectWithValue('Session expired. Please log in again.');
+        }
+      }
+      
       return rejectWithValue(error.response?.data || 'Failed to update profile');
     }
   }
 );
 
+// thunk for token refresh
+export const refreshToken = createAsyncThunk(
+  'auth/refreshToken',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(
+        'http://localhost:8000/api/token/refresh/',
+        {},  // Your backend might require the refresh token in the body
+        { withCredentials: true }  // Important to include cookies
+      );
+      
+      return response.data;
+    } catch (error) {
+      console.error('Token refresh error:', error.response?.data || error.message);
+      return rejectWithValue('Failed to refresh authentication');
+    }
+  }
+);
 const userSlice = createSlice({
   name: 'user',
   initialState: loadInitialState(),

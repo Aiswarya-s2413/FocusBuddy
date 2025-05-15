@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-9s*(+7e36unmblx$swr-eu0vvebqf0pm$a_s1k2ahpf4ptneln
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -139,15 +139,25 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173"
+]
+
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'userapp.authentication.CookieJWTAuthentication'
+
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
 }
 
-# Add this to settings.py
-SESSION_COOKIE_SAMESITE = 'Lax'  # or 'None' if cross-site
+
+SESSION_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
 
 SIMPLE_JWT = {
     'AUTH_COOKIE': 'access',

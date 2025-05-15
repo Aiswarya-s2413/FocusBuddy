@@ -1,55 +1,176 @@
-import React, { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
-import { userAxios } from '../../utils/axios';
-import { TimerDisplay } from '../../components/pomodoro/TimerDisplay';
-import { TimerControls } from '../../components/pomodoro/TimerControls';
-import { TimerSettings } from '../../components/pomodoro/TimerSettings';
-import { ProgressTracker } from '../../components/pomodoro/ProgressTracker';
-import { MotivationalWidget } from '../../components/pomodoro/MotivationalWidget';
-import { TaskForm } from '../../components/pomodoro/TaskForm';
-import { usePomodoro } from '../../hooks/usePomodoro';
+import { useState, useEffect, useRef } from 'react';
 
-const PomodoroTimer = () => {
-  const [showTaskForm, setShowTaskForm] = useState(true);
-  const [tasks, setTasks] = useState([]);
-  const { user } = useSelector((state) => state.user);
-
-  // useEffect(() => {
-  //   console.log('PomodoroTimer - User:', user);
-
-  // // Fetch user-specific data
-  //   userAxios.get('/pomodoro')
-  //     .then((response) => {
-  //       console.log('Pomodoro data:', response.data);
-  //     })
-  //     .catch((error) => {
-  //       console.error('Error fetching pomodoro data:', error);
-  //     });
-  // }, [user]);
-
-  // Define the handlers first
-  const handleCompletePomodoro = async (taskId) => {
-    try {
-      await userAxios.post(`/tasks/${taskId}/complete_pomodoro/`);
-      const updatedTasks = tasks.map(task => 
-        task.id === taskId ? {...task, completed_pomodoros: task.completed_pomodoros + 1} : task
-      );
-      setTasks(updatedTasks);
-    } catch (error) {
-      console.error('Error completing pomodoro:', error);
-    }
+export const usePomodoro = ({ onCompletePomodoro, onCompleteSession }) => {
+  // Default settings
+  const defaultSettings = {
+    focusDuration: 25,
+    shortBreakDuration: 5,
+    longBreakDuration: 15,
+    sessionsBeforeLongBreak: 4,
+    autoStartNextSession: false,
+    playSoundWhenSessionEnds: true
   };
 
-  const handleCompleteSession = async (sessionId) => {
-    try {
-      await userAxios.post(`/sessions/${sessionId}/complete/`);
-    } catch (error) {
-      console.error('Error completing session:', error);
+  // State
+  const [settings, setSettings] = useState(defaultSettings);
+  const [time, setTime] = useState(defaultSettings.focusDuration * 60); // Initialize with focus duration in seconds
+  const [isRunning, setIsRunning] = useState(false);
+  const [sessionType, setSessionType] = useState('focus');
+  const [currentSession, setCurrentSession] = useState(1);
+  const [currentTask, setCurrentTask] = useState(null);
+  
+  // References
+  const timerRef = useRef(null);
+  const totalTimeRef = useRef(0);
+  
+  // Constants
+  const totalSessions = settings.sessionsBeforeLongBreak;
+
+  // Effect to calculate initial time based on session type
+  useEffect(() => {
+    // Reset the timer whenever session type changes
+    let initialTime;
+    
+    switch (sessionType) {
+      case 'focus':
+        initialTime = settings.focusDuration * 60;
+        break;
+      case 'shortBreak':
+        initialTime = settings.shortBreakDuration * 60;
+        break;
+      case 'longBreak':
+        initialTime = settings.longBreakDuration * 60;
+        break;
+      default:
+        initialTime = settings.focusDuration * 60;
     }
+    
+    // Store total time for progress calculation
+    totalTimeRef.current = initialTime;
+    
+    // Reset timer
+    setTime(initialTime);
+    setIsRunning(false);
+    
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [sessionType, settings]);
+
+  // Timer logic
+  useEffect(() => {
+    if (isRunning) {
+      timerRef.current = setInterval(() => {
+        setTime(prevTime => {
+          if (prevTime <= 1) {
+            // Timer completed
+            clearInterval(timerRef.current);
+            handleTimerComplete();
+            return 0;
+          }
+          return prevTime - 1;
+        });
+      }, 1000);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    
+    // Cleanup
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [isRunning]);
+
+  // Handler for timer completion
+  const handleTimerComplete = () => {
+    // Handle different session types
+    if (sessionType === 'focus') {
+      // Increment completed pomodoros for current task
+      if (currentTask && currentTask.id) {
+        onCompletePomodoro(currentTask.id);
+      }
+      
+      // Determine next break type
+      if (currentSession >= totalSessions) {
+        setSessionType('longBreak');
+      } else {
+        setSessionType('shortBreak');
+      }
+    } else {
+      // After break, go back to focus
+      setSessionType('focus');
+      
+      // If it was a long break, reset session counter
+      if (sessionType === 'longBreak') {
+        setCurrentSession(1);
+      } else {
+        setCurrentSession(prev => prev + 1);
+      }
+    }
+    
+    // Auto-start next session if enabled
+    if (settings.autoStartNextSession) {
+      setIsRunning(true);
+    }
+    
+    // Play sound if enabled
+    if (settings.playSoundWhenSessionEnds) {
+      // Play sound logic would go here
+    }
+    
+    // Record session completion
+    onCompleteSession && onCompleteSession();
   };
 
-  // Then use them in the hook
-  const {
+  // Timer controls
+  const startTimer = () => setIsRunning(true);
+  const pauseTimer = () => setIsRunning(false);
+  
+  const resetTimer = () => {
+    pauseTimer();
+    
+    // Reset to current session type's duration
+    let resetTime;
+    switch (sessionType) {
+      case 'focus':
+        resetTime = settings.focusDuration * 60;
+        break;
+      case 'shortBreak':
+        resetTime = settings.shortBreakDuration * 60;
+        break;
+      case 'longBreak':
+        resetTime = settings.longBreakDuration * 60;
+        break;
+      default:
+        resetTime = settings.focusDuration * 60;
+    }
+    
+    setTime(resetTime);
+    totalTimeRef.current = resetTime;
+  };
+
+  // Settings updater
+  const updateSettings = (newSettings) => {
+    setSettings(prev => ({
+      ...prev,
+      ...newSettings
+    }));
+    
+    // Apply settings immediately by resetting timer
+    resetTimer();
+  };
+
+  // Set task for the timer
+  const setTaskForTimer = (task) => {
+    setCurrentTask(task);
+    resetTimer();
+  };
+
+  return {
     time,
     isRunning,
     sessionType,
@@ -63,113 +184,5 @@ const PomodoroTimer = () => {
     setSessionType,
     updateSettings,
     setTaskForTimer
-  } = usePomodoro({
-    onCompletePomodoro: handleCompletePomodoro,
-    onCompleteSession: handleCompleteSession
-  });
-
-  // Fetch user's tasks on component mount
-  useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        console.log('Fetching tasks...'); // Debugging: Log when the function starts
-        const response = await userAxios.get('/tasks/');
-        console.log('Tasks fetched successfully:', response.data); // Debugging: Log successful response
-        setTasks(response.data);
-      } catch (error) {
-        console.error('Error fetching tasks:', error); // Debugging: Log the error
-        console.log('Error details:', { // Debugging: Log detailed error info
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data,
-          headers: error.response?.headers,
-        });
-      }
-    };
-    fetchTasks();
-  }, []);
-
-  const handleTaskSubmit = async (task) => {
-    try {
-      // Create new task
-      const response = await userAxios.post('/tasks/', task);
-      setTaskForTimer(response.data);
-      setShowTaskForm(false);
-      setTasks([...tasks, response.data]);
-    } catch (error) {
-      console.error('Error creating task:', error);
-    }
   };
-
-  const handleSettingsSave = async (newSettings) => {
-    try {
-      await userAxios.put('/settings/', newSettings);
-      updateSettings(newSettings);
-    } catch (error) {
-      console.error('Error updating settings:', error);
-    }
-  };
-
-  const handleResetTask = () => {
-    resetTimer();
-    setShowTaskForm(true);
-  };
-
-  return (
-    <div className="min-h-screen bg-[#F8F6FB] py-8">
-      <div className="container mx-auto px-4">
-        <h1 className="text-2xl font-bold text-[#6E59A5] mb-6">Pomodoro Timer</h1>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            {showTaskForm ? (
-              <TaskForm onTaskSubmit={handleTaskSubmit} />
-            ) : (
-              <>
-                <div className="bg-white rounded-xl shadow-sm p-8">
-                  {currentTask && (
-                    <div className="mb-6">
-                      <h2 className="text-xl font-semibold text-[#6E59A5]">{currentTask.title}</h2>
-                      <p className="text-gray-600">
-                        Pomodoros: {currentTask.completedPomodoros} of {currentTask.estimatedPomodoros} completed
-                      </p>
-                    </div>
-                  )}
-
-                  <TimerDisplay
-                    time={time}
-                    sessionType={sessionType}
-                    currentSession={currentSession}
-                    totalSessions={totalSessions}
-                  />
-                  <TimerControls
-                    isRunning={isRunning}
-                    onStart={startTimer}
-                    onPause={pauseTimer}
-                    onReset={handleResetTask}
-                    sessionType={sessionType}
-                    onSessionTypeChange={setSessionType}
-                  />
-                </div>
-                <ProgressTracker
-                  currentSession={currentSession}
-                  totalSessions={totalSessions}
-                />
-                <MotivationalWidget />
-              </>
-            )}
-          </div>
-
-          <div className="lg:col-span-1">
-            <TimerSettings
-              onSaveSettings={handleSettingsSave}
-              defaultSettings={settings}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 };
-
-export default PomodoroTimer;

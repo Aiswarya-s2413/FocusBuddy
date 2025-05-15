@@ -5,6 +5,8 @@ import { Clock, Calendar, BarChart2, Book, Settings, LogOut } from "lucide-react
 import { cn } from "../lib/utils";
 import { useDispatch } from "react-redux";
 import { logout } from "../store/userSlice";
+import axios from 'axios';
+
 
 const AuthNavbar = () => {
   const dispatch = useDispatch();

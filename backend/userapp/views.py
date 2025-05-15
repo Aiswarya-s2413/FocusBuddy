@@ -144,11 +144,11 @@ class LoginView(APIView):
             # Set JWT tokens in HttpOnly cookies
             response.set_cookie(
                 "access", data["access"], httponly=True, 
-                secure=False, samesite="Lax", path="/"
+                secure=False, samesite='Lax', path="/"
             )
             response.set_cookie(
                 "refresh", data["refresh"], httponly=True, 
-                secure=False, samesite="Lax", path="/"
+                secure=False, samesite='Lax', path="/"
             )
             return response
         logger.warning("Login failed with errors: %s", serializer.errors)
@@ -389,6 +389,9 @@ class PomodoroSettingsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        print(request.headers.get("Authorization"))
+
+        print("User:", request.user)
         settings, created = PomodoroSettings.objects.get_or_create(user=request.user)
         serializer = PomodoroSettingsSerializer(settings)
         return Response(serializer.data)
@@ -409,28 +412,3 @@ class PomodoroSettingsAPIView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class CookieJWTAuthentication(JWTAuthentication):
-    def authenticate(self, request):
-        print("=== Debug Authentication ===")
-        print("All Cookies:", request.COOKIES)
-        
-        # Get all cookies that might contain the token
-        raw_token = request.COOKIES.get('access')  # Try 'access' first
-        if not raw_token:
-            raw_token = request.COOKIES.get('user_access')  # Try 'user_access' next
-        
-        print("Found token:", raw_token)
-        
-        if not raw_token:
-            print("No token found in cookies")
-            return None
-
-        try:
-            validated_token = self.get_validated_token(raw_token)
-            print("Token validation successful")
-            user = self.get_user(validated_token)
-            print("User found:", user.email if user else None)
-            return (user, validated_token)
-        except Exception as e:
-            print("Token validation failed:", str(e))
-            return None
