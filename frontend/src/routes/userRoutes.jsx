@@ -7,6 +7,7 @@ import Home from "../pages/user/Home";
 import VerifyOtp from "../pages/user/VerifyOtp";
 import SelectSubjects from "../pages/user/SelectSubjects";
 import PomodoroTimer from "../pages/user/PomodoroTimer";
+import Journal from "../pages/user/Journal";
 import { useSelector } from "react-redux";
 import AuthLayout from "../components/AuthLayout";
 
@@ -45,6 +46,14 @@ const UserRoutes = () => {
         element={
           <ProtectedRoute>
             <AuthLayout><PomodoroTimer /></AuthLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/journal"
+        element={
+          <ProtectedRoute>
+            <AuthLayout><Journal /></AuthLayout>
           </ProtectedRoute>
         }
       />

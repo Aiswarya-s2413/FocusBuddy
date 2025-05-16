@@ -27,4 +27,7 @@ urlpatterns = [
     path('settings/', PomodoroSettingsAPIView.as_view(), name='pomodoro-settings'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('journals/', JournalAPIView.as_view(), name='journals'),               
+    path('journals/<int:journal_id>/', JournalAPIView.as_view(), name='user-journals'),
+    path('moods/', MoodChoicesAPIView.as_view(), name='mood-choices'),
 ]

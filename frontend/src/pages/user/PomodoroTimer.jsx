@@ -4,8 +4,8 @@ import { TimerControls } from '../../components/pomodoro/TimerControls';
 import { ProgressTracker } from '../../components/pomodoro/ProgressTracker';
 import { MotivationalWidget } from '../../components/pomodoro/MotivationalWidget';
 import { TaskForm } from '../../components/pomodoro/TaskForm';
+import { userAxios } from '../../utils/axios';
 
-// Convert to a React component that returns JSX
 const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
   // Default settings
   const defaultSettings = {
@@ -18,66 +18,206 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
   };
 
   // State
-  const [settings, setSettings] = useState(defaultSettings);
-  const [time, setTime] = useState(defaultSettings.focusDuration * 60); // Initialize with focus duration in seconds
-  const [isRunning, setIsRunning] = useState(false);
-  const [sessionType, setSessionType] = useState('focus');
-  const [currentSession, setCurrentSession] = useState(1);
-  const [currentTask, setCurrentTask] = useState(null);
-  const [timerVisible, setTimerVisible] = useState(false);
+  const [settings, setSettings] = useState(() => {
+    // Try to get settings from localStorage
+    const savedSettings = localStorage.getItem('pomodoroSettings');
+    return savedSettings ? JSON.parse(savedSettings) : defaultSettings;
+  });
+  
+  const [time, setTime] = useState(() => {
+    // Try to get time from localStorage
+    const savedTime = localStorage.getItem('pomodoroTime');
+    return savedTime ? parseInt(savedTime, 10) : defaultSettings.focusDuration * 60;
+  });
+  
+  const [isRunning, setIsRunning] = useState(() => {
+    // Try to get running state from localStorage
+    const savedIsRunning = localStorage.getItem('pomodoroIsRunning');
+    return savedIsRunning === 'true';
+  });
+  
+  const [sessionType, setSessionType] = useState(() => {
+    // Try to get session type from localStorage
+    const savedSessionType = localStorage.getItem('pomodoroSessionType');
+    return savedSessionType || 'focus';
+  });
+  
+  const [currentSession, setCurrentSession] = useState(() => {
+    // Try to get current session from localStorage
+    const savedCurrentSession = localStorage.getItem('pomodoroCurrentSession');
+    return savedCurrentSession ? parseInt(savedCurrentSession, 10) : 1;
+  });
+  
+  const [currentTask, setCurrentTask] = useState(() => {
+    // Try to get current task from localStorage
+    const savedCurrentTask = localStorage.getItem('pomodoroCurrentTask');
+    return savedCurrentTask ? JSON.parse(savedCurrentTask) : null;
+  });
+  
+  const [timerVisible, setTimerVisible] = useState(() => {
+    // Try to get timer visibility from localStorage
+    const savedTimerVisible = localStorage.getItem('pomodoroTimerVisible');
+    return savedTimerVisible === 'true';
+  });
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [tasks, setTasks] = useState([]);
   
   // References
   const timerRef = useRef(null);
-  const totalTimeRef = useRef(0);
+  const totalTimeRef = useRef(() => {
+    // Try to get total time from localStorage
+    const savedTotalTime = localStorage.getItem('pomodoroTotalTime');
+    return savedTotalTime ? parseInt(savedTotalTime, 10) : defaultSettings.focusDuration * 60;
+  });
+  
+  // Store last updated timestamp to calculate elapsed time during page refresh
+  const lastUpdatedRef = useRef(() => {
+    const savedLastUpdated = localStorage.getItem('pomodoroLastUpdated');
+    return savedLastUpdated ? parseInt(savedLastUpdated, 10) : Date.now();
+  });
   
   // Constants
   const totalSessions = settings.sessionsBeforeLongBreak;
 
-  // Effect to calculate initial time based on session type
+  // Store state in localStorage whenever it changes
   useEffect(() => {
-    // Reset the timer whenever session type changes
-    let initialTime;
-    
-    switch (sessionType) {
-      case 'focus':
-        initialTime = settings.focusDuration * 60;
-        break;
-      case 'shortBreak':
-        initialTime = settings.shortBreakDuration * 60;
-        break;
-      case 'longBreak':
-        initialTime = settings.longBreakDuration * 60;
-        break;
-      default:
-        initialTime = settings.focusDuration * 60;
+    localStorage.setItem('pomodoroSettings', JSON.stringify(settings));
+  }, [settings]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroTime', time.toString());
+  }, [time]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroIsRunning', isRunning.toString());
+  }, [isRunning]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroSessionType', sessionType);
+  }, [sessionType]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroCurrentSession', currentSession.toString());
+  }, [currentSession]);
+  
+  useEffect(() => {
+    if (currentTask) {
+      localStorage.setItem('pomodoroCurrentTask', JSON.stringify(currentTask));
+    } else {
+      localStorage.removeItem('pomodoroCurrentTask');
+    }
+  }, [currentTask]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroTimerVisible', timerVisible.toString());
+  }, [timerVisible]);
+  
+  useEffect(() => {
+    if (totalTimeRef.current) {
+      localStorage.setItem('pomodoroTotalTime', totalTimeRef.current.toString());
+    }
+  }, [totalTimeRef.current]);
+
+  // Effect to handle time updates during page refresh
+  useEffect(() => {
+    // If timer was running when page was refreshed, adjust the time
+    if (isRunning) {
+      const lastUpdated = parseInt(localStorage.getItem('pomodoroLastUpdated') || Date.now(), 10);
+      const now = Date.now();
+      const elapsedSeconds = Math.floor((now - lastUpdated) / 1000);
+      
+      // Update time if page was refreshed while timer was running
+      if (elapsedSeconds > 0) {
+        const newTime = Math.max(0, time - elapsedSeconds);
+        setTime(newTime);
+        
+        // If timer would have completed during refresh, handle completion
+        if (newTime === 0) {
+          handleTimerComplete();
+        }
+      }
     }
     
-    // Store total time for progress calculation
-    totalTimeRef.current = initialTime;
+    // Start updating lastUpdated timestamp periodically
+    const intervalId = setInterval(() => {
+      localStorage.setItem('pomodoroLastUpdated', Date.now().toString());
+    }, 1000);
     
-    // Reset timer
-    setTime(initialTime);
-    setIsRunning(false);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Fetch tasks when component mounts
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        setIsLoading(true);
+        const response = await userAxios.get('/tasks/');
+        setTasks(response.data);
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+        setError('Failed to load tasks');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTasks();
+  }, []);
+
+  // Effect to calculate initial time based on session type
+  useEffect(() => {
+    // Reset the timer whenever session type changes if not already running
+    if (!isRunning) {
+      let initialTime;
+      
+      switch (sessionType) {
+        case 'focus':
+          initialTime = settings.focusDuration * 60;
+          break;
+        case 'shortBreak':
+          initialTime = settings.shortBreakDuration * 60;
+          break;
+        case 'longBreak':
+          initialTime = settings.longBreakDuration * 60;
+          break;
+        default:
+          initialTime = settings.focusDuration * 60;
+      }
+      
+      // Store total time for progress calculation
+      totalTimeRef.current = initialTime;
+      localStorage.setItem('pomodoroTotalTime', initialTime.toString());
+      
+      // Reset timer
+      setTime(initialTime);
+    }
     
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
-  }, [sessionType, settings]);
+  }, [sessionType, settings, isRunning]);
 
   // Timer logic
   useEffect(() => {
     if (isRunning) {
       timerRef.current = setInterval(() => {
         setTime(prevTime => {
-          if (prevTime <= 1) {
+          const newTime = prevTime <= 1 ? 0 : prevTime - 1;
+          
+          // Update timestamp in localStorage
+          localStorage.setItem('pomodoroLastUpdated', Date.now().toString());
+          
+          if (newTime === 0) {
             // Timer completed
             clearInterval(timerRef.current);
             handleTimerComplete();
-            return 0;
           }
-          return prevTime - 1;
+          
+          return newTime;
         });
       }, 1000);
     } else if (timerRef.current) {
@@ -93,12 +233,30 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
   }, [isRunning]);
 
   // Handler for timer completion
-  const handleTimerComplete = () => {
+  const handleTimerComplete = async () => {
     // Handle different session types
     if (sessionType === 'focus') {
       // Increment completed pomodoros for current task
       if (currentTask && currentTask.id) {
-        onCompletePomodoro && onCompletePomodoro(currentTask.id);
+        try {
+          // Update the task in the database
+          const updatedTask = {
+            ...currentTask,
+            completed_pomodoros: currentTask.completed_pomodoros + 1
+          };
+          
+          await userAxios.patch(`/tasks/${currentTask.id}/`, {
+            completed_pomodoros: updatedTask.completed_pomodoros
+          });
+          
+          // Update the task in local state
+          setCurrentTask(updatedTask);
+          
+          // Call the callback if provided
+          onCompletePomodoro && onCompletePomodoro(currentTask.id);
+        } catch (error) {
+          console.error('Error updating task pomodoros:', error);
+        }
       }
       
       // Determine next break type
@@ -158,6 +316,7 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
     
     setTime(resetTime);
     totalTimeRef.current = resetTime;
+    localStorage.setItem('pomodoroTotalTime', resetTime.toString());
   };
 
   // Settings updater
@@ -174,56 +333,89 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
   // Set task for the timer
   const setTaskForTimer = (task) => {
     setCurrentTask(task);
+    setTimerVisible(true);
     resetTimer();
   };
 
   // Handle task submission
-  const handleTaskSubmit = (newTask) => {
-    // Create a task with an ID (in a real app, this would come from the server)
-    const taskWithId = {
-      ...newTask,
-      id: Date.now().toString(), // Simple temporary ID
-      completed_pomodoros: 0,
-      estimated_pomodoros: Math.ceil(newTask.estimated_minutes / settings.focusDuration)
-    };
-    
-    // Set this task as the current task for the timer
-    setTaskForTimer(taskWithId);
-    
-    // Show the timer component
-    setTimerVisible(true);
-    
-    // In a real application, you might also save this task to state or send it to a server
-    // For example: addTaskToList(taskWithId);
+  const handleTaskSubmit = async (task) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Prepare task data for API
+      const taskData = {
+        title: task.title,
+        description: task.description || '',
+        estimated_minutes: task.estimated_minutes,
+      };
+      
+      // Create new task - make sure we're sending the right format
+      const response = await userAxios.post('/tasks/', taskData);
+      
+      // Use the data returned from the server (which includes all fields)
+      const newTask = response.data;
+      
+      // Update state with the task from server (which will have the correct ID and other fields)
+      setTaskForTimer(newTask);
+      setTasks(prevTasks => [...prevTasks, newTask]);
+      
+    } catch (error) {
+      console.error('Error creating task:', error);
+      
+      // Log more specific error details from the response
+      if (error.response && error.response.data) {
+        console.error('Error details:', error.response.data);
+      }
+      
+      setError('Failed to create task. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Reset the timer and return to the task form
+  const handleResetAndNewTask = () => {
+    pauseTimer();
+    setCurrentTask(null);
+    setTimerVisible(false);
   };
 
   return (
     <div className="space-y-8">
-      {/* Task Form Component - Always visible */}
-      <TaskForm onTaskSubmit={handleTaskSubmit} />
+      {/* Error message if there's an error */}
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+          <span className="block sm:inline">{error}</span>
+        </div>
+      )}
+      
+      {/* Task Form Component - Only visible when no timer is active */}
+      {!timerVisible && (
+        <TaskForm onTaskSubmit={handleTaskSubmit} isLoading={isLoading} />
+      )}
       
       {/* Timer UI - Only visible after task submission */}
-      {timerVisible && (
+      {timerVisible && currentTask && (
         <div className="bg-white rounded-xl shadow-lg p-6">
           {/* Display current task if available */}
-          {currentTask && (
-            <div className="mb-6 p-4 bg-[#F8F6FB] rounded-lg">
-              <h3 className="font-semibold text-[#6E59A5]">Current Task: {currentTask.title}</h3>
-              {currentTask.description && (
-                <p className="text-sm text-gray-600 mt-2">{currentTask.description}</p>
-              )}
-              <div className="flex justify-between mt-2 text-sm text-gray-500">
-                <span>Estimated: {currentTask.estimated_minutes} minutes</span>
-                <span>Completed Pomodoros: {currentTask.completed_pomodoros}</span>
-              </div>
+          <div className="mb-6 p-4 bg-[#F8F6FB] rounded-lg">
+            <h3 className="font-semibold text-[#6E59A5]">Current Task: {currentTask.title}</h3>
+            {currentTask.description && (
+              <p className="text-sm text-gray-600 mt-2">{currentTask.description}</p>
+            )}
+            <div className="flex justify-between mt-2 text-sm text-gray-500">
+              <span>Estimated: {currentTask.estimated_minutes} minutes</span>
+              <span>Completed Pomodoros: {currentTask.completed_pomodoros}</span>
             </div>
-          )}
+          </div>
         
           <TimerDisplay 
             time={time} 
             sessionType={sessionType} 
             currentSession={currentSession} 
             totalSessions={totalSessions} 
+            currentTask={currentTask}
           />
           
           <TimerControls 
@@ -243,6 +435,15 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
             
             <MotivationalWidget />
           </div>
+          
+          {/* Button to go back to task form */}
+          <button
+            onClick={handleResetAndNewTask}
+            className="mt-6 w-full py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
+            type="button"
+          >
+            Create New Task
+          </button>
         </div>
       )}
     </div>
@@ -261,66 +462,162 @@ export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
     playSoundWhenSessionEnds: true
   };
 
-  // State
-  const [settings, setSettings] = useState(defaultSettings);
-  const [time, setTime] = useState(defaultSettings.focusDuration * 60);
-  const [isRunning, setIsRunning] = useState(false);
-  const [sessionType, setSessionType] = useState('focus');
-  const [currentSession, setCurrentSession] = useState(1);
-  const [currentTask, setCurrentTask] = useState(null);
+  // State with localStorage persistence
+  const [settings, setSettings] = useState(() => {
+    const savedSettings = localStorage.getItem('pomodoroSettings');
+    return savedSettings ? JSON.parse(savedSettings) : defaultSettings;
+  });
+  
+  const [time, setTime] = useState(() => {
+    const savedTime = localStorage.getItem('pomodoroTime');
+    return savedTime ? parseInt(savedTime, 10) : defaultSettings.focusDuration * 60;
+  });
+  
+  const [isRunning, setIsRunning] = useState(() => {
+    const savedIsRunning = localStorage.getItem('pomodoroIsRunning');
+    return savedIsRunning === 'true';
+  });
+  
+  const [sessionType, setSessionType] = useState(() => {
+    const savedSessionType = localStorage.getItem('pomodoroSessionType');
+    return savedSessionType || 'focus';
+  });
+  
+  const [currentSession, setCurrentSession] = useState(() => {
+    const savedCurrentSession = localStorage.getItem('pomodoroCurrentSession');
+    return savedCurrentSession ? parseInt(savedCurrentSession, 10) : 1;
+  });
+  
+  const [currentTask, setCurrentTask] = useState(() => {
+    const savedCurrentTask = localStorage.getItem('pomodoroCurrentTask');
+    return savedCurrentTask ? JSON.parse(savedCurrentTask) : null;
+  });
   
   // References
   const timerRef = useRef(null);
-  const totalTimeRef = useRef(0);
+  const totalTimeRef = useRef(() => {
+    const savedTotalTime = localStorage.getItem('pomodoroTotalTime');
+    return savedTotalTime ? parseInt(savedTotalTime, 10) : defaultSettings.focusDuration * 60;
+  });
+  
+  // Store last updated timestamp
+  const lastUpdatedRef = useRef(() => {
+    const savedLastUpdated = localStorage.getItem('pomodoroLastUpdated');
+    return savedLastUpdated ? parseInt(savedLastUpdated, 10) : Date.now();
+  });
   
   // Constants
   const totalSessions = settings.sessionsBeforeLongBreak;
+  
+  // Store state in localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('pomodoroSettings', JSON.stringify(settings));
+  }, [settings]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroTime', time.toString());
+  }, [time]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroIsRunning', isRunning.toString());
+  }, [isRunning]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroSessionType', sessionType);
+  }, [sessionType]);
+  
+  useEffect(() => {
+    localStorage.setItem('pomodoroCurrentSession', currentSession.toString());
+  }, [currentSession]);
+  
+  useEffect(() => {
+    if (currentTask) {
+      localStorage.setItem('pomodoroCurrentTask', JSON.stringify(currentTask));
+    } else {
+      localStorage.removeItem('pomodoroCurrentTask');
+    }
+  }, [currentTask]);
+
+  // Effect to handle time updates during page refresh
+  useEffect(() => {
+    // If timer was running when page was refreshed, adjust the time
+    if (isRunning) {
+      const lastUpdated = parseInt(localStorage.getItem('pomodoroLastUpdated') || Date.now(), 10);
+      const now = Date.now();
+      const elapsedSeconds = Math.floor((now - lastUpdated) / 1000);
+      
+      // Update time if page was refreshed while timer was running
+      if (elapsedSeconds > 0) {
+        const newTime = Math.max(0, time - elapsedSeconds);
+        setTime(newTime);
+        
+        // If timer would have completed during refresh, handle completion
+        if (newTime === 0) {
+          handleTimerComplete();
+        }
+      }
+    }
+    
+    // Start updating lastUpdated timestamp periodically
+    const intervalId = setInterval(() => {
+      localStorage.setItem('pomodoroLastUpdated', Date.now().toString());
+    }, 1000);
+    
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Effect to calculate initial time based on session type
   useEffect(() => {
-    // Reset the timer whenever session type changes
-    let initialTime;
-    
-    switch (sessionType) {
-      case 'focus':
-        initialTime = settings.focusDuration * 60;
-        break;
-      case 'shortBreak':
-        initialTime = settings.shortBreakDuration * 60;
-        break;
-      case 'longBreak':
-        initialTime = settings.longBreakDuration * 60;
-        break;
-      default:
-        initialTime = settings.focusDuration * 60;
+    // Reset the timer whenever session type changes if not already running
+    if (!isRunning) {
+      let initialTime;
+      
+      switch (sessionType) {
+        case 'focus':
+          initialTime = settings.focusDuration * 60;
+          break;
+        case 'shortBreak':
+          initialTime = settings.shortBreakDuration * 60;
+          break;
+        case 'longBreak':
+          initialTime = settings.longBreakDuration * 60;
+          break;
+        default:
+          initialTime = settings.focusDuration * 60;
+      }
+      
+      // Store total time for progress calculation
+      totalTimeRef.current = initialTime;
+      localStorage.setItem('pomodoroTotalTime', initialTime.toString());
+      
+      // Reset timer
+      setTime(initialTime);
     }
-    
-    // Store total time for progress calculation
-    totalTimeRef.current = initialTime;
-    
-    // Reset timer
-    setTime(initialTime);
-    setIsRunning(false);
     
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
-  }, [sessionType, settings]);
+  }, [sessionType, settings, isRunning]);
 
   // Timer logic
   useEffect(() => {
     if (isRunning) {
       timerRef.current = setInterval(() => {
         setTime(prevTime => {
-          if (prevTime <= 1) {
+          const newTime = prevTime <= 1 ? 0 : prevTime - 1;
+          
+          // Update timestamp in localStorage
+          localStorage.setItem('pomodoroLastUpdated', Date.now().toString());
+          
+          if (newTime === 0) {
             // Timer completed
             clearInterval(timerRef.current);
             handleTimerComplete();
-            return 0;
           }
-          return prevTime - 1;
+          
+          return newTime;
         });
       }, 1000);
     } else if (timerRef.current) {
@@ -401,6 +698,7 @@ export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
     
     setTime(resetTime);
     totalTimeRef.current = resetTime;
+    localStorage.setItem('pomodoroTotalTime', resetTime.toString());
   };
 
   // Settings updater

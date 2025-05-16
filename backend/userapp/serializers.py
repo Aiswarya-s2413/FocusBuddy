@@ -189,3 +189,9 @@ class PomodoroSettingsSerializer(serializers.ModelSerializer):
         fields = ['id', 'focus_duration', 'short_break_duration',
                  'long_break_duration', 'sessions_before_long_break',
                  'auto_start_next_session', 'play_sound_when_session_ends']
+
+class JournalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Journal
+        fields = ['id', 'user', 'mood', 'description', 'date', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'created_at', 'updated_at']

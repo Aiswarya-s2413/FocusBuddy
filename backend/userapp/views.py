@@ -249,6 +249,14 @@ class LogoutView(APIView):
 class UpdateProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        user = request.user
+        return Response({
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+        }, status=status.HTTP_200_OK)
+
     def put(self, request):
         try:
             # Get token from cookies
@@ -412,3 +420,51 @@ class PomodoroSettingsAPIView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+class JournalAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, journal_id=None):
+        if journal_id:
+            journal = get_object_or_404(Journal, id=journal_id, user=request.user)
+            serializer = JournalSerializer(journal)
+            return Response(serializer.data)
+        else:
+            journals = Journal.objects.filter(user=request.user).order_by('-date')
+            serializer = JournalSerializer(journals, many=True)
+            return Response(serializer.data)
+
+    def post(self, request):
+        serializer = JournalSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=request.user)  # associate the user automatically
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request, journal_id):
+        journal = get_object_or_404(Journal, id=journal_id, user=request.user)
+        serializer = JournalSerializer(journal, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, journal_id):
+        journal = get_object_or_404(Journal, id=journal_id, user=request.user)
+        serializer = JournalSerializer(journal, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, journal_id):
+        journal = get_object_or_404(Journal, id=journal_id, user=request.user)
+        journal.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class MoodChoicesAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        moods = [{'key': key, 'label': label} for key, label in Journal.MOOD_CHOICES]
+        return Response(moods)

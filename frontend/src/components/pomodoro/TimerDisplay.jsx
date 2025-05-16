@@ -5,7 +5,8 @@ export const TimerDisplay = ({
   time,
   sessionType = 'focus',
   currentSession = 1,
-  totalSessions = 4
+  totalSessions = 4,
+  currentTask
 }) => {
   // Add error handling for invalid time values
   const validTime = typeof time === 'number' && !isNaN(time) ? time : 0;
@@ -37,7 +38,7 @@ export const TimerDisplay = ({
           sessionType === 'focus' ? 'bg-green-500' : 'bg-blue-500'
         }`} />
         <span className="text-sm font-medium text-gray-600">
-          Session {currentSession} of {totalSessions}
+          Session {currentSession} of {currentTask.estimated_pomodoros}
         </span>
       </div>
 
