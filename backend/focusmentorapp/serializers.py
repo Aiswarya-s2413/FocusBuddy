@@ -1,11 +1,13 @@
 from rest_framework import serializers
-from userapp.models import User, Subject
+from userapp.models import *
 from rest_framework_simplejwt.tokens import RefreshToken
 import random
 from django.core.mail import send_mail
 from django.conf import settings
 import logging
 from django.utils import timezone
+from django.db import transaction
+from .utils import CloudinaryService
 
 logger = logging.getLogger(__name__)
 
@@ -110,11 +112,6 @@ class MentorLoginSerializer(serializers.Serializer):
             }
         }
 
-class MentorProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'name', 'email', 'subjects', 'bio', 'experience']
-        read_only_fields = ['email']  # Email cannot be changed 
 
 class MentorOtpVerifySerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -186,3 +183,131 @@ class MentorResetPasswordSerializer(serializers.Serializer):
         user.otp = None  # Clear the OTP after successful password reset
         user.save()
         return user 
+
+
+class MentorProfileUploadSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='user.name')
+    bio = serializers.CharField(source='user.bio', required=False, allow_blank=True)
+    subjects = serializers.CharField(required=False, write_only=True)
+    experience = serializers.CharField(source='user.experience', required=False)
+    profile_image = serializers.ImageField(required=False)
+    expertise_level = serializers.CharField(required=False)  # Make sure this field is explicitly defined
+    
+    class Meta:
+        model = Mentor
+        fields = [
+            'name', 'bio', 'subjects', 'experience', 'expertise_level',
+            'hourly_rate', 'profile_image', 'is_available'
+        ]
+    
+    def validate_subjects(self, value):
+        """Validate and process the comma-separated subjects string"""
+        if not value:
+            return []
+        
+        # Split by comma and strip whitespace
+        subject_names = [name.strip() for name in value.split(',') if name.strip()]
+        
+        if not subject_names:
+            raise serializers.ValidationError("Please provide at least one subject")
+            
+        return subject_names
+        
+    def validate_expertise_level(self, value):
+        """Ensure expertise level matches one of the valid choices"""
+        if not value:
+            return value
+            
+        valid_choices = dict(Mentor._meta.get_field('expertise_level').choices)
+        
+        # Convert to lowercase for comparison
+        if value.lower() not in [choice.lower() for choice in valid_choices.keys()]:
+            raise serializers.ValidationError(
+                f"Expertise level must be one of: {', '.join(valid_choices.values())}"
+            )
+        
+        # Return the lowercase version to match DB choices
+        return value.lower()
+        
+    def validate_experience(self, value):
+        """Convert experience to integer when possible"""
+        try:
+            # Try to extract just the number from strings like "5+ Years"
+            if isinstance(value, str) and '+' in value:
+                return int(value.split('+')[0])
+            return int(value)
+        except (ValueError, TypeError):
+            return value
+            
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', {})
+        subjects_data = validated_data.pop('subjects', [])
+        profile_image = validated_data.pop('profile_image', None)
+        
+        # Update user model fields
+        user = instance.user
+        if 'name' in user_data:
+            user.name = user_data['name']
+        if 'bio' in user_data:
+            user.bio = user_data['bio']
+        if 'experience' in user_data:
+            user.experience = user_data['experience']
+            
+        # Process subjects
+        if subjects_data:
+            subjects = []
+            for subject_name in subjects_data:
+                subject, created = Subject.objects.get_or_create(name=subject_name)
+                subjects.append(subject)
+            user.subjects.set(subjects)
+            
+        # Handle profile image upload
+        if profile_image:
+            try:
+                upload_result = CloudinaryService.upload_image(profile_image)
+                if upload_result:
+                    # Set the CloudinaryField's value to the public_id from Cloudinary
+                    instance.profile_image = upload_result['public_id']
+            except Exception as e:
+                logger.error(f"Error uploading profile image: {str(e)}")
+                # Continue with the profile update even if the image upload fails
+            
+        # Update mentor model fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+            
+        # Log the expertise level value before saving
+        logger.info(f"Setting expertise_level to: {instance.expertise_level}")
+        
+        # Save both models
+        user.save()
+        instance.save()
+        
+        return instance
+        
+    def to_representation(self, instance):
+        """Format the response data to match frontend expectations"""
+        subjects = instance.user.subjects.all()
+        subject_names = ", ".join([subject.name for subject in subjects])
+        
+        representation = super().to_representation(instance)
+        representation['subjects'] = subject_names
+        
+        # Format experience based on the value
+        experience_val = instance.user.experience
+        if isinstance(experience_val, int):
+            representation['experience'] = f"{experience_val}+ Years"
+        else:
+            representation['experience'] = str(experience_val)
+        
+        # Add profile image URL
+        representation['profile_image_url'] = (
+            instance.profile_image.url if instance.profile_image else None
+        )
+        
+        # Set expertise level to match frontend format (capitalized)
+        if instance.expertise_level:
+            representation['expertise_level'] = instance.get_expertise_level_display().title()
+        
+        return representation

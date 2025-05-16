@@ -24,12 +24,12 @@ const MentorLogin = () => {
       const response = await axios.post("http://localhost:8000/api/mentor/login/", {
         email,
         password,
-      });
+      },{ withCredentials: true });
 
       if (response.status === 200) {
         // Store user data in localStorage if needed
         localStorage.setItem("user", JSON.stringify(response.data.user));
-        navigate("/mentor/profile");
+        navigate("/mentor/upload-profile");
       }
     } catch (err) {
       setError(err.response?.data?.error || "Login failed. Please try again.");

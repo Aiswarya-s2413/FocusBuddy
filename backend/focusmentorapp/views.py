@@ -4,12 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import logout
-from .serializers import (
-    MentorSignupSerializer, MentorLoginSerializer, MentorProfileSerializer,
-    MentorOtpVerifySerializer, MentorSubjectSelectionSerializer,
-    MentorForgotPasswordSerializer, MentorVerifyForgotPasswordOTPSerializer,
-    MentorResetPasswordSerializer
-)
+from .serializers import *
 from userapp.models import User, Subject
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
@@ -18,6 +13,8 @@ import logging
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
+from rest_framework.parsers import MultiPartParser, FormParser
+
 
 logger = logging.getLogger(__name__)
 
@@ -76,65 +73,41 @@ class MentorLoginView(APIView):
             # Set tokens in cookies
             response.set_cookie(
                 "mentor_access", data["access"], httponly=True, 
-                secure=False, samesite="Lax", path="/"
+                secure=False, samesite="Lax", path="/",domain='localhost'
             )
             response.set_cookie(
                 "mentor_refresh", data["refresh"], httponly=True, 
-                secure=False, samesite="Lax", path="/"
+                secure=False, samesite="Lax", path="/", domain='localhost'
             )
             return response
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class MentorLogoutView(APIView):
+    permission_classes = [AllowAny]  # Changed from requiring authentication
+    
     def post(self, request):
         try:
             response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
+            
             # Delete both cookies regardless of authentication status
             response.delete_cookie('mentor_access', path='/', samesite='Lax')
             response.delete_cookie('mentor_refresh', path='/', samesite='Lax')
-            # Try to logout if user is authenticated
+            
+            # Try to logout if user is authenticated, but don't require it
             if request.user.is_authenticated:
                 logout(request)
+                
             return response
         except Exception as e:
             logger.error(f"Error during logout: {str(e)}")
+            
             # Still try to delete cookies even if there's an error
-            response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
+            response = Response({"message": "Logged out with warnings"}, status=status.HTTP_200_OK)
             response.delete_cookie('mentor_access', path='/', samesite='Lax')
             response.delete_cookie('mentor_refresh', path='/', samesite='Lax')
+            
             return response
 
-class MentorProfileView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        try:
-            serializer = MentorProfileSerializer(request.user)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Exception as e:
-            logger.error(f"Error fetching mentor profile: {str(e)}")
-            return Response(
-                {"error": "An error occurred while fetching profile"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-    def put(self, request):
-        try:
-            serializer = MentorProfileSerializer(request.user, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response({
-                    "message": "Profile updated successfully",
-                    "user": serializer.data
-                }, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error(f"Error updating mentor profile: {str(e)}")
-            return Response(
-                {"error": "An error occurred while updating profile"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
 class MentorCheckAuthView(APIView):
     def get(self, request):
@@ -317,3 +290,85 @@ class MentorResetPasswordView(APIView):
             user = serializer.save()
             return Response({"message": "Password reset successfully"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MentorProfileUploadView(APIView):
+    authentication_classes = [CookieJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    def get(self, request):
+        """Get current mentor profile data"""
+        try:
+            # Ensure the user has a mentor profile
+            mentor, created = Mentor.objects.get_or_create(user=request.user)
+            
+            # Check if the user is marked as a mentor
+            if not request.user.is_mentor:
+                request.user.is_mentor = True
+                request.user.save()
+                
+            serializer = MentorProfileUploadSerializer(mentor)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error fetching mentor profile: {str(e)}")
+            return Response(
+                {"error": "Failed to fetch mentor profile data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @transaction.atomic
+    def put(self, request):
+        """Update mentor profile"""
+        try:
+            # Get or create mentor profile
+            mentor, created = Mentor.objects.get_or_create(user=request.user)
+            
+            # Extract JSON data if present
+            data = request.data.copy()
+            
+            if 'data' in data:
+                # Parse the JSON data from the form
+                import json
+                json_data = json.loads(data.get('data', '{}'))
+                
+                # Extract expertise_level from the JSON data
+                if 'expertise_level' in json_data:
+                    data['expertise_level'] = json_data['expertise_level']
+                
+                # Extract other fields as needed
+                if 'name' in json_data:
+                    data['name'] = json_data['name']
+                if 'bio' in json_data:
+                    data['bio'] = json_data['bio']
+                if 'subjects' in json_data:
+                    data['subjects'] = ','.join(json_data['subjects'])
+                if 'experience' in json_data:
+                    data['experience'] = json_data['experience']
+                if 'hourly_rate' in json_data:
+                    data['hourly_rate'] = json_data['hourly_rate']
+                    
+                # We're removing professional titles and languages handling
+                # No additional processing needed for the availability data
+            
+            # Process the data
+            serializer = MentorProfileUploadSerializer(mentor, data=data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    "message": "Profile updated successfully",
+                    "profile": serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                logger.error(f"Validation errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error updating mentor profile: {str(e)}")
+            return Response(
+                {"error": f"An error occurred while updating the profile: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+    @transaction.atomic
+    def post(self, request):
+        return self.put(request)

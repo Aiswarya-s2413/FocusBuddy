@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
+from cloudinary.models import CloudinaryField
 
 class Subject(models.Model):
     name = models.CharField(max_length=100)
@@ -99,6 +100,8 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 class Mentor(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='mentor_profile')
+    profile_image = CloudinaryField('image', blank=True, null=True)
+
     expertise_level = models.CharField(
         max_length=20,
         choices=[
@@ -106,8 +109,7 @@ class Mentor(models.Model):
             ('intermediate', 'Intermediate'),
             ('advanced', 'Advanced'),
             ('expert', 'Expert')
-        ],
-        default='intermediate'
+        ]
     )
     hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     availability = models.JSONField(
@@ -128,7 +130,6 @@ class Mentor(models.Model):
         return f"{self.user.name}'s Mentor Profile"
 
     def save(self, *args, **kwargs):
-        # Ensure the associated user is marked as a mentor
         if not self.user.is_mentor:
             self.user.is_mentor = True
             self.user.save()
@@ -136,7 +137,6 @@ class Mentor(models.Model):
 
     @property
     def full_profile(self):
-        """Returns a dictionary with both user and mentor information"""
         return {
             'id': self.user.id,
             'name': self.user.name,
@@ -150,8 +150,10 @@ class Mentor(models.Model):
             'rating': float(self.rating),
             'total_sessions': self.total_sessions,
             'total_students': self.total_students,
-            'is_available': self.is_available
+            'is_available': self.is_available,
+            'profile_image_url': self.profile_image.url if self.profile_image else None
         }
+
 
 class Journal(models.Model):
     MOOD_CHOICES = [
