@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from userapp.models import User
+from userapp.models import *
 from rest_framework_simplejwt.tokens import RefreshToken
 
 class AdminLoginSerializer(serializers.Serializer):
@@ -50,3 +50,22 @@ class UserEditSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['name', 'phone', 'is_active'] 
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email']
+
+class JournalListSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = Journal
+        fields = ['id', 'user', 'mood', 'date', 'created_at', 'is_blocked']
+
+class JournalDetailSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = Journal
+        fields = ['id', 'user', 'mood', 'description', 'date', 'created_at', 'updated_at', 'is_blocked']

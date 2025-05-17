@@ -10,6 +10,8 @@ from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import logging
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import permission_classes
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +29,12 @@ class CookieJWTAuthentication(JWTAuthentication):
         except (InvalidToken, TokenError) as e:
             return None
 
+@permission_classes([AllowAny])
 class AdminLoginView(APIView):
     def post(self, request):
         serializer = AdminLoginSerializer(data=request.data)
+        if not serializer.is_valid():
+            print(serializer.errors)
         if serializer.is_valid():
             data = serializer.validated_data
             response = Response({"message": "Login successful", "user": data["user"]}, status=status.HTTP_200_OK)
@@ -48,21 +53,50 @@ class AdminLogoutView(APIView):
     def post(self, request):
         try:
             response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
-            # Delete both cookies regardless of authentication status
-            response.delete_cookie('admin_access', path='/', samesite='Lax')
-            response.delete_cookie('admin_refresh', path='/', samesite='Lax')
+            
+            # Delete both cookies with ALL the same parameters used when setting them
+            response.delete_cookie(
+                'admin_access', 
+                path='/', 
+                samesite='Lax',
+                httponly=True,  # This matches the setting parameter
+                secure=False    # This matches the setting parameter
+            )
+            response.delete_cookie(
+                'admin_refresh', 
+                path='/', 
+                samesite='Lax',
+                httponly=True,  # This matches the setting parameter
+                secure=False    # This matches the setting parameter
+            )
+            
             # Try to logout if user is authenticated
             if request.user.is_authenticated:
                 logout(request)
+                
             return response
         except Exception as e:
             logger.error(f"Error during logout: {str(e)}")
             # Still try to delete cookies even if there's an error
             response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
-            response.delete_cookie('admin_access', path='/', samesite='Lax')
-            response.delete_cookie('admin_refresh', path='/', samesite='Lax')
+            
+            # Use the same parameters here too
+            response.delete_cookie(
+                'admin_access', 
+                path='/', 
+                samesite='Lax',
+                httponly=True,
+                secure=False
+            )
+            response.delete_cookie(
+                'admin_refresh', 
+                path='/', 
+                samesite='Lax',
+                httponly=True,
+                secure=False
+            )
+            
             return response
-
 class UserListView(APIView):
     authentication_classes = [CookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -254,4 +288,79 @@ class AdminRefreshTokenView(APIView):
             return Response(
                 {"error": "An error occurred while refreshing token"},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+class AdminJournalListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request):
+        # Get query parameters for search and pagination
+        search_query = request.query_params.get('search', '')
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 10))
+        
+        # Perform search if query is provided
+        if search_query:
+            journals = Journal.objects.filter(
+                Q(user__username__icontains=search_query) | 
+                Q(mood__icontains=search_query)
+            ).select_related('user')
+        else:
+            journals = Journal.objects.all().select_related('user')
+        
+        # Paginate the results
+        paginator = Paginator(journals, page_size)
+        current_page = paginator.page(page)
+        
+        # Serialize the paginated data
+        serializer = JournalListSerializer(current_page.object_list, many=True)
+        
+        # Prepare pagination info
+        pagination_data = {
+            'total_journals': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': page,
+            'page_size': page_size,
+            'has_next': current_page.has_next(),
+            'has_previous': current_page.has_previous()
+        }
+        
+        return Response({
+            'journals': serializer.data,
+            'pagination': pagination_data
+        })
+
+class AdminJournalDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get(self, request, journal_id):
+        try:
+            journal = Journal.objects.select_related('user').get(pk=journal_id)
+            serializer = JournalDetailSerializer(journal)
+            return Response(serializer.data)
+        except Journal.DoesNotExist:
+            return Response(
+                {'error': 'Journal not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+class AdminBlockJournalView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def post(self, request, journal_id):
+        try:
+            journal = Journal.objects.get(pk=journal_id)
+            # Toggle the is_blocked status
+            journal.is_blocked = not journal.is_blocked
+            journal.save()
+            
+            action = "blocked" if journal.is_blocked else "unblocked"
+            return Response({
+                'message': f'Journal successfully {action}',
+                'is_blocked': journal.is_blocked
+            })
+        except Journal.DoesNotExist:
+            return Response(
+                {'error': 'Journal not found'}, 
+                status=status.HTTP_404_NOT_FOUND
             )

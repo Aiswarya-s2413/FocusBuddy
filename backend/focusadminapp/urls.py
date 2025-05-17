@@ -1,13 +1,5 @@
 from django.urls import path
-from .views import (
-    AdminLoginView,
-    AdminLogoutView,
-    UserListView,
-    UserEditView,
-    UserBlockView,
-    AdminCheckAuthView,
-    AdminRefreshTokenView
-)
+from .views import *
 
 urlpatterns = [
     path('login/', AdminLoginView.as_view(), name='admin-login'),
@@ -17,4 +9,7 @@ urlpatterns = [
     path('users/<int:user_id>/block/', UserBlockView.as_view(), name='user-block'),
     path('check-auth/', AdminCheckAuthView.as_view(), name='admin-check-auth'),
     path('refresh/', AdminRefreshTokenView.as_view(), name='admin-refresh'),
+    path('journals/', AdminJournalListView.as_view(), name='admin-journal-list'),
+    path('journals/<int:journal_id>/', AdminJournalDetailView.as_view(), name='admin-journal-detail'),
+    path('journals/<int:journal_id>/block/', AdminBlockJournalView.as_view(), name='admin-journal-block'),
 ]

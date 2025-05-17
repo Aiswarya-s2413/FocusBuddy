@@ -6,7 +6,7 @@ export const adminLogin = createAsyncThunk(
   'admin/login',
   async (credentials, { rejectWithValue }) => {
     try {
-      const response = await adminAxios.post('/admin/login/', credentials);
+      const response = await adminAxios.post('/login/', credentials);
       return response.data;
     } catch (error) {
       if (error.response) {
@@ -23,7 +23,8 @@ export const adminLogout = createAsyncThunk(
   'admin/logout',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await adminAxios.post('/admin/logout/');
+      // Make sure to include withCredentials to ensure cookies are sent with the request
+      const response = await adminAxios.post('/logout/', {}, { withCredentials: true });
       return response.data;
     } catch (error) {
       if (error.response) {
@@ -40,7 +41,7 @@ export const checkAuthStatus = createAsyncThunk(
   'admin/checkAuth',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await adminAxios.get('/admin/check-auth/');
+      const response = await adminAxios.get('/check-auth/');
       return response.data;
     } catch (error) {
       // Don't treat 401 as an error, just return not authenticated

@@ -5,7 +5,7 @@ import { Mail, KeyRound, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardContent } from "../../components/ui/card";
 import { useDispatch, useSelector } from "react-redux";
-import { adminLogin, clearError, clearMessage, checkAuthStatus } from "../../store/adminSlice";
+import { adminLogin, clearError, clearMessage } from "../../store/adminSlice";
 
 const AdminLogin = () => {
   const dispatch = useDispatch();
@@ -20,19 +20,6 @@ const AdminLogin = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Check authentication status on component mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        await dispatch(checkAuthStatus()).unwrap();
-      } catch (error) {
-        // Silently handle the error - we expect this when not authenticated
-        console.log('Not authenticated');
-      }
-    };
-    checkAuth();
-  }, [dispatch]);
-
   // Clear any existing errors or messages when component mounts
   useEffect(() => {
     dispatch(clearError());
@@ -41,10 +28,10 @@ const AdminLogin = () => {
 
   // If admin is already authenticated, redirect to /admin/users
   useEffect(() => {
-    if (admin) {
+    if (isAuthenticated && admin) {
       navigate('/admin/users');
     }
-  }, [admin]);
+  }, [isAuthenticated, admin, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import AdminLogin from "../pages/admin/AdminLogin";
 import AdminUsers from "../pages/admin/AdminUsers";
+import AdminJournals from "../pages/admin/AdminJournals";
 import { useSelector } from "react-redux";
 
 const ProtectedAdminRoute = ({ children }) => {
@@ -29,6 +30,14 @@ const AdminRoutes = () => {
         }
       />
       <Route
+        path="/journals"
+        element={
+          <ProtectedAdminRoute>
+            <AdminJournals />
+          </ProtectedAdminRoute>
+        }
+        />
+      <Route
         path="/"
         element={
           <ProtectedAdminRoute>
@@ -36,6 +45,7 @@ const AdminRoutes = () => {
           </ProtectedAdminRoute>
         }
       />
+      
       <Route path="*" element={<Navigate to="/admin/login" replace />} />
     </Routes>
   );
