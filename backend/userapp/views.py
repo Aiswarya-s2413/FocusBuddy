@@ -19,6 +19,8 @@ from django.shortcuts import get_object_or_404
 logger = logging.getLogger(__name__)
 
 class SignupView(APIView):
+    permission_classes=[]
+    authentication_classes=[]
     def post(self, request):
         logger.info("Received signup request with data: %s", request.data)
         serializer = SignupSerializer(data=request.data)
@@ -67,6 +69,8 @@ class SignupView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class OtpVerifyView(APIView):
+    permission_classes=[]
+    authentication_classes=[]
     def post(self, request):
         serializer = OtpVerifySerializer(data=request.data)
         if serializer.is_valid():
@@ -92,6 +96,8 @@ class OtpVerifyView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ResendOtpView(APIView):
+    permission_classes=[]
+    authentication_classes=[]
     def post(self, request):
         email = request.data.get('email')
         try:
@@ -115,6 +121,8 @@ class ResendOtpView(APIView):
 
 
 class SelectSubjectsView(APIView):
+    permission_classes=[]
+    authentication_classes=[]
     def get(self, request):
         subjects = Subject.objects.all()
         serializer = SubjectSerializer(subjects, many=True)
@@ -135,7 +143,7 @@ class SelectSubjectsView(APIView):
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
-
+    authentication_classes=[]
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
@@ -156,7 +164,7 @@ class LoginView(APIView):
 
 class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
-
+    authentication_classes=[]
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
         if serializer.is_valid():
@@ -166,7 +174,7 @@ class ForgotPasswordView(APIView):
 
 class VerifyForgotPasswordOTPView(APIView):
     permission_classes = [AllowAny]
-
+    authentication_classes=[]
     def post(self, request):
         serializer = VerifyForgotPasswordOTPSerializer(data=request.data)
         if serializer.is_valid():
@@ -192,7 +200,7 @@ class VerifyForgotPasswordOTPView(APIView):
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
-
+    authentication_classes=[]
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
         if serializer.is_valid():
@@ -223,7 +231,7 @@ class ResetPasswordView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class LogoutView(APIView):
-    permission_classes = [AllowAny]
+    
 
     def post(self, request):
         response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)

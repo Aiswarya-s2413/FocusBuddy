@@ -12,6 +12,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 import logging
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import permission_classes
+from django.utils import timezone
+
 
 logger = logging.getLogger(__name__)
 
@@ -25,78 +27,293 @@ class CookieJWTAuthentication(JWTAuthentication):
         try:
             # Validate the token
             validated_token = self.get_validated_token(access_token)
-            return self.get_user(validated_token), validated_token
+            user = self.get_user(validated_token)
+            return user, validated_token
         except (InvalidToken, TokenError) as e:
+            logger.warning(f"Token validation failed: {str(e)}")
             return None
 
 @permission_classes([AllowAny])
 class AdminLoginView(APIView):
     def post(self, request):
-        serializer = AdminLoginSerializer(data=request.data)
-        if not serializer.is_valid():
-            print(serializer.errors)
+        # Don't log sensitive data like passwords
+        logger.info(f"Admin login attempt for email: {request.data.get('email', 'unknown')}")
+        
+        serializer = AdminLoginSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            data = serializer.validated_data
-            response = Response({"message": "Login successful", "user": data["user"]}, status=status.HTTP_200_OK)
-            response.set_cookie(
-                "admin_access", data["access"], httponly=True, 
-                secure=False, samesite="Lax", path="/"
-            )
-            response.set_cookie(
-                "admin_refresh", data["refresh"], httponly=True, 
-                secure=False, samesite="Lax", path="/"
-            )
-            return response
+            try:
+                data = serializer.validated_data
+                user = data["user"]
+                
+                # Generate fresh tokens
+                refresh = RefreshToken.for_user(user)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
+                
+                # Update last login
+                user.last_login = timezone.now()
+                user.save(update_fields=['last_login'])
+                
+                response = Response({
+                    "message": "Login successful", 
+                    "user": {
+                        "id": user.id,
+                        "email": user.email,
+                        "name": getattr(user, 'name', user.email),  # Use email as fallback instead of username
+                        "is_staff": user.is_staff,
+                        "is_superuser": user.is_superuser,
+                    }
+                }, status=status.HTTP_200_OK)
+                
+                # Set cookies with proper expiration times
+                response.set_cookie(
+                    "admin_access",
+                    access_token,
+                    max_age=60 * 15,  # 15 minutes
+                    httponly=True,
+                    secure=False,  # Set to True in production with HTTPS
+                    samesite="Lax",
+                    path="/",
+                    domain=None  
+                )
+                response.set_cookie(
+                    "admin_refresh",
+                    refresh_token,
+                    max_age=60 * 60 * 24 * 7,  # 7 days
+                    httponly=True,
+                    secure=False,  # Set to True in production with HTTPS
+                    samesite="Lax",
+                    path="/",
+                    domain=None  
+                )
+                
+                logger.info(f"Admin login successful for user: {user.email}")
+                return response
+                
+            except Exception as e:
+                logger.error(f"Error during login process: {str(e)}")
+                return Response({
+                    "error": "Login failed",
+                    "detail": "An error occurred during authentication"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        logger.warning(f"Admin login validation failed: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AdminLogoutView(APIView):
     def post(self, request):
         try:
+            # Try to blacklist refresh token if available
+            refresh_token = request.COOKIES.get('admin_refresh')
+            if refresh_token:
+                try:
+                    refresh = RefreshToken(refresh_token)
+                    refresh.blacklist()
+                    logger.info("Refresh token blacklisted successfully")
+                except (InvalidToken, TokenError) as e:
+                    logger.warning(f"Could not blacklist refresh token: {str(e)}")
+                    pass
+            
             response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
             
-            # Delete both cookies with ALL the same parameters used when setting them
-            response.delete_cookie(
-                'admin_access', 
-                path='/', 
+            # Delete cookies with EXACT same parameters used when setting them
+            # The key is to match ALL parameters exactly
+            # response.delete_cookie(
+            #     'admin_access',
+            #     path='/',
+            #     domain=None,  # Must match the domain used when setting
+            #     samesite='Lax'
+            # )
+            # response.delete_cookie(
+            #     'admin_refresh',
+            #     path='/',
+            #     domain=None,  # Must match the domain used when setting
+            #     samesite='Lax'
+            # )
+            
+            # Alternative approach: Set cookies with past expiration date
+            # This is more reliable for cookie deletion
+            response.set_cookie(
+                'admin_access',
+                '',
+                max_age=0,
+                expires='Thu, 01 Jan 1970 00:00:00 GMT',
+                httponly=True,
+                secure=False,
                 samesite='Lax',
-                httponly=True,  # This matches the setting parameter
-                secure=False    # This matches the setting parameter
+                path='/',
+                domain=None
             )
-            response.delete_cookie(
-                'admin_refresh', 
-                path='/', 
+            response.set_cookie(
+                'admin_refresh',
+                '',
+                max_age=0,
+                expires='Thu, 01 Jan 1970 00:00:00 GMT',
+                httponly=True,
+                secure=False,
                 samesite='Lax',
-                httponly=True,  # This matches the setting parameter
-                secure=False    # This matches the setting parameter
+                path='/',
+                domain=None
             )
             
             # Try to logout if user is authenticated
-            if request.user.is_authenticated:
+            if hasattr(request, 'user') and request.user.is_authenticated:
                 logout(request)
                 
+            logger.info("Admin logout successful")
             return response
+            
         except Exception as e:
             logger.error(f"Error during logout: {str(e)}")
             # Still try to delete cookies even if there's an error
             response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
             
-            # Use the same parameters here too
-            response.delete_cookie(
-                'admin_access', 
-                path='/', 
-                samesite='Lax',
+            # Use the set_cookie approach for more reliable deletion
+            response.set_cookie(
+                'admin_access',
+                '',
+                max_age=0,
+                expires='Thu, 01 Jan 1970 00:00:00 GMT',
                 httponly=True,
-                secure=False
+                secure=False,
+                samesite='Lax',
+                path='/',
+                domain=None
             )
-            response.delete_cookie(
-                'admin_refresh', 
-                path='/', 
-                samesite='Lax',
+            response.set_cookie(
+                'admin_refresh',
+                '',
+                max_age=0,
+                expires='Thu, 01 Jan 1970 00:00:00 GMT',
                 httponly=True,
-                secure=False
+                secure=False,
+                samesite='Lax',
+                path='/',
+                domain=None
             )
             
             return response
+
+class AdminCheckAuthView(APIView):
+    authentication_classes = [CookieJWTAuthentication]  # Add this line
+    
+    def get(self, request):
+        try:
+            # Get token from cookies
+            access_token = request.COOKIES.get('admin_access')
+            
+            if not access_token:
+                return Response(
+                    {"error": "Authentication credentials were not provided."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            try:
+                # Validate token
+                token = AccessToken(access_token)
+                # Get user from token
+                user_id = token.get('user_id')
+                if user_id:
+                    try:
+                        from django.contrib.auth import get_user_model
+                        User = get_user_model()
+                        user = User.objects.get(id=user_id)
+                        
+                        # Check if user is admin
+                        if not (user.is_staff or user.is_superuser):
+                            return Response(
+                                {"error": "Admin access required."},
+                                status=status.HTTP_403_FORBIDDEN
+                            )
+                        
+                        return Response({
+                            "message": "Authentication successful",
+                            "user": {
+                                "id": user.id,
+                                "email": user.email,
+                                "name": getattr(user, 'name', user.username),
+                                "is_staff": user.is_staff,
+                                "is_superuser": user.is_superuser,
+                            }
+                        }, status=status.HTTP_200_OK)
+                    except User.DoesNotExist:
+                        return Response(
+                            {"error": "User not found."},
+                            status=status.HTTP_401_UNAUTHORIZED
+                        )
+                else:
+                    return Response(
+                        {"error": "Invalid token payload."},
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+                    
+            except (InvalidToken, TokenError) as e:
+                logger.warning(f"Token validation failed in check auth: {str(e)}")
+                return Response(
+                    {"error": "Invalid or expired token."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+        except Exception as e:
+            logger.error(f"Error checking authentication: {str(e)}")
+            return Response(
+                {"error": "An error occurred while checking authentication"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class AdminRefreshTokenView(APIView):
+    def post(self, request):
+        try:
+            # Get refresh token from cookies
+            refresh_token = request.COOKIES.get('admin_refresh')
+            
+            if not refresh_token:
+                return Response(
+                    {"error": "Refresh token not provided."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            try:
+                # Validate refresh token and generate new access token
+                refresh = RefreshToken(refresh_token)
+                access_token = str(refresh.access_token)
+                
+                response = Response({
+                    "message": "Token refreshed successfully"
+                }, status=status.HTTP_200_OK)
+                
+                # Set new access token in cookie
+                response.set_cookie(
+                    "admin_access", 
+                    access_token, 
+                    max_age=60 * 15,  # 15 minutes
+                    httponly=True, 
+                    secure=False, 
+                    samesite="Lax", 
+                    path="/"
+                )
+                
+                logger.info("Token refreshed successfully")
+                return response
+                
+            except (InvalidToken, TokenError) as e:
+                logger.warning(f"Token refresh failed: {str(e)}")
+                # Clear invalid cookies
+                response = Response(
+                    {"error": "Invalid or expired refresh token."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+                response.delete_cookie("admin_access", path="/")
+                response.delete_cookie("admin_refresh", path="/")
+                return response
+                
+        except Exception as e:
+            logger.error(f"Error refreshing token: {str(e)}")
+            return Response(
+                {"error": "An error occurred while refreshing token"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+# Rest of your views remain the same...
 class UserListView(APIView):
     authentication_classes = [CookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -291,7 +508,7 @@ class AdminRefreshTokenView(APIView):
             )
 
 class AdminJournalListView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated]
     
     def get(self, request):
         # Get query parameters for search and pagination

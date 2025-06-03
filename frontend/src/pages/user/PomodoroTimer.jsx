@@ -166,40 +166,45 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
     fetchTasks();
   }, []);
 
-  // Effect to calculate initial time based on session type
+  // FIXED: Effect to handle session type changes (separate from pause/resume)
   useEffect(() => {
-    // Reset the timer whenever session type changes if not already running
-    if (!isRunning) {
-      let initialTime;
-      
-      switch (sessionType) {
-        case 'focus':
-          initialTime = settings.focusDuration * 60;
-          break;
-        case 'shortBreak':
-          initialTime = settings.shortBreakDuration * 60;
-          break;
-        case 'longBreak':
-          initialTime = settings.longBreakDuration * 60;
-          break;
-        default:
-          initialTime = settings.focusDuration * 60;
-      }
-      
-      // Store total time for progress calculation
-      totalTimeRef.current = initialTime;
-      localStorage.setItem('pomodoroTotalTime', initialTime.toString());
-      
-      // Reset timer
-      setTime(initialTime);
+    // Reset the timer when session type changes (not when pausing/resuming)
+    let initialTime;
+    
+    switch (sessionType) {
+      case 'focus':
+        initialTime = settings.focusDuration * 60;
+        break;
+      case 'shortBreak':
+        initialTime = settings.shortBreakDuration * 60;
+        break;
+      case 'longBreak':
+        initialTime = settings.longBreakDuration * 60;
+        break;
+      default:
+        initialTime = settings.focusDuration * 60;
     }
     
+    // Store total time for progress calculation
+    totalTimeRef.current = initialTime;
+    localStorage.setItem('pomodoroTotalTime', initialTime.toString());
+    
+    // Reset timer when session type changes
+    setTime(initialTime);
+    
+    // Always pause when session type changes
+    setIsRunning(false);
+    
+  }, [sessionType, settings]); // Only depend on sessionType and settings
+
+  // Separate effect for cleanup
+  useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
-  }, [sessionType, settings, isRunning]);
+  }, []);
 
   // Timer logic
   useEffect(() => {
@@ -295,6 +300,7 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
   const startTimer = () => setIsRunning(true);
   const pauseTimer = () => setIsRunning(false);
   
+  // FIXED: Update resetTimer function to properly handle reset
   const resetTimer = () => {
     pauseTimer();
     
@@ -317,6 +323,7 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
     setTime(resetTime);
     totalTimeRef.current = resetTime;
     localStorage.setItem('pomodoroTotalTime', resetTime.toString());
+    localStorage.setItem('pomodoroTime', resetTime.toString());
   };
 
   // Settings updater
@@ -450,7 +457,7 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
   );
 };
 
-// Also create a hook version for reusing timer logic elsewhere
+// FIXED: Also create a hook version for reusing timer logic elsewhere
 export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
   // Default settings
   const defaultSettings = {
@@ -566,40 +573,45 @@ export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Effect to calculate initial time based on session type
+  // FIXED: Effect to handle session type changes (separate from pause/resume)
   useEffect(() => {
-    // Reset the timer whenever session type changes if not already running
-    if (!isRunning) {
-      let initialTime;
-      
-      switch (sessionType) {
-        case 'focus':
-          initialTime = settings.focusDuration * 60;
-          break;
-        case 'shortBreak':
-          initialTime = settings.shortBreakDuration * 60;
-          break;
-        case 'longBreak':
-          initialTime = settings.longBreakDuration * 60;
-          break;
-        default:
-          initialTime = settings.focusDuration * 60;
-      }
-      
-      // Store total time for progress calculation
-      totalTimeRef.current = initialTime;
-      localStorage.setItem('pomodoroTotalTime', initialTime.toString());
-      
-      // Reset timer
-      setTime(initialTime);
+    // Reset the timer when session type changes (not when pausing/resuming)
+    let initialTime;
+    
+    switch (sessionType) {
+      case 'focus':
+        initialTime = settings.focusDuration * 60;
+        break;
+      case 'shortBreak':
+        initialTime = settings.shortBreakDuration * 60;
+        break;
+      case 'longBreak':
+        initialTime = settings.longBreakDuration * 60;
+        break;
+      default:
+        initialTime = settings.focusDuration * 60;
     }
     
+    // Store total time for progress calculation
+    totalTimeRef.current = initialTime;
+    localStorage.setItem('pomodoroTotalTime', initialTime.toString());
+    
+    // Reset timer when session type changes
+    setTime(initialTime);
+    
+    // Always pause when session type changes
+    setIsRunning(false);
+    
+  }, [sessionType, settings]); // Only depend on sessionType and settings
+
+  // Separate effect for cleanup
+  useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
-  }, [sessionType, settings, isRunning]);
+  }, []);
 
   // Timer logic
   useEffect(() => {
@@ -677,6 +689,7 @@ export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
   const startTimer = () => setIsRunning(true);
   const pauseTimer = () => setIsRunning(false);
   
+  // FIXED: Update resetTimer function to properly handle reset
   const resetTimer = () => {
     pauseTimer();
     
@@ -699,6 +712,7 @@ export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
     setTime(resetTime);
     totalTimeRef.current = resetTime;
     localStorage.setItem('pomodoroTotalTime', resetTime.toString());
+    localStorage.setItem('pomodoroTime', resetTime.toString());
   };
 
   // Settings updater
