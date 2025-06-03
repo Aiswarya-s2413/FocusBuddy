@@ -14,6 +14,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 from rest_framework.parsers import MultiPartParser, FormParser
+from userapp.authentication import MentorCookieJWTAuthentication
 
 
 logger = logging.getLogger(__name__)
@@ -292,7 +293,7 @@ class MentorResetPasswordView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class MentorProfileUploadView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
+    authentication_classes = [MentorCookieJWTAuthentication]
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
     
@@ -347,8 +348,7 @@ class MentorProfileUploadView(APIView):
                 if 'hourly_rate' in json_data:
                     data['hourly_rate'] = json_data['hourly_rate']
                     
-                # We're removing professional titles and languages handling
-                # No additional processing needed for the availability data
+                
             
             # Process the data
             serializer = MentorProfileUploadSerializer(mentor, data=data, partial=True)

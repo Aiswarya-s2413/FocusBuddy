@@ -303,7 +303,7 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
         
         # Add profile image URL
         representation['profile_image_url'] = (
-            instance.profile_image.url if instance.profile_image else None
+            instance.profile_image if instance.profile_image else None
         )
         
         # Set expertise level to match frontend format (capitalized)

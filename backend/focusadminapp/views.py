@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.contrib.auth import logout
-from .serializers import AdminLoginSerializer, UserListSerializer, UserEditSerializer
-from userapp.models import User
+from .serializers import *
+from userapp.models import *
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -13,30 +13,22 @@ import logging
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import permission_classes
 from django.utils import timezone
+from userapp.authentication import AdminCookieJWTAuthentication
+
+from rest_framework import status
+from django.http import JsonResponse
+import traceback
+import sys
+
 
 
 logger = logging.getLogger(__name__)
 
-class CookieJWTAuthentication(JWTAuthentication):
-    def authenticate(self, request):
-        # Get the token from cookies
-        access_token = request.COOKIES.get('admin_access')
-        if not access_token:
-            return None
-
-        try:
-            # Validate the token
-            validated_token = self.get_validated_token(access_token)
-            user = self.get_user(validated_token)
-            return user, validated_token
-        except (InvalidToken, TokenError) as e:
-            logger.warning(f"Token validation failed: {str(e)}")
-            return None
 
 @permission_classes([AllowAny])
 class AdminLoginView(APIView):
     def post(self, request):
-        # Don't log sensitive data like passwords
+        
         logger.info(f"Admin login attempt for email: {request.data.get('email', 'unknown')}")
         
         serializer = AdminLoginSerializer(data=request.data, context={'request': request})
@@ -101,6 +93,7 @@ class AdminLoginView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AdminLogoutView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
     def post(self, request):
         try:
             # Try to blacklist refresh token if available
@@ -195,7 +188,7 @@ class AdminLogoutView(APIView):
             return response
 
 class AdminCheckAuthView(APIView):
-    authentication_classes = [CookieJWTAuthentication]  # Add this line
+    authentication_classes = [AdminCookieJWTAuthentication]  
     
     def get(self, request):
         try:
@@ -262,60 +255,52 @@ class AdminCheckAuthView(APIView):
 
 class AdminRefreshTokenView(APIView):
     def post(self, request):
-        try:
-            # Get refresh token from cookies
-            refresh_token = request.COOKIES.get('admin_refresh')
-            
-            if not refresh_token:
-                return Response(
-                    {"error": "Refresh token not provided."},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-            
-            try:
-                # Validate refresh token and generate new access token
-                refresh = RefreshToken(refresh_token)
-                access_token = str(refresh.access_token)
-                
-                response = Response({
-                    "message": "Token refreshed successfully"
-                }, status=status.HTTP_200_OK)
-                
-                # Set new access token in cookie
-                response.set_cookie(
-                    "admin_access", 
-                    access_token, 
-                    max_age=60 * 15,  # 15 minutes
-                    httponly=True, 
-                    secure=False, 
-                    samesite="Lax", 
-                    path="/"
-                )
-                
-                logger.info("Token refreshed successfully")
-                return response
-                
-            except (InvalidToken, TokenError) as e:
-                logger.warning(f"Token refresh failed: {str(e)}")
-                # Clear invalid cookies
-                response = Response(
-                    {"error": "Invalid or expired refresh token."},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-                response.delete_cookie("admin_access", path="/")
-                response.delete_cookie("admin_refresh", path="/")
-                return response
-                
-        except Exception as e:
-            logger.error(f"Error refreshing token: {str(e)}")
+        # Get refresh token from admin_refresh cookie
+        refresh_token = request.COOKIES.get('admin_refresh')
+        
+        if not refresh_token:
             return Response(
-                {"error": "An error occurred while refreshing token"},
+                {'error': 'Refresh token not found'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        try:
+            # Validate and refresh the token
+            refresh = RefreshToken(refresh_token)
+            access_token = str(refresh.access_token)
+            
+            # Create response with new access token
+            response = Response({
+                'message': 'Token refreshed successfully'
+            })
+            
+            # Set the new access token in cookie
+            response.set_cookie(
+                'admin_access',
+                access_token,
+                max_age=60 * 15,  # 15 minutes
+                httponly=True,
+                secure=True,  # Set to False if not using HTTPS in development
+                samesite='Lax'
+            )
+            
+            return response
+            
+        except TokenError as e:
+            logger.error(f"Token refresh failed: {str(e)}")
+            return Response(
+                {'error': 'Invalid refresh token'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error during token refresh: {str(e)}")
+            return Response(
+                {'error': 'Token refresh failed'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-# Rest of your views remain the same...
 class UserListView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
+    authentication_classes = [AdminCookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
@@ -367,7 +352,7 @@ class UserListView(APIView):
             )
 
 class UserEditView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
+    authentication_classes = [AdminCookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def put(self, request, user_id):
@@ -397,7 +382,7 @@ class UserEditView(APIView):
             )
 
 class UserBlockView(APIView):
-    authentication_classes = [CookieJWTAuthentication]
+    authentication_classes = [AdminCookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def post(self, request, user_id):
@@ -431,137 +416,80 @@ class UserBlockView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class AdminCheckAuthView(APIView):
-    def get(self, request):
-        try:
-            # Get token from cookies
-            access_token = request.COOKIES.get('admin_access')
-            
-            if not access_token:
-                return Response(
-                    {"error": "Authentication credentials were not provided."},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-            
-            try:
-                # Validate token
-                AccessToken(access_token)
-                # If token is valid, return success response
-                return Response({
-                    "message": "Authentication successful",
-                    "user": {
-                        "email": request.user.email if hasattr(request.user, 'email') else None,
-                        "name": request.user.name if hasattr(request.user, 'name') else None
-                    }
-                }, status=status.HTTP_200_OK)
-            except (InvalidToken, TokenError) as e:
-                return Response(
-                    {"error": "Invalid or expired token."},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-        except Exception as e:
-            logger.error(f"Error checking authentication: {str(e)}")
-            return Response(
-                {"error": "An error occurred while checking authentication"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-class AdminRefreshTokenView(APIView):
-    def post(self, request):
-        try:
-            # Get refresh token from cookies
-            refresh_token = request.COOKIES.get('admin_refresh')
-            
-            if not refresh_token:
-                return Response(
-                    {"error": "Refresh token not provided."},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-            
-            try:
-                # Validate refresh token
-                refresh = RefreshToken(refresh_token)
-                # Generate new access token
-                access_token = str(refresh.access_token)
-                
-                response = Response({
-                    "message": "Token refreshed successfully"
-                }, status=status.HTTP_200_OK)
-                
-                # Set new access token in cookie
-                response.set_cookie(
-                    "admin_access", access_token, httponly=True, 
-                    secure=False, samesite="Lax", path="/"
-                )
-                
-                return response
-            except (InvalidToken, TokenError) as e:
-                return Response(
-                    {"error": "Invalid or expired refresh token."},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-        except Exception as e:
-            logger.error(f"Error refreshing token: {str(e)}")
-            return Response(
-                {"error": "An error occurred while refreshing token"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
 class AdminJournalListView(APIView):
-    permission_classes = [IsAuthenticated]
-    
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
     def get(self, request):
-        # Get query parameters for search and pagination
-        search_query = request.query_params.get('search', '')
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 10))
-        
-        # Perform search if query is provided
-        if search_query:
-            journals = Journal.objects.filter(
-                Q(user__username__icontains=search_query) | 
-                Q(mood__icontains=search_query)
-            ).select_related('user')
-        else:
-            journals = Journal.objects.all().select_related('user')
-        
-        # Paginate the results
-        paginator = Paginator(journals, page_size)
-        current_page = paginator.page(page)
-        
-        # Serialize the paginated data
-        serializer = JournalListSerializer(current_page.object_list, many=True)
-        
-        # Prepare pagination info
-        pagination_data = {
-            'total_journals': paginator.count,
-            'total_pages': paginator.num_pages,
-            'current_page': page,
-            'page_size': page_size,
-            'has_next': current_page.has_next(),
-            'has_previous': current_page.has_previous()
-        }
-        
-        return Response({
-            'journals': serializer.data,
-            'pagination': pagination_data
-        })
+        try:
+            # Get query parameters
+            search_query = request.query_params.get('search', '')
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 10))
+
+            # Filter journals based on search
+            if search_query:
+                journals = Journal.objects.filter(
+                    Q(user__name__icontains=search_query) |
+                    Q(mood__icontains=search_query)
+                ).select_related('user').order_by('-created_at')
+            else:
+                journals = Journal.objects.all().select_related('user').order_by('-created_at')
+
+            # Manual pagination calculation
+            total_journals = journals.count()
+            total_pages = (total_journals + page_size - 1) // page_size
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_journals = journals[start_index:end_index]
+
+            # Serialize
+            serializer = JournalListSerializer(paginated_journals, many=True)
+
+            return Response({
+                "journals": serializer.data,
+                "pagination": {
+                    "total_journals": total_journals,
+                    "total_pages": total_pages,
+                    "current_page": page,
+                    "page_size": page_size,
+                    "has_next": page < total_pages,
+                    "has_previous": page > 1
+                }
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error listing journals: {str(e)}")
+            return Response(
+                {"error": "An error occurred while listing journals"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 
 class AdminJournalDetailView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
     
     def get(self, request, journal_id):
         try:
             journal = Journal.objects.select_related('user').get(pk=journal_id)
             serializer = JournalDetailSerializer(journal)
+            print(serializer.data)
             return Response(serializer.data)
         except Journal.DoesNotExist:
             return Response(
                 {'error': 'Journal not found'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
+        except Exception as e:
+            return Response(
+                {'error': 'An error occurred while fetching the journal'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class AdminBlockJournalView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
     
     def post(self, request, journal_id):
@@ -580,4 +508,81 @@ class AdminBlockJournalView(APIView):
             return Response(
                 {'error': 'Journal not found'}, 
                 status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': 'An error occurred while updating the journal'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+@permission_classes([AllowAny])
+class TestAdminJournalView(APIView):
+    def get(self, request):
+        try:
+            # Step 1: Test basic response
+            print("=== STEP 1: Basic response test ===")
+            return Response({"message": "Basic response works"})
+            
+        except Exception as e:
+            print(f"ERROR in Step 1: {str(e)}")
+            print("TRACEBACK:")
+            traceback.print_exc()
+            return Response(
+                {'error': f'Error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+@permission_classes([AllowAny])
+class TestAdminJournalView2(APIView):
+    def get(self, request):
+        try:
+            print("=== STEP 2: Testing model import ===")
+            from userapp.models import Journal  
+            print("=== STEP 3: Testing basic query ===")
+            journals_count = Journal.objects.count()
+            print(f"Found {journals_count} journals")
+            
+            return Response({
+                "message": "Model import and basic query works",
+                "count": journals_count
+            })
+            
+        except Exception as e:
+            print(f"ERROR in Step 2/3: {str(e)}")
+            print("TRACEBACK:")
+            traceback.print_exc()
+            return Response(
+                {'error': f'Error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+@permission_classes([AllowAny])
+class TestAdminJournalView3(APIView):
+    def get(self, request):
+        try:
+            print("=== STEP 4: Testing serializer ===")
+            from userapp.models import Journal  # Replace with your app name
+            from focusadminapp.serializers import JournalListSerializer  # Replace with your app name
+            
+            journals = Journal.objects.first()  # Get just one journal
+            if journals.exists():
+                journal = journals.first()
+                print(f"Testing serializer with journal: {journal}")
+                
+                serializer = JournalListSerializer(journal)
+                print(f"Serializer data: {serializer.data}")
+                
+                return Response({
+                    "message": "Serializer works",
+                    "data": serializer.data
+                })
+            else:
+                return Response({
+                    "message": "No journals found to test serializer"
+                })
+                
+        except Exception as e:
+            print(f"ERROR in Step 4: {str(e)}")
+            print("TRACEBACK:")
+            traceback.print_exc()
+            return Response(
+                {'error': f'Error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

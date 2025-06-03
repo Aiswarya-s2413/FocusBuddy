@@ -138,14 +138,14 @@ const MentorProfileUpload = () => {
       // Create form data for multipart/form-data submission (needed for file upload)
       const formData = new FormData();
       
-      // Convert frontend data to backend format - removed languages and title
+      // Convert frontend data to backend format
       const backendData = {
         name: data.name,
         bio: data.bio,
         subjects: data.subjects.split(',').map(subject => subject.trim()),
         experience: data.experience,
         hourly_rate: data.hourlyRate,
-        expertise_level: level.toLowerCase() // This is the key part
+        expertise_level: level.toLowerCase()
       };
       
       console.log("Submitting form with expertise level:", level.toLowerCase());
@@ -153,23 +153,28 @@ const MentorProfileUpload = () => {
       // Add JSON data to form
       formData.append('data', JSON.stringify(backendData));
       
-      // Alternative: add expertise_level directly to FormData as well for extra safety
+      // Add expertise_level directly to FormData as well for extra safety
       formData.append('expertise_level', level.toLowerCase());
       
       // Add image file if present
       if (imageFile) {
+        console.log("Adding image file to FormData:", imageFile.name, imageFile.type, imageFile.size);
         formData.append('profile_image', imageFile);
       }
       
-      // Send data to backend
+      // Debug: Log what's being sent
+      console.log("FormData contents:");
+      for (let [key, value] of formData.entries()) {
+        console.log(key, value);
+      }
+      
+      // Send data to backend - REMOVED Content-Type header
       const response = await axios({
         method: existingProfile ? 'put' : 'post',
         url: `${API_URL}/profile-upload/`,
         data: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        withCredentials: true // Important for cookies
+        // DON'T SET Content-Type - let browser set it with boundary
+        withCredentials: true
       });
   
       console.log("Server response:", response.data);
@@ -184,7 +189,7 @@ const MentorProfileUpload = () => {
       toast({
         title: "Profile updated",
         description: `Your mentor profile has been updated successfully.`,
-        duration: 5000, // Display for 5 seconds
+        duration: 5000,
       });
       
     } catch (error) {
@@ -359,7 +364,7 @@ const MentorProfileUpload = () => {
                   name="hourlyRate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Hourly Rate ($)</FormLabel>
+                      <FormLabel>Hourly Rate</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" step="0.01" {...field} />
                       </FormControl>

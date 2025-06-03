@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+import cloudinary
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,6 +27,32 @@ SECRET_KEY = 'django-insecure-9s*(+7e36unmblx$swr-eu0vvebqf0pm$a_s1k2ahpf4ptneln
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
 
 ALLOWED_HOSTS = ["*"]
 
@@ -148,7 +175,8 @@ CSRF_TRUSTED_ORIGINS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'userapp.authentication.CookieJWTAuthentication'
+        'userapp.authentication.UserCookieJWTAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
 
     ],
     'DEFAULT_PERMISSION_CLASSES': [
@@ -187,10 +215,20 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
 
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME'),
-    'API_KEY': config('CLOUDINARY_API_KEY'),
-    'API_SECRET': config('CLOUDINARY_API_SECRET'),
+    'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME').strip(),
+    'API_KEY': config('CLOUDINARY_API_KEY').strip(),
+    'API_SECRET': config('CLOUDINARY_API_SECRET').strip(),
 }
 
+print("CLOUDINARY_API_KEY:", config('CLOUDINARY_API_KEY'))
+
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+
+cloudinary.config( 
+  cloud_name = config('CLOUDINARY_CLOUD_NAME').strip(), 
+  api_key = config('CLOUDINARY_API_KEY').strip(), 
+  api_secret = config('CLOUDINARY_API_SECRET').strip(),
+  secure = True
+)
 

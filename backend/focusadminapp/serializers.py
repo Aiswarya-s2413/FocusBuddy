@@ -51,14 +51,14 @@ class UserEditSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email']
+        fields = ['id', 'name', 'email']
 
 class JournalListSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     
     class Meta:
         model = Journal
-        fields = ['id', 'user', 'mood', 'date', 'created_at', 'is_blocked']
+        fields = ['id', 'user', 'mood', 'date',  'created_at', 'is_blocked']
 
 class JournalDetailSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)

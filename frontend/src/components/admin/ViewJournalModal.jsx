@@ -1,5 +1,5 @@
 import React from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,DialogDescription } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 
@@ -31,6 +31,8 @@ const ViewJournalModal = ({ isOpen, onClose, journal }) => {
         return 'bg-gray-100 text-gray-800 hover:bg-gray-200';
     }
   };
+  console.log("Journal description:", journal.description);
+  console.log("Journal mood:", journal.mood);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -39,12 +41,15 @@ const ViewJournalModal = ({ isOpen, onClose, journal }) => {
           <DialogTitle className="text-xl font-semibold">
             Journal Entry Details
           </DialogTitle>
+          <DialogDescription>
+            Detailed view of the selected journal entry.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium text-gray-500">User</p>
-            <p className="text-base font-medium">{journal.user.username}</p>
+            <p className="text-base font-medium">{journal.user.name}</p>
           </div>
           
           <div className="flex justify-between">
