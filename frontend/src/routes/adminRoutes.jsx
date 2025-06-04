@@ -1,8 +1,8 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import AdminLogin from "../pages/admin/AdminLogin";
 import AdminUsers from "../pages/admin/AdminUsers";
-import AdminJournals from "../pages/admin/AdminJournals";
 import { useSelector } from "react-redux";
+import AdminMentorsApproval from "../pages/admin/AdminMentorsApproval";
 
 const ProtectedAdminRoute = ({ children }) => {
   const { admin } = useSelector((state) => state.admin);
@@ -30,10 +30,10 @@ const AdminRoutes = () => {
         }
       />
       <Route
-        path="/journals"
+        path="/mentors"
         element={
           <ProtectedAdminRoute>
-            <AdminJournals />
+            <AdminMentorsApproval />
           </ProtectedAdminRoute>
         }
         />

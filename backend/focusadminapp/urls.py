@@ -12,7 +12,10 @@ urlpatterns = [
     path('journals/', AdminJournalListView.as_view(), name='admin-journal-list'),
     path('journals/<int:journal_id>/', AdminJournalDetailView.as_view(), name='admin-journal-detail'),
     path('journals/<int:journal_id>/block/', AdminBlockJournalView.as_view(), name='admin-journal-block'),
-    path('test1/', TestAdminJournalView.as_view(), name='test1'),
-    path('test2/', TestAdminJournalView2.as_view(), name='test2'),
-    path('test3/', TestAdminJournalView3.as_view(), name='test3'),
+    path('mentors/', MentorApprovalListView.as_view(), name='mentor-approval-list'),
+    path('mentors/<int:mentor_id>/', MentorDetailView.as_view(), name='mentor-detail'),
+    path('mentors/<int:mentor_id>/approve/', ApproveMentorView.as_view(), name='approve-mentor'),
+    path('mentors/<int:mentor_id>/reject/', RejectMentorView.as_view(), name='reject-mentor'),
+    path('mentors/stats/', MentorApprovalStatsView.as_view(), name='mentor-approval-stats'),
+    
 ]

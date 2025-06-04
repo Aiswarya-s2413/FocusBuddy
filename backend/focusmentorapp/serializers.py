@@ -8,6 +8,9 @@ import logging
 from django.utils import timezone
 from django.db import transaction
 from .utils import CloudinaryService
+from django.contrib.auth import authenticate, get_user_model
+
+User = get_user_model()
 
 logger = logging.getLogger(__name__)
 
@@ -197,8 +200,12 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
         model = Mentor
         fields = [
             'name', 'bio', 'subjects', 'experience', 'expertise_level',
-            'hourly_rate', 'profile_image', 'is_available'
+            'hourly_rate', 'profile_image', 'is_available', 
+            # Add approval-related fields
+            'submitted_for_approval', 'approval_status', 'submitted_at', 
+            'approved_at', 'approved_by'
         ]
+        read_only_fields = ['submitted_at', 'approved_at', 'approved_by']
     
     def validate_subjects(self, value):
         """Validate and process the comma-separated subjects string"""
@@ -241,6 +248,8 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
             
     @transaction.atomic
     def update(self, instance, validated_data):
+        from django.utils import timezone
+        
         user_data = validated_data.pop('user', {})
         subjects_data = validated_data.pop('subjects', [])
         profile_image = validated_data.pop('profile_image', None)
@@ -277,6 +286,12 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
             
+        # Set submission for approval when profile is updated/created
+        if not instance.submitted_for_approval:
+            instance.submitted_for_approval = True
+            instance.approval_status = 'pending'
+            instance.submitted_at = timezone.now()
+            
         # Log the expertise level value before saving
         logger.info(f"Setting expertise_level to: {instance.expertise_level}")
         
@@ -306,8 +321,19 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
             instance.profile_image if instance.profile_image else None
         )
         
-        # Set expertise level to match frontend format (capitalized)
+        # Set expertise level to match frontend format 
         if instance.expertise_level:
             representation['expertise_level'] = instance.get_expertise_level_display().title()
         
+        # Add approval-related fields with proper formatting
+        representation['submitted_for_approval'] = instance.submitted_for_approval
+        representation['approval_status'] = instance.approval_status
+        representation['submitted_at'] = instance.submitted_at.isoformat() if instance.submitted_at else None
+        representation['approved_at'] = instance.approved_at.isoformat() if instance.approved_at else None
+        if instance.approved_by:
+            representation['approved_by'] = instance.approved_by.name
+        else:
+            representation['approved_by'] = None
+        
         return representation
+

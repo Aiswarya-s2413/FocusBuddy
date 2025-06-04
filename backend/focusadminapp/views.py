@@ -514,75 +514,240 @@ class AdminBlockJournalView(APIView):
                 {'error': 'An error occurred while updating the journal'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-@permission_classes([AllowAny])
-class TestAdminJournalView(APIView):
+class MentorApprovalListView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
     def get(self, request):
+        """List mentors with filtering, search and pagination"""
         try:
-            # Step 1: Test basic response
-            print("=== STEP 1: Basic response test ===")
-            return Response({"message": "Basic response works"})
+            # Get query parameters
+            search_query = request.query_params.get('search', '')
+            status_filter = request.query_params.get('status', 'pending')
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 10))
             
-        except Exception as e:
-            print(f"ERROR in Step 1: {str(e)}")
-            print("TRACEBACK:")
-            traceback.print_exc()
-            return Response(
-                {'error': f'Error: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-@permission_classes([AllowAny])
-class TestAdminJournalView2(APIView):
-    def get(self, request):
-        try:
-            print("=== STEP 2: Testing model import ===")
-            from userapp.models import Journal  
-            print("=== STEP 3: Testing basic query ===")
-            journals_count = Journal.objects.count()
-            print(f"Found {journals_count} journals")
+            # Base queryset
+            queryset = Mentor.objects.select_related('user', 'approved_by').all()
+            
+            # Filter by approval status
+            if status_filter and status_filter != 'all':
+                queryset = queryset.filter(approval_status=status_filter)
+            
+            # Search functionality
+            if search_query:
+                queryset = queryset.filter(
+                    Q(user__name__icontains=search_query) |
+                    Q(user__email__icontains=search_query)
+                )
+            
+            # Order by submission date (latest first)
+            queryset = queryset.order_by('-submitted_at', '-created_at')
+            
+            # Manual pagination calculation
+            total_mentors = queryset.count()
+            total_pages = (total_mentors + page_size - 1) // page_size
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_mentors = queryset[start_index:end_index]
+            
+            # Serialize the data
+            serializer = MentorApprovalSerializer(paginated_mentors, many=True)
             
             return Response({
-                "message": "Model import and basic query works",
-                "count": journals_count
-            })
+                'mentors': serializer.data,
+                'pagination': {
+                    'total_mentors': total_mentors,
+                    'total_pages': total_pages,
+                    'current_page': page,
+                    'page_size': page_size,
+                    'has_next': page < total_pages,
+                    'has_previous': page > 1,
+                }
+            }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            print(f"ERROR in Step 2/3: {str(e)}")
-            print("TRACEBACK:")
-            traceback.print_exc()
+            logger.error(f"Error listing mentors: {str(e)}")
             return Response(
-                {'error': f'Error: {str(e)}'},
+                {"error": "An error occurred while listing mentors"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-@permission_classes([AllowAny])
-class TestAdminJournalView3(APIView):
-    def get(self, request):
+
+class MentorDetailView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, mentor_id):
+        """Get detailed mentor information"""
         try:
-            print("=== STEP 4: Testing serializer ===")
-            from userapp.models import Journal  # Replace with your app name
-            from focusadminapp.serializers import JournalListSerializer  # Replace with your app name
+            try:
+                mentor = Mentor.objects.select_related('user', 'approved_by').get(id=mentor_id)
+            except Mentor.DoesNotExist:
+                return Response(
+                    {'error': 'Mentor not found'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
             
-            journals = Journal.objects.first()  # Get just one journal
-            if journals.exists():
-                journal = journals.first()
-                print(f"Testing serializer with journal: {journal}")
-                
-                serializer = JournalListSerializer(journal)
-                print(f"Serializer data: {serializer.data}")
-                
-                return Response({
-                    "message": "Serializer works",
-                    "data": serializer.data
-                })
-            else:
-                return Response({
-                    "message": "No journals found to test serializer"
-                })
-                
+            serializer = MentorDetailSerializer(mentor)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
         except Exception as e:
-            print(f"ERROR in Step 4: {str(e)}")
-            print("TRACEBACK:")
-            traceback.print_exc()
+            logger.error(f"Error getting mentor detail: {str(e)}")
             return Response(
-                {'error': f'Error: {str(e)}'},
+                {'error': 'An error occurred while fetching mentor details'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class ApproveMentorView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, mentor_id):
+        """Approve a mentor application"""
+        try:
+            try:
+                mentor = Mentor.objects.select_related('user').get(id=mentor_id)
+            except Mentor.DoesNotExist:
+                return Response(
+                    {'error': 'Mentor not found'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            if mentor.approval_status == 'approved':
+                return Response(
+                    {'error': 'Mentor is already approved'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update mentor status
+            mentor.approval_status = 'approved'
+            mentor.is_approved = True
+            mentor.approved_at = timezone.now()
+            mentor.approved_by = request.user
+            mentor.save()
+            
+            # Update user mentor status if not already set
+            if not mentor.user.is_mentor:
+                mentor.user.is_mentor = True
+                mentor.user.save()
+            
+            # Create or update approval request record
+            approval_request, created = MentorApprovalRequest.objects.get_or_create(
+                mentor=mentor,
+                defaults={
+                    'status': 'approved',
+                    'processed_by': request.user,
+                    'processed_at': timezone.now(),
+                }
+            )
+            
+            if not created:
+                approval_request.status = 'approved'
+                approval_request.processed_by = request.user
+                approval_request.processed_at = timezone.now()
+                approval_request.save()
+            
+            logger.info(f"Mentor approved: {mentor.user.name} by {request.user.email}")
+            return Response({
+                'message': f'Mentor application for {mentor.user.name} has been approved successfully',
+                'mentor_id': mentor.id,
+                'status': 'approved'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error approving mentor: {str(e)}")
+            return Response(
+                {'error': f'Failed to approve mentor: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class RejectMentorView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, mentor_id):
+        """Reject a mentor application"""
+        try:
+            try:
+                mentor = Mentor.objects.select_related('user').get(id=mentor_id)
+            except Mentor.DoesNotExist:
+                return Response(
+                    {'error': 'Mentor not found'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            if mentor.approval_status == 'rejected':
+                return Response(
+                    {'error': 'Mentor is already rejected'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get admin notes from request body if provided
+            admin_notes = request.data.get('admin_notes', '')
+            
+            # Update mentor status
+            mentor.approval_status = 'rejected'
+            mentor.is_approved = False
+            mentor.approved_at = timezone.now()  # Set timestamp when processed
+            mentor.approved_by = request.user
+            mentor.save()
+            
+            # Ensure user is not marked as mentor if rejected
+            if mentor.user.is_mentor:
+                mentor.user.is_mentor = False
+                mentor.user.save()
+            
+            # Create or update approval request record
+            approval_request, created = MentorApprovalRequest.objects.get_or_create(
+                mentor=mentor,
+                defaults={
+                    'status': 'rejected',
+                    'processed_by': request.user,
+                    'processed_at': timezone.now(),
+                    'admin_notes': admin_notes,
+                }
+            )
+            
+            if not created:
+                approval_request.status = 'rejected'
+                approval_request.processed_by = request.user
+                approval_request.processed_at = timezone.now()
+                approval_request.admin_notes = admin_notes
+                approval_request.save()
+            
+            logger.info(f"Mentor rejected: {mentor.user.name} by {request.user.email}")
+            return Response({
+                'message': f'Mentor application for {mentor.user.name} has been rejected',
+                'mentor_id': mentor.id,
+                'status': 'rejected'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error rejecting mentor: {str(e)}")
+            return Response(
+                {'error': f'Failed to reject mentor: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class MentorApprovalStatsView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        """Get statistics for mentor approvals"""
+        try:
+            stats = {
+                'total_mentors': Mentor.objects.count(),
+                'pending_approvals': Mentor.objects.filter(approval_status='pending').count(),
+                'approved_mentors': Mentor.objects.filter(approval_status='approved').count(),
+                'rejected_mentors': Mentor.objects.filter(approval_status='rejected').count(),
+            }
+            
+            return Response(stats, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting mentor stats: {str(e)}")
+            return Response(
+                {'error': f'Failed to get stats: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

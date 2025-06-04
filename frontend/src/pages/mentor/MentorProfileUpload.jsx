@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "../../components/ui/form";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
-import { Camera } from "lucide-react";
+import { Camera, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -42,7 +42,8 @@ const MentorProfileUpload = () => {
   const [level, setLevel] = useState("Intermediate");
   const [isLoading, setIsLoading] = useState(false);
   const [existingProfile, setExistingProfile] = useState(null);
-  const [successMessage, setSuccessMessage] = useState(null);
+  const [approvalStatus, setApprovalStatus] = useState(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
 
   const form = useForm({
     resolver: zodResolver(mentorProfileSchema),
@@ -66,6 +67,26 @@ const MentorProfileUpload = () => {
         
         if (response.data) {
           setExistingProfile(response.data);
+          
+          console.log("Profile data received:", response.data);
+          
+          // Check if profile is already submitted for approval
+          // This is the key fix - check the actual boolean value from backend
+          if (response.data.submitted_for_approval === true) {
+            console.log("Profile is submitted for approval");
+            setIsSubmitted(true);
+            setApprovalStatus({
+              status: response.data.approval_status || 'pending',
+              submitted_at: response.data.submitted_at,
+              approved_at: response.data.approved_at,
+              approved_by: response.data.approved_by
+            });
+            return; // Don't populate form if already submitted
+          } else {
+            console.log("Profile is not submitted for approval yet");
+            setIsSubmitted(false);
+            setApprovalStatus(null);
+          }
           
           // Convert backend data to frontend format
           const frontendData = {
@@ -133,7 +154,6 @@ const MentorProfileUpload = () => {
   const onSubmit = async (data) => {
     try {
       setIsLoading(true);
-      setSuccessMessage(null);
       
       // Create form data for multipart/form-data submission (needed for file upload)
       const formData = new FormData();
@@ -179,16 +199,33 @@ const MentorProfileUpload = () => {
   
       console.log("Server response:", response.data);
       
-      // Update the existing profile with the new data
-      setExistingProfile(response.data.profile);
-      
-      // Set success message
-      setSuccessMessage(`Profile updated successfully with expertise level: ${level}`);
+      // Set submitted state and approval status based on server response
+      // This ensures we're in sync with the backend
+      if (response.data.profile) {
+        setIsSubmitted(response.data.profile.submitted_for_approval);
+        if (response.data.profile.submitted_for_approval) {
+          setApprovalStatus({
+            status: response.data.profile.approval_status || 'pending',
+            submitted_at: response.data.profile.submitted_at,
+            approved_at: response.data.profile.approved_at,
+            approved_by: response.data.profile.approved_by
+          });
+        }
+      } else {
+        // Fallback for older response format
+        setIsSubmitted(true);
+        setApprovalStatus({
+          status: 'pending',
+          submitted_at: new Date().toISOString(),
+          approved_at: null,
+          approved_by: null
+        });
+      }
       
       // Display success toast
       toast({
-        title: "Profile updated",
-        description: `Your mentor profile has been updated successfully.`,
+        title: "Profile submitted",
+        description: "Your mentor profile has been submitted for admin approval.",
         duration: 5000,
       });
       
@@ -203,6 +240,56 @@ const MentorProfileUpload = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'pending':
+        return <Clock className="h-6 w-6 text-yellow-500" />;
+      case 'approved':
+        return <CheckCircle className="h-6 w-6 text-green-500" />;
+      case 'rejected':
+        return <XCircle className="h-6 w-6 text-red-500" />;
+      default:
+        return <AlertCircle className="h-6 w-6 text-gray-500" />;
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending':
+        return 'bg-yellow-100 border-yellow-300 text-yellow-800';
+      case 'approved':
+        return 'bg-green-100 border-green-300 text-green-800';
+      case 'rejected':
+        return 'bg-red-100 border-red-300 text-red-800';
+      default:
+        return 'bg-gray-100 border-gray-300 text-gray-800';
+    }
+  };
+
+  const getStatusMessage = (status) => {
+    switch (status) {
+      case 'pending':
+        return 'Your mentor profile is currently under review by our admin team. We will notify you once a decision has been made.';
+      case 'approved':
+        return 'Congratulations! Your mentor profile has been approved. You can now start accepting mentoring sessions.';
+      case 'rejected':
+        return 'Your mentor profile was not approved. Please contact support for more information or to resubmit.';
+      default:
+        return 'Status unknown. Please contact support for assistance.';
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const renderExpertiseLevel = (levelName, isActive) => {
@@ -223,10 +310,84 @@ const MentorProfileUpload = () => {
     );
   };
 
+  // Add a function to handle resubmission
+  const handleResubmit = () => {
+    setIsSubmitted(false);
+    setApprovalStatus(null);
+    // Optionally refetch the profile data to get the latest state
+    window.location.reload(); // Simple way to reset the form
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <p>Loading profile data...</p>
+      </div>
+    );
+  }
+
+  // Show approval status if profile is submitted
+  if (isSubmitted && approvalStatus) {
+    return (
+      <div className="max-w-4xl mx-auto my-8 px-4">
+        <h1 className="text-3xl font-bold mb-8 text-center">Mentor Profile Status</h1>
+        
+        <Card className="max-w-2xl mx-auto">
+          <CardContent className="p-8 text-center">
+            <div className="flex justify-center mb-4">
+              {getStatusIcon(approvalStatus.status)}
+            </div>
+            
+            <h2 className="text-2xl font-semibold mb-4">Request Sent for Admin Approval</h2>
+            
+            <div className={`p-4 rounded-lg border-2 mb-6 ${getStatusColor(approvalStatus.status)}`}>
+              <div className="flex items-center justify-center mb-2">
+                <Badge className={`text-sm font-medium px-3 py-1 ${
+                  approvalStatus.status === 'pending' ? 'bg-yellow-500 text-white' :
+                  approvalStatus.status === 'approved' ? 'bg-green-500 text-white' :
+                  'bg-red-500 text-white'
+                }`}>
+                  {approvalStatus.status.charAt(0).toUpperCase() + approvalStatus.status.slice(1)}
+                </Badge>
+              </div>
+              <p className="text-sm">{getStatusMessage(approvalStatus.status)}</p>
+            </div>
+            
+            <div className="space-y-3 text-sm text-gray-600 mb-6">
+              {approvalStatus.submitted_at && (
+                <div>
+                  <strong>Submitted:</strong> {formatDate(approvalStatus.submitted_at)}
+                </div>
+              )}
+              {approvalStatus.approved_at && (
+                <div>
+                  <strong>Processed:</strong> {formatDate(approvalStatus.approved_at)}
+                </div>
+              )}
+              {approvalStatus.approved_by && (
+                <div>
+                  <strong>Processed by:</strong> {approvalStatus.approved_by}
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-center gap-4">
+              <Button 
+                variant="outline" 
+                onClick={() => navigate("/mentor-profile")}
+              >
+                Go to Profile
+              </Button>
+              {approvalStatus.status === 'rejected' && (
+                <Button 
+                  onClick={handleResubmit}
+                >
+                  Resubmit Profile
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -236,12 +397,6 @@ const MentorProfileUpload = () => {
       <h1 className="text-3xl font-bold mb-8">
         {existingProfile ? "Update Your Mentor Profile" : "Create Your Mentor Profile"}
       </h1>
-
-      {successMessage && (
-        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
-          {successMessage}
-        </div>
-      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">

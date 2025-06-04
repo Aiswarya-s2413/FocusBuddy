@@ -147,10 +147,10 @@ const AdminUsers = () => {
   <div className="flex gap-3">
     <Button
       variant="outline"
-      onClick={() => navigate("/admin/journals")}
+      onClick={() => navigate("/admin/mentors")}
       className="flex items-center gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
     >
-      <span>Go to Journals</span>
+      <span>Mentor requests</span>
     </Button>
     <Button
       variant="outline"

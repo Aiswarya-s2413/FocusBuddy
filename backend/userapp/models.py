@@ -122,6 +122,26 @@ class Mentor(models.Model):
     is_available = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_approved = models.BooleanField(default=False)
+    approval_status = models.CharField(
+        max_length=20, 
+        choices=[
+            ('pending', 'Pending'),
+            ('approved', 'Approved'),
+            ('rejected', 'Rejected'),
+        ],
+        default='pending'
+    )
+    submitted_for_approval = models.BooleanField(default=False)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='approved_mentors'
+    )
 
     class Meta:
         ordering = ['-rating', '-total_sessions']
@@ -154,6 +174,33 @@ class Mentor(models.Model):
             'profile_image_url': self.profile_image.url if self.profile_image else None
         }
 
+class MentorApprovalRequest(models.Model):
+    mentor = models.ForeignKey(Mentor, on_delete=models.CASCADE)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('approved', 'Approved'),
+            ('rejected', 'Rejected'),
+        ],
+        default='pending'
+    )
+    admin_notes = models.TextField(blank=True, null=True)
+    processed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='processed_approval_requests'
+    )
+    processed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-requested_at']
+        
+    def __str__(self):
+        return f"Approval request for {self.mentor.user.name} - {self.status}"
 
 class Journal(models.Model):
     MOOD_CHOICES = [

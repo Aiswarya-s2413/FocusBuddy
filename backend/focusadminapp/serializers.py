@@ -66,3 +66,47 @@ class JournalDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Journal
         fields = ['id', 'user', 'mood', 'description', 'date', 'created_at', 'updated_at', 'is_blocked']
+
+class MentorApprovalSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='user.name', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+    bio = serializers.CharField(source='user.bio', read_only=True)
+    subjects = serializers.CharField(source='user.subjects', read_only=True)
+    experience = serializers.CharField(source='user.experience', read_only=True)
+    profile_image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Mentor
+        fields = [
+            'id', 'name', 'email', 'bio', 'subjects', 'experience',
+            'expertise_level', 'hourly_rate', 'approval_status',
+            'submitted_at', 'approved_at', 'profile_image_url'
+        ]
+    
+    def get_profile_image_url(self, obj):
+        if obj.profile_image:
+            return obj.profile_image.url
+        return None
+
+class MentorDetailSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='user.name', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+    bio = serializers.CharField(source='user.bio', read_only=True)
+    subjects = serializers.CharField(source='user.subjects', read_only=True)
+    experience = serializers.CharField(source='user.experience', read_only=True)
+    profile_image_url = serializers.SerializerMethodField()
+    approved_by_name = serializers.CharField(source='approved_by.name', read_only=True)
+    
+    class Meta:
+        model = Mentor
+        fields = [
+            'id', 'name', 'email', 'bio', 'subjects', 'experience',
+            'expertise_level', 'hourly_rate', 'approval_status',
+            'submitted_at', 'approved_at', 'profile_image_url',
+            'approved_by_name', 'rating', 'total_sessions', 'total_students'
+        ]
+    
+    def get_profile_image_url(self, obj):
+        if obj.profile_image:
+            return obj.profile_image.url
+        return None
