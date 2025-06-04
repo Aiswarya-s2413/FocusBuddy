@@ -151,6 +151,7 @@ export const refreshToken = createAsyncThunk(
     }
   }
 );
+
 const userSlice = createSlice({
   name: 'user',
   initialState: loadInitialState(),

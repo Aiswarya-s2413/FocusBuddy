@@ -110,8 +110,15 @@ class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value):
-        if not User.objects.filter(email=value).exists():
+        try:
+            user = User.objects.get(email=value)
+        except User.DoesNotExist:
             raise serializers.ValidationError("No user found with this email address.")
+        
+        # Check if user is active
+        if not user.is_active:
+            raise serializers.ValidationError("User has been blocked by the admin.")
+        
         return value
 
     def create(self, validated_data):

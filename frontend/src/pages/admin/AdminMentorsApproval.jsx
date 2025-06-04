@@ -13,7 +13,6 @@ import {
   Clock,
   User,
   DollarSign,
-  BookOpen,
   Award
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
@@ -36,9 +35,21 @@ const Avatar = ({ children, className = "" }) => (
   </div>
 );
 
-const AvatarImage = ({ src, alt }) => (
-  src ? <img src={src} alt={alt} className="w-full h-full object-cover rounded-full" /> : null
-);
+const AvatarImage = ({ src, alt, className = "" }) => {
+  if (!src) return null;
+  
+  return (
+    <img 
+      src={src} 
+      alt={alt || "Avatar"} 
+      className={`w-full h-full object-cover rounded-full ${className}`}
+      onError={(e) => {
+        // Hide broken image and show fallback
+        e.target.style.display = 'none';
+      }}
+    />
+  );
+};
 
 const AvatarFallback = ({ children, className = "" }) => (
   <div className={`text-gray-600 font-medium ${className}`}>{children}</div>
@@ -354,13 +365,7 @@ const AdminMentorsApproval = () => {
               <User className="h-4 w-4" />
               <span>Manage Users</span>
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => navigate("/admin/journals")}
-              className="flex items-center gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-            >
-              <span>Go to Journals</span>
-            </Button>
+            
             <Button
               variant="outline"
               onClick={handleLogout}

@@ -66,12 +66,12 @@ const MentorProfileUpload = () => {
         });
         
         if (response.data) {
+          // Always set the existing profile data
           setExistingProfile(response.data);
           
           console.log("Profile data received:", response.data);
           
           // Check if profile is already submitted for approval
-          // This is the key fix - check the actual boolean value from backend
           if (response.data.submitted_for_approval === true) {
             console.log("Profile is submitted for approval");
             setIsSubmitted(true);
@@ -81,49 +81,53 @@ const MentorProfileUpload = () => {
               approved_at: response.data.approved_at,
               approved_by: response.data.approved_by
             });
-            return; // Don't populate form if already submitted
+            // Don't populate form if already submitted, but keep existing profile data
+            return;
           } else {
             console.log("Profile is not submitted for approval yet");
             setIsSubmitted(false);
             setApprovalStatus(null);
-          }
-          
-          // Convert backend data to frontend format
-          const frontendData = {
-            name: response.data.name || "",
-            bio: response.data.bio || "",
-            subjects: Array.isArray(response.data.subjects) 
-              ? response.data.subjects.join(", ") 
-              : response.data.subjects || "",
-            experience: response.data.experience || "1+ Years",
-            hourlyRate: response.data.hourly_rate || 40,
-          };
-          
-          // Set form values
-          Object.keys(frontendData).forEach(key => {
-            form.setValue(key, frontendData[key]);
-          });
-          
-          // Set expertise level
-          if (response.data.expertise_level) {
-            const expertiseLevel = response.data.expertise_level.charAt(0).toUpperCase() + 
-                    response.data.expertise_level.slice(1);
-            setLevel(expertiseLevel);
-            console.log("Loaded expertise level from profile:", expertiseLevel);
-          }
-          
-          // Set profile image if exists
-          if (response.data.profile_image_url) {
-            setImage(response.data.profile_image_url);
+            
+            // Convert backend data to frontend format
+            const frontendData = {
+              name: response.data.name || "",
+              bio: response.data.bio || "",
+              subjects: Array.isArray(response.data.subjects) 
+                ? response.data.subjects.join(", ") 
+                : response.data.subjects || "",
+              experience: response.data.experience || "1+ Years",
+              hourlyRate: response.data.hourly_rate || 40,
+            };
+            
+            // Set form values
+            Object.keys(frontendData).forEach(key => {
+              form.setValue(key, frontendData[key]);
+            });
+            
+            // Set expertise level
+            if (response.data.expertise_level) {
+              const expertiseLevel = response.data.expertise_level.charAt(0).toUpperCase() + 
+                      response.data.expertise_level.slice(1);
+              setLevel(expertiseLevel);
+              console.log("Loaded expertise level from profile:", expertiseLevel);
+            }
+            
+            // Set profile image if exists
+            if (response.data.profile_image_url) {
+              setImage(response.data.profile_image_url);
+            }
           }
         }
       } catch (error) {
         console.error("Failed to fetch profile data:", error);
-        toast({
-          title: "Failed to load profile",
-          description: "Could not load your existing profile data.",
-          variant: "destructive"
-        });
+        // Only show toast if it's not a 404 (no profile exists yet)
+        if (error.response?.status !== 404) {
+          toast({
+            title: "Failed to load profile",
+            description: "Could not load your existing profile data.",
+            variant: "destructive"
+          });
+        }
       } finally {
         setIsLoading(false);
       }
@@ -199,8 +203,10 @@ const MentorProfileUpload = () => {
   
       console.log("Server response:", response.data);
       
+      // Update the existing profile state with the new data
+      setExistingProfile(response.data.profile || response.data);
+      
       // Set submitted state and approval status based on server response
-      // This ensures we're in sync with the backend
       if (response.data.profile) {
         setIsSubmitted(response.data.profile.submitted_for_approval);
         if (response.data.profile.submitted_for_approval) {
@@ -310,12 +316,55 @@ const MentorProfileUpload = () => {
     );
   };
 
-  // Add a function to handle resubmission
-  const handleResubmit = () => {
-    setIsSubmitted(false);
-    setApprovalStatus(null);
-    // Optionally refetch the profile data to get the latest state
-    window.location.reload(); // Simple way to reset the form
+  // Modified handleResubmit function to properly reset states
+  const handleResubmit = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Reset the submission status on the backend if needed
+      // This might require an API call to reset the submitted_for_approval flag
+      
+      // Reset local states
+      setIsSubmitted(false);
+      setApprovalStatus(null);
+      
+      // Repopulate the form with existing data if available
+      if (existingProfile) {
+        const frontendData = {
+          name: existingProfile.name || "",
+          bio: existingProfile.bio || "",
+          subjects: Array.isArray(existingProfile.subjects) 
+            ? existingProfile.subjects.join(", ") 
+            : existingProfile.subjects || "",
+          experience: existingProfile.experience || "1+ Years",
+          hourlyRate: existingProfile.hourly_rate || 40,
+        };
+        
+        Object.keys(frontendData).forEach(key => {
+          form.setValue(key, frontendData[key]);
+        });
+        
+        if (existingProfile.expertise_level) {
+          const expertiseLevel = existingProfile.expertise_level.charAt(0).toUpperCase() + 
+                  existingProfile.expertise_level.slice(1);
+          setLevel(expertiseLevel);
+        }
+        
+        if (existingProfile.profile_image_url) {
+          setImage(existingProfile.profile_image_url);
+        }
+      }
+      
+    } catch (error) {
+      console.error("Error during resubmit preparation:", error);
+      toast({
+        title: "Error",
+        description: "Failed to prepare form for resubmission.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isLoading) {
@@ -381,8 +430,9 @@ const MentorProfileUpload = () => {
               {approvalStatus.status === 'rejected' && (
                 <Button 
                   onClick={handleResubmit}
+                  disabled={isLoading}
                 >
-                  Resubmit Profile
+                  {isLoading ? "Preparing..." : "Resubmit Profile"}
                 </Button>
               )}
             </div>

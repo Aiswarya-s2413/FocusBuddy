@@ -23,6 +23,43 @@ const ForgotPassword = () => {
   const [timeLeft, setTimeLeft] = useState(60); // 60 seconds timer
   const [canResend, setCanResend] = useState(false);
 
+  // Helper function to extract error message from API response
+  const getErrorMessage = (error) => {
+    if (!error.response) {
+      return "Network error. Please check your connection and try again.";
+    }
+
+    const errorData = error.response.data;
+    
+    // Handle field-specific errors (like email validation errors)
+    if (errorData.email && Array.isArray(errorData.email)) {
+      return errorData.email[0];
+    }
+    
+    // Handle general error field
+    if (errorData.error) {
+      return errorData.error;
+    }
+    
+    // Handle non_field_errors
+    if (errorData.non_field_errors && Array.isArray(errorData.non_field_errors)) {
+      return errorData.non_field_errors[0];
+    }
+    
+    // Handle detail field (common in DRF)
+    if (errorData.detail) {
+      return errorData.detail;
+    }
+    
+    // Handle message field
+    if (errorData.message) {
+      return errorData.message;
+    }
+    
+    // Default fallback
+    return "An error occurred. Please try again.";
+  };
+
   // Timer effect
   useEffect(() => {
     let timer;
@@ -53,6 +90,8 @@ const ForgotPassword = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setMessage("");
+    
     try {
       const response = await axios.post("http://localhost:8000/api/user/forgot-password/", { email });
       if (response.status === 200) {
@@ -60,7 +99,8 @@ const ForgotPassword = () => {
         setStep(2);
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to send OTP. Please try again.");
+      console.log('Send OTP Error:', err.response?.data); // Debug log
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -70,6 +110,8 @@ const ForgotPassword = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setMessage("");
+    
     try {
       const response = await axios.post("http://localhost:8000/api/user/verify-forgot-password-otp/", {
         email,
@@ -80,7 +122,8 @@ const ForgotPassword = () => {
         setStep(3);
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Invalid OTP. Please try again.");
+      console.log('Verify OTP Error:', err.response?.data); // Debug log
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -118,6 +161,8 @@ const ForgotPassword = () => {
     }
     setLoading(true);
     setError(null);
+    setMessage("");
+    
     try {
       const response = await axios.post("http://localhost:8000/api/user/reset-password/", {
         email,
@@ -129,7 +174,8 @@ const ForgotPassword = () => {
         navigate("/login");
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to reset password. Please try again.");
+      console.log('Reset Password Error:', err.response?.data); // Debug log
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -138,6 +184,8 @@ const ForgotPassword = () => {
   const handleResendOTP = async () => {
     setLoading(true);
     setError(null);
+    setMessage("");
+    
     try {
       const response = await axios.post("http://localhost:8000/api/user/forgot-password/", { email });
       if (response.status === 200) {
@@ -146,7 +194,8 @@ const ForgotPassword = () => {
         setCanResend(false);
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to resend OTP. Please try again.");
+      console.log('Resend OTP Error:', err.response?.data); // Debug log
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -290,12 +339,12 @@ const ForgotPassword = () => {
           )}
 
           {error && (
-            <div className="text-red-500 text-sm mt-2">
+            <div className="text-red-500 text-sm mt-2 p-2 bg-red-50 rounded border border-red-200">
               {error}
             </div>
           )}
           {message && (
-            <div className="text-green-500 text-sm mt-2">
+            <div className="text-green-600 text-sm mt-2 p-2 bg-green-50 rounded border border-green-200">
               {message}
             </div>
           )}
@@ -313,4 +362,4 @@ const ForgotPassword = () => {
   );
 };
 
-export default ForgotPassword; 
+export default ForgotPassword;
