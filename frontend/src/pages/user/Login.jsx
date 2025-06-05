@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
-import { Mail, KeyRound, Eye, EyeOff } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Mail, KeyRound, Eye, EyeOff, CheckCircle } from "lucide-react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Card, CardHeader, CardContent, CardFooter } from "../../components/ui/card";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser } from "../../store/userSlice"; 
@@ -11,6 +11,7 @@ import { clearMessage } from "../../store/userSlice";
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Redux states for loading, error, and success messages
   const { loading, error, message } = useSelector((state) => state.user);
@@ -18,6 +19,23 @@ const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+
+  // Check for signup success from navigation state
+  useEffect(() => {
+    if (location.state?.signupSuccess) {
+      setShowSuccessToast(true);
+      // Hide toast after 5 seconds
+      const timer = setTimeout(() => {
+        setShowSuccessToast(false);
+      }, 5000);
+      
+      // Clear the state to prevent showing toast on refresh
+      window.history.replaceState({}, document.title);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [location.state]);
 
   const getErrorMessage = (error) => {
     if (!error) return "";
@@ -74,7 +92,28 @@ const Login = () => {
   }, [message, error, navigate, dispatch]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 relative">
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <div className="fixed top-4 right-4 z-50 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg max-w-sm animate-in slide-in-from-right-full">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-green-800">Signup Successful!</p>
+              <p className="text-xs text-green-700 mt-1">
+                {location.state?.message || "Please login to continue."}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSuccessToast(false)}
+              className="ml-auto text-green-600 hover:text-green-800"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       <Card className="w-full max-w-md">
         <CardHeader>
           <h2 className="text-2xl font-semibold text-center flex items-center justify-center gap-2 text-gray-900">

@@ -60,7 +60,13 @@ const SelectSubjects = () => {
 
       if (response.status === 200) {
         localStorage.removeItem("email"); // Clear email from localStorage after successful submission
-        navigate("/login");
+        // Navigate to login with signup success state
+        navigate("/login", { 
+          state: { 
+            signupSuccess: true,
+            message: "Signup completed successfully! Please login to continue."
+          } 
+        });
       }
     } catch (err) {
       setError(err.response?.data?.error || "Failed to save subjects. Please try again.");
