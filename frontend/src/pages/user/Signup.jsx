@@ -95,7 +95,17 @@ const Signup = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    dispatch({ type: 'user/setError', payload: null }); // Clear any existing error
+    
+    // Clear any existing errors
+    dispatch({ type: 'user/setError', payload: null });
+    setMessage("");
+
+    console.log("=== SIGNUP SUBMISSION STARTED ===");
+    console.log("Form data:", {
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone
+    });
 
     // Validate all fields before submission
     let hasErrors = false;
@@ -109,18 +119,15 @@ const Signup = () => {
     });
     
     if (hasErrors) {
+      console.log("=== VALIDATION ERRORS FOUND ===", newErrors);
       setFormErrors(newErrors);
       setIsLoading(false);
       return;
     }
 
     try {
-      console.log("Attempting signup with data:", {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone
-      });
-
+      console.log("=== MAKING API CALL ===");
+      
       const signupResponse = await axios.post("http://localhost:8000/api/user/signup/", {
         name: formData.name,
         email: formData.email,
@@ -128,36 +135,86 @@ const Signup = () => {
         password: formData.password,
       });
       
-      console.log("Signup response:", signupResponse.data);
+      console.log("=== API RESPONSE RECEIVED ===");
+      console.log("Status:", signupResponse.status);
+      console.log("Data:", signupResponse.data);
       
-      if (signupResponse.status === 201) {
-        setMessage(signupResponse.data.message);
+      // Check for successful response (200 or 201)
+      if (signupResponse.status === 200 || signupResponse.status === 201) {
+        console.log("=== SIGNUP SUCCESSFUL ===");
+        
+        // Set success message
+        setMessage(signupResponse.data.message || "Signup successful!");
+        
+        // Store email for OTP verification
         localStorage.setItem("email", formData.email);
+        console.log("Email stored in localStorage:", formData.email);
+        
+        // Navigate to OTP verification page
+        console.log("=== ATTEMPTING NAVIGATION ===");
         navigate("/verify-otp");
-      }
-    } catch (err) {
-      console.log("Signup error details:", {
-        status: err.response?.status,
-        data: err.response?.data,
-        headers: err.response?.headers
-      });
-      
-      if (err.response?.data?.email) {
-        // Handle email-specific errors
-        const emailError = Array.isArray(err.response.data.email) 
-          ? err.response.data.email[0] 
-          : err.response.data.email;
-        dispatch({ type: 'user/setError', payload: emailError });
+        console.log("=== NAVIGATION CALLED ===");
+        
       } else {
-        const errorMessage = err.response?.data?.error || 
-                           (typeof err.response?.data === 'string' ? err.response?.data : 
-                           "An error occurred during signup");
-        dispatch({ type: 'user/setError', payload: errorMessage });
+        console.log("=== UNEXPECTED STATUS CODE ===", signupResponse.status);
+        throw new Error(`Unexpected response status: ${signupResponse.status}`);
+      }
+      
+    } catch (err) {
+      console.log("=== ERROR OCCURRED ===");
+      console.log("Error object:", err);
+      console.log("Response status:", err.response?.status);
+      console.log("Response data:", err.response?.data);
+      console.log("Response headers:", err.response?.headers);
+      
+      // Handle different types of errors
+      if (err.response) {
+        // Server responded with error status
+        const status = err.response.status;
+        const data = err.response.data;
+        
+        if (status === 400 && data?.email) {
+          // Handle email-specific validation errors
+          const emailError = Array.isArray(data.email) ? data.email[0] : data.email;
+          console.log("Email validation error:", emailError);
+          setFormErrors(prev => ({ ...prev, email: emailError }));
+          dispatch({ type: 'user/setError', payload: emailError });
+        } else if (data?.error) {
+          // Handle general error messages
+          console.log("General error:", data.error);
+          dispatch({ type: 'user/setError', payload: data.error });
+        } else if (data?.detail) {
+          // Handle detail error messages
+          console.log("Detail error:", data.detail);
+          dispatch({ type: 'user/setError', payload: data.detail });
+        } else if (typeof data === 'string') {
+          // Handle string error responses
+          console.log("String error response:", data);
+          dispatch({ type: 'user/setError', payload: data });
+        } else {
+          // Handle other response errors
+          console.log("Other response error");
+          dispatch({ type: 'user/setError', payload: `Server error: ${status}` });
+        }
+      } else if (err.request) {
+        // Network error
+        console.log("Network error:", err.request);
+        dispatch({ type: 'user/setError', payload: "Network error. Please check your connection." });
+      } else {
+        // Other errors
+        console.log("Other error:", err.message);
+        dispatch({ type: 'user/setError', payload: err.message || "An unexpected error occurred" });
       }
     } finally {
+      console.log("=== CLEANUP ===");
       setIsLoading(false);
     }
   };
+
+  // Add this useEffect to debug navigation
+  React.useEffect(() => {
+    console.log("Current route location:", window.location.pathname);
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -168,12 +225,20 @@ const Signup = () => {
           </h2>
         </CardHeader>
         <CardContent>
+          {/* Success message display */}
+          {message && (
+            <div className="mb-4 p-3 bg-green-100 border border-green-300 text-green-700 rounded">
+              {message}
+            </div>
+          )}
+          
           <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             <div className="space-y-2">
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">Your Name</label>
               <Input id="name" type="text" placeholder="" required value={formData.name} onChange={handleChange} />
               {formErrors.name && <p className="text-sm text-red-500">{formErrors.name}</p>}
             </div>
+            
             <div className="space-y-2">
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email Address</label>
               <div className="relative">
@@ -182,6 +247,7 @@ const Signup = () => {
               </div>
               {formErrors.email && <p className="text-sm text-red-500">{formErrors.email}</p>}
             </div>
+            
             <div className="space-y-2">
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone Number</label>
               <div className="relative">
@@ -190,6 +256,7 @@ const Signup = () => {
               </div>
               {formErrors.phone && <p className="text-sm text-red-500">{formErrors.phone}</p>}
             </div>
+            
             <div className="space-y-2">
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
               <div className="relative">
@@ -211,6 +278,7 @@ const Signup = () => {
               </div>
               {formErrors.password && <p className="text-sm text-red-500">{formErrors.password}</p>}
             </div>
+            
             <div className="space-y-2">
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">Confirm Password</label>
               <div className="relative">
@@ -232,12 +300,15 @@ const Signup = () => {
                 </button>
               </div>
               {formErrors.confirmPassword && <p className="text-sm text-red-500">{formErrors.confirmPassword}</p>}
-              {error && (
-                <p className="text-sm text-red-500">
-                  {typeof error === 'object' ? error.message || Object.values(error)[0] : error}
-                </p>
-              )}
             </div>
+            
+            {/* Display Redux error */}
+            {error && (
+              <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded text-sm">
+                {typeof error === 'object' ? error.message || Object.values(error)[0] : error}
+              </div>
+            )}
+            
             <Button
               type="submit"
               className="w-full bg-purple-600 hover:bg-purple-700"
