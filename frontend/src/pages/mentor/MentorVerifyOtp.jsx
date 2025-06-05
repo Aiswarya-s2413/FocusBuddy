@@ -1,16 +1,39 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "../../components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Card, CardHeader, CardContent, CardFooter } from "../../components/ui/card";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "../../components/ui/input-otp";
+import { Clock, RefreshCw } from "lucide-react";
 import axios from "axios";
 
 const MentorVerifyOtp = () => {
   const navigate = useNavigate();
   const [otp, setOtp] = useState("");
   const [error, setError] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(60); // 60 seconds timer
+  const [canResend, setCanResend] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
-  const email = localStorage.getItem("email"); // Make sure to store email after signup
+  const email = localStorage.getItem("email");
+
+  // Timer effect
+  useEffect(() => {
+    if (timeLeft > 0) {
+      const timer = setTimeout(() => {
+        setTimeLeft(timeLeft - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setCanResend(true);
+    }
+  }, [timeLeft]);
+
+  // Format time as MM:SS
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleVerify = async (e) => {
     e.preventDefault();
@@ -27,6 +50,34 @@ const MentorVerifyOtp = () => {
       }
     } catch (err) {
       setError(err.response?.data?.error || "Verification failed");
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!canResend) return;
+
+    setIsResending(true);
+    setError(null);
+
+    try {
+      // Assuming you have a resend OTP endpoint
+      const response = await axios.post("http://localhost:8000/api/mentor/resend-otp/", {
+        email,
+      });
+
+      if (response.status === 200) {
+        // Reset timer
+        setTimeLeft(60);
+        setCanResend(false);
+        setOtp(""); // Clear current OTP input
+        
+        // You might want to show a success message
+        setError(null);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to resend OTP");
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -54,6 +105,18 @@ const MentorVerifyOtp = () => {
                   <InputOTPSlot index={5} />
                 </InputOTPGroup>
               </InputOTP>
+
+              {/* Timer Display */}
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Clock className="h-4 w-4" />
+                <span>
+                  {timeLeft > 0 ? (
+                    <>Code expires in {formatTime(timeLeft)}</>
+                  ) : (
+                    <span className="text-red-500">Code expired</span>
+                  )}
+                </span>
+              </div>
             </div>
 
             {error && <p className="text-red-500 text-center">{error}</p>}
@@ -71,8 +134,22 @@ const MentorVerifyOtp = () => {
           <p className="text-sm text-gray-600 text-center">
             Didn't receive a code?
           </p>
-          <Button variant="link" className="text-purple-600">
-            Resend Code
+          <Button 
+            variant="link" 
+            className={`text-purple-600 ${!canResend ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={handleResendOtp}
+            disabled={!canResend || isResending}
+          >
+            {isResending ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Sending...
+              </>
+            ) : canResend ? (
+              "Resend Code"
+            ) : (
+              `Resend in ${formatTime(timeLeft)}`
+            )}
           </Button>
         </CardFooter>
       </Card>
@@ -80,4 +157,4 @@ const MentorVerifyOtp = () => {
   );
 };
 
-export default MentorVerifyOtp; 
+export default MentorVerifyOtp;

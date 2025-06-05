@@ -214,6 +214,39 @@ class MentorOtpVerifyView(APIView):
                 return Response({"error": "Invalid Email or OTP"}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class MentorResendOtpView(APIView):
+    permission_classes = []
+    authentication_classes = []
+    
+    def post(self, request):
+        email = request.data.get('email')
+        try:
+            # Get mentor user specifically
+            user = User.objects.get(email=email, is_mentor=True)
+            
+            # Generate new OTP
+            otp = f"{random.randint(100000, 999999)}"
+            print(f"Mentor OTP: {otp}")
+            
+            # Update user with new OTP
+            user.otp = otp
+            user.otp_created_at = timezone.now()  # Set OTP creation time
+            user.save()
+
+            # Send email with mentor-specific subject
+            send_mail(
+                subject="Your new Mentor OTP",
+                message=f"Hello {user.name}, your new mentor verification OTP is {otp}",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+            
+            return Response({"message": "Mentor OTP resent successfully"}, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            return Response({"error": "Mentor not found"}, status=status.HTTP_400_BAD_REQUEST)
+
 class MentorSelectSubjectsView(APIView):
     permission_classes = [AllowAny]
 

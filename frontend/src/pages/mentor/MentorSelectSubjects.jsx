@@ -50,7 +50,10 @@ const MentorSelectSubjects = () => {
       });
 
       if (response.status === 200) {
-        navigate("/mentor/login");
+        // Clean up email from localStorage as signup is complete
+        localStorage.removeItem("email");
+        // Redirect to login with success parameter
+        navigate("/mentor/login?signup=success");
       }
     } catch (err) {
       setError(err.response?.data?.error || "Failed to save subjects. Please try again.");
@@ -106,7 +109,7 @@ const MentorSelectSubjects = () => {
               className="w-full bg-purple-600 hover:bg-purple-700"
               disabled={selectedSubjects.length === 0}
             >
-              Continue
+              Complete Signup
             </Button>
           </form>
         </CardContent>
@@ -115,4 +118,4 @@ const MentorSelectSubjects = () => {
   );
 };
 
-export default MentorSelectSubjects; 
+export default MentorSelectSubjects;
