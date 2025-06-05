@@ -164,12 +164,52 @@ class LoginView(APIView):
 
 class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes=[]
+    authentication_classes = []
+    
     def post(self, request):
+        logger.info("Received forgot password request with data: %s", request.data)
         serializer = ForgotPasswordSerializer(data=request.data)
+        
         if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "OTP has been sent to your email"}, status=status.HTTP_200_OK)
+            logger.info("Serializer is valid, proceeding with OTP generation")
+            try:
+                user = serializer.save()
+                otp = user.otp
+                print(f"OTP: {otp}")
+                logger.info(f"OTP generated successfully for user: {user.email}")
+                
+                try:
+                    # Send OTP via email
+                    send_mail(
+                        subject="Your FocusBuddy Password Reset OTP",
+                        message=f"Hello {user.name}, your password reset OTP is {otp}.",
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[user.email],
+                        fail_silently=False,
+                    )
+                    logger.info("Password reset OTP email sent successfully to %s", user.email)
+                    return Response({
+                        "message": "OTP has been sent to your email"
+                    }, status=status.HTTP_200_OK)
+                    
+                except Exception as e:
+                    logger.error("Failed to send password reset OTP email: %s", str(e))
+                    return Response(
+                        {"error": "Failed to send OTP email. Please try again."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+                    
+            except serializers.ValidationError as e:
+                logger.error("Validation error during forgot password: %s", str(e))
+                return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                logger.error("Unexpected error during forgot password: %s", str(e))
+                return Response(
+                    {"error": "An unexpected error occurred. Please try again."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        logger.warning("Serializer validation failed: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class VerifyForgotPasswordOTPView(APIView):
