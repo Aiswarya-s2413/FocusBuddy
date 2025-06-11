@@ -202,3 +202,50 @@ class JournalSerializer(serializers.ModelSerializer):
         model = Journal
         fields = ['id', 'user', 'mood', 'description', 'date', 'created_at', 'updated_at']
         read_only_fields = ['user', 'created_at', 'updated_at']
+
+class MentorSerializer(serializers.ModelSerializer):
+    # User fields
+    name = serializers.CharField(source='user.name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    bio = serializers.CharField(source='user.bio', read_only=True)
+    experience = serializers.IntegerField(source='user.experience', read_only=True)
+    subjects = SubjectSerializer(source='user.subjects', many=True, read_only=True)
+    
+    # Profile image URL
+    profile_image_url = serializers.SerializerMethodField()
+    
+    # Convert decimal fields to float for frontend
+    hourly_rate = serializers.SerializerMethodField()
+    rating = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Mentor
+        fields = [
+            'id',
+            'name',
+            'email',
+            'bio',
+            'experience',
+            'subjects',
+            'expertise_level',
+            'hourly_rate',
+            'availability',
+            'rating',
+            'total_sessions',
+            'total_students',
+            'is_available',
+            'profile_image_url',
+            'created_at',
+            'updated_at'
+        ]
+
+    def get_profile_image_url(self, obj):
+        if obj.profile_image:
+            return obj.profile_image.url
+        return None
+
+    def get_hourly_rate(self, obj):
+        return float(obj.hourly_rate)
+
+    def get_rating(self, obj):
+        return float(obj.rating)

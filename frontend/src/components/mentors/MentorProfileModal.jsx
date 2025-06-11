@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Star, Calendar, Clock, MessageCircle, Video, User, Award, Globe } from "lucide-react";
-import { Calendar as CalendarComponent } from "../../components/ui/calendar";
+import { Calendar as CalendarComponent } from "../../components/ui/calender";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Badge } from "../../components/ui/badge";
 import { useToast } from "../../hooks/use-toast";
@@ -14,6 +14,11 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [duration, setDuration] = useState("30 mins");
   const [mode, setMode] = useState("Video");
+
+  // Guard clause to prevent errors if mentor is undefined
+  if (!mentor) {
+    return null;
+  }
 
   const timeSlots = [
     "9:00 AM", "10:00 AM", "11:00 AM", 
@@ -28,6 +33,12 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
     onClose();
   };
 
+  // Calculate price based on duration and hourly rate
+  const calculatePrice = () => {
+    const rate = mentor.hourly_rate || 25;
+    return duration === "30 mins" ? (rate / 2).toFixed(2) : rate.toFixed(2);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -39,100 +50,93 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
           <div className="md:col-span-1 space-y-6">
             <div className="flex flex-col items-center text-center space-y-3">
               <Avatar className="h-24 w-24 border-2 border-purple-100">
-                <AvatarImage src={mentor.profilePicture} alt={mentor.name} />
-                <AvatarFallback>{mentor.name.charAt(0)}</AvatarFallback>
+                <AvatarImage src={mentor.profile_image_url} alt={mentor.name} />
+                <AvatarFallback>{mentor.name?.charAt(0) || 'M'}</AvatarFallback>
               </Avatar>
               <div>
                 <h2 className="text-xl font-semibold">{mentor.name}</h2>
-                <p className="text-purple-600">{mentor.specialization}</p>
+                <p className="text-purple-600">{mentor.expertise_level}</p>
               </div>
               <div className="flex items-center justify-center">
                 <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 mr-1" />
                 <span>{mentor.rating}</span>
-                <span className="text-gray-500 ml-1">({mentor.reviewCount} reviews)</span>
+                <span className="text-gray-500 ml-1">({mentor.total_sessions} sessions)</span>
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Award className="h-5 w-5 text-gray-500" />
-                <span>{mentor.experience}</span>
+                <span>{mentor.experience || 'Experience not specified'}</span>
               </div>
               
               <div className="flex items-center gap-2">
                 <Globe className="h-5 w-5 text-gray-500" />
-                <div className="flex flex-wrap gap-1">
-                  {mentor.languages.map((lang) => (
-                    <Badge key={lang} variant="outline" className="bg-purple-50">
-                      {lang}
-                    </Badge>
-                  ))}
-                </div>
+                <span className="text-gray-600">Rate: Rs.{mentor.hourly_rate}/hour</span>
               </div>
               
               <div className="flex items-center gap-2 text-green-600">
                 <Clock className="h-5 w-5" />
-                <span>Next available: {mentor.nextAvailable}</span>
+                <span>{mentor.is_available ? 'Available Now' : 'Currently Unavailable'}</span>
               </div>
             </div>
 
             <div>
-              <h3 className="font-medium mb-2">Expertise</h3>
+              <h3 className="font-medium mb-2">Subjects</h3>
               <div className="flex flex-wrap gap-2">
-                {mentor.expertise.map((skill) => (
-                  <Badge key={skill} variant="secondary">
-                    {skill}
+                {mentor.subjects?.map((subject, index) => (
+                  <Badge key={subject.id || index} variant="secondary">
+                    {subject.name || subject}
                   </Badge>
-                ))}
+                )) || <span className="text-gray-500">No subjects specified</span>}
               </div>
             </div>
+
+            {/* <div className="space-y-2">
+              <h3 className="font-medium">Stats</h3>
+              <div className="text-sm text-gray-600">
+                <p>Total Sessions: {mentor.total_sessions}</p>
+                <p>Total Students: {mentor.total_students}</p>
+                <p>Expertise Level: {mentor.expertise_level}</p>
+              </div>
+            </div> */}
           </div>
 
           <div className="md:col-span-2">
             <Tabs defaultValue="about">
-              <TabsList className="grid grid-cols-3 mb-4">
+              <TabsList className="grid grid-cols-2 mb-4">
                 <TabsTrigger value="about">About</TabsTrigger>
-                <TabsTrigger value="reviews">Reviews</TabsTrigger>
                 <TabsTrigger value="booking">Book Session</TabsTrigger>
               </TabsList>
               
               <TabsContent value="about" className="space-y-4">
                 <div>
                   <h3 className="font-medium mb-2">Bio & Background</h3>
-                  <p className="text-gray-600">{mentor.bio}</p>
+                  <p className="text-gray-600">{mentor.bio || 'No bio available'}</p>
                 </div>
                 
                 <div>
-                  <h3 className="font-medium mb-2">Past Session Topics</h3>
-                  <ul className="list-disc pl-5 text-gray-600 space-y-1">
-                    {mentor.pastSessionTopics.map((topic, index) => (
-                      <li key={index}>{topic}</li>
-                    ))}
-                  </ul>
+                  <h3 className="font-medium mb-2">Contact Information</h3>
+                  <p className="text-gray-600">Email: {mentor.email}</p>
                 </div>
-              </TabsContent>
-              
-              <TabsContent value="reviews" className="space-y-4">
-                {mentor.reviews.map((review, index) => (
-                  <div key={index} className="p-3 rounded-lg border">
-                    <div className="flex justify-between items-center mb-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-500" />
-                        <span className="font-medium">{review.user}</span>
-                      </div>
-                      <div className="flex">
-                        {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`h-4 w-4 ${i < review.rating ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`}
-                          />
+
+                <div>
+                  <h3 className="font-medium mb-2">Availability</h3>
+                  <div className="text-gray-600">
+                    {mentor.availability && Object.keys(mentor.availability).length > 0 ? (
+                      <div className="space-y-1">
+                        {Object.entries(mentor.availability).map(([day, times]) => (
+                          <div key={day} className="flex justify-between">
+                            <span className="capitalize font-medium">{day}:</span>
+                            <span>{Array.isArray(times) ? times.join(', ') : times}</span>
+                          </div>
                         ))}
                       </div>
-                    </div>
-                    <p className="text-gray-600 text-sm">{review.comment}</p>
-                    <p className="text-xs text-gray-400 mt-1">{review.date}</p>
+                    ) : (
+                      <p>Availability schedule not set</p>
+                    )}
                   </div>
-                ))}
+                </div>
               </TabsContent>
               
               <TabsContent value="booking" className="space-y-6">
@@ -220,18 +224,18 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Estimated Price:</span>
-                      <span className="font-medium">{duration === "30 mins" ? "$25" : "$45"}</span>
+                      <span className="font-medium">${calculatePrice()}</span>
                     </div>
                   </div>
                 </div>
                 
                 <Button 
                   className="w-full bg-purple-600 hover:bg-purple-700"
-                  disabled={!selectedSlot || !date}
+                  disabled={!selectedSlot || !date || !mentor.is_available}
                   onClick={handleBookSession}
                 >
                   <Calendar className="mr-2 h-4 w-4" />
-                  Confirm Booking
+                  {mentor.is_available ? 'Confirm Booking' : 'Mentor Unavailable'}
                 </Button>
               </TabsContent>
             </Tabs>

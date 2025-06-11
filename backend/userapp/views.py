@@ -516,3 +516,105 @@ class MoodChoicesAPIView(APIView):
     def get(self, request):
         moods = [{'key': key, 'label': label} for key, label in Journal.MOOD_CHOICES]
         return Response(moods)
+
+class MentorListAPIView(APIView):
+    
+    def get(self, request):
+        try:
+            # Get query parameters
+            search_query = request.query_params.get('search', '').strip()
+            subjects_param = request.query_params.get('subjects', '')
+            expertise_levels = request.query_params.getlist('expertise_level')
+            min_rating = request.query_params.get('rating', 0)
+            min_hourly_rate = request.query_params.get('min_hourly_rate', 0)
+            max_hourly_rate = request.query_params.get('max_hourly_rate', 1000)
+            
+            # Base queryset - only approved mentors
+            mentors = Mentor.objects.filter(
+                is_approved=True,
+                approval_status='approved'
+            ).select_related('user').prefetch_related('user__subjects')
+            
+            # Apply search filter
+            if search_query:
+                mentors = mentors.filter(
+                    Q(user__name__icontains=search_query) |
+                    Q(user__bio__icontains=search_query) |
+                    Q(user__subjects__name__icontains=search_query)
+                ).distinct()
+            
+            # Apply subject filter
+            if subjects_param:
+                subject_names = [s.strip() for s in subjects_param.split(',') if s.strip()]
+                if subject_names:
+                    mentors = mentors.filter(
+                        user__subjects__name__in=subject_names
+                    ).distinct()
+            
+            # Apply expertise level filter
+            if expertise_levels:
+                mentors = mentors.filter(expertise_level__in=expertise_levels)
+            
+            # Apply rating filter
+            try:
+                min_rating = float(min_rating)
+                if min_rating > 0:
+                    mentors = mentors.filter(rating__gte=min_rating)
+            except (ValueError, TypeError):
+                pass
+            
+            # Apply hourly rate filter
+            try:
+                min_rate = float(min_hourly_rate)
+                max_rate = float(max_hourly_rate)
+                mentors = mentors.filter(
+                    hourly_rate__gte=min_rate,
+                    hourly_rate__lte=max_rate
+                )
+            except (ValueError, TypeError):
+                pass
+            
+            # Serialize the data
+            serializer = MentorSerializer(mentors, many=True)
+            
+            return Response({
+                'success': True,
+                'count': len(serializer.data),
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class MentorDetailAPIView(APIView):
+    
+    def get(self, request, mentor_id):
+        try:
+            mentor = Mentor.objects.select_related('user').prefetch_related('user__subjects').get(
+                id=mentor_id,
+                is_approved=True,
+                approval_status='approved'
+            )
+            
+            serializer = MentorSerializer(mentor)
+            
+            return Response({
+                'success': True,
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Mentor.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': 'Mentor not found or not approved'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -10,6 +10,7 @@ import PomodoroTimer from "../pages/user/PomodoroTimer";
 import Journal from "../pages/user/Journal";
 import { useSelector } from "react-redux";
 import AuthLayout from "../components/AuthLayout";
+import Mentors from "../pages/user/Mentors";
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useSelector((state) => state.user);
@@ -54,6 +55,14 @@ const UserRoutes = () => {
         element={
           <ProtectedRoute>
             <AuthLayout><Journal /></AuthLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/mentors"
+        element={
+          <ProtectedRoute>
+            <AuthLayout><Mentors /></AuthLayout>
           </ProtectedRoute>
         }
       />

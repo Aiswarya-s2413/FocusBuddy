@@ -96,36 +96,10 @@ class AdminLogoutView(APIView):
     authentication_classes = [AdminCookieJWTAuthentication]
     def post(self, request):
         try:
-            # Try to blacklist refresh token if available
-            refresh_token = request.COOKIES.get('admin_refresh')
-            if refresh_token:
-                try:
-                    refresh = RefreshToken(refresh_token)
-                    refresh.blacklist()
-                    logger.info("Refresh token blacklisted successfully")
-                except (InvalidToken, TokenError) as e:
-                    logger.warning(f"Could not blacklist refresh token: {str(e)}")
-                    pass
+        
             
             response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
             
-            # Delete cookies with EXACT same parameters used when setting them
-            # The key is to match ALL parameters exactly
-            # response.delete_cookie(
-            #     'admin_access',
-            #     path='/',
-            #     domain=None,  # Must match the domain used when setting
-            #     samesite='Lax'
-            # )
-            # response.delete_cookie(
-            #     'admin_refresh',
-            #     path='/',
-            #     domain=None,  # Must match the domain used when setting
-            #     samesite='Lax'
-            # )
-            
-            # Alternative approach: Set cookies with past expiration date
-            # This is more reliable for cookie deletion
             response.set_cookie(
                 'admin_access',
                 '',

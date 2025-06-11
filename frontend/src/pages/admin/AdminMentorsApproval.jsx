@@ -125,8 +125,6 @@ const ToastContainer = ({ toasts, removeToast }) => {
   );
 };
 
-
-
 const adminLogout = () => ({ type: 'ADMIN_LOGOUT' });
 
 const AdminMentorsApproval = () => {
@@ -199,19 +197,14 @@ const AdminMentorsApproval = () => {
     }
   };
 
-  // Debounced search effect
+  // Single effect for both initial load and search with debouncing
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchMentors(searchQuery, 1, filterStatus);
-    }, 500);
+    }, searchQuery ? 500 : 0); // No delay for initial load, 500ms delay for search
     
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filterStatus]);
-
-  // Initial load effect
-  useEffect(() => {
-    fetchMentors("", 1, filterStatus);
-  }, []);
 
   // Handle search input changes
   const handleSearchChange = (e) => {
@@ -356,25 +349,7 @@ const AdminMentorsApproval = () => {
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-3xl font-bold">Mentor Applications</h1>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => navigate("/admin/users")}
-              className="flex items-center gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-            >
-              <User className="h-4 w-4" />
-              <span>Manage Users</span>
-            </Button>
-            
-            <Button
-              variant="outline"
-              onClick={handleLogout}
-              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
-          </div>
+          
         </div>
 
         {/* Status Filter Tabs */}

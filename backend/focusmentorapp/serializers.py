@@ -316,10 +316,18 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
         else:
             representation['experience'] = str(experience_val)
         
-        # Add profile image URL
-        representation['profile_image_url'] = (
-            instance.profile_image if instance.profile_image else None
-        )
+        # Add profile image URL - FIXED: Handle CloudinaryResource properly
+        if instance.profile_image:
+            # If it's a CloudinaryResource object, get the URL
+            if hasattr(instance.profile_image, 'url'):
+                representation['profile_image_url'] = instance.profile_image.url
+            elif hasattr(instance.profile_image, 'build_url'):
+                representation['profile_image_url'] = instance.profile_image.build_url()
+            else:
+                # If it's just a string (public_id), build the URL
+                representation['profile_image_url'] = str(instance.profile_image)
+        else:
+            representation['profile_image_url'] = None
         
         # Set expertise level to match frontend format 
         if instance.expertise_level:
@@ -334,6 +342,5 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
             representation['approved_by'] = instance.approved_by.name
         else:
             representation['approved_by'] = None
-        
+    
         return representation
-

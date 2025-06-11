@@ -30,4 +30,6 @@ urlpatterns = [
     path('journals/', JournalAPIView.as_view(), name='journals'),               
     path('journals/<int:journal_id>/', JournalAPIView.as_view(), name='user-journals'),
     path('moods/', MoodChoicesAPIView.as_view(), name='mood-choices'),
+    path('mentors/', MentorListAPIView.as_view(), name='mentor-list'),
+    path('mentors/<int:mentor_id>/', MentorDetailAPIView.as_view(), name='mentor-detail'),
 ]

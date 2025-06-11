@@ -79,10 +79,12 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// Admin Token Refresh Logic - Fixed to prevent infinite loop
+// Admin Token Refresh Logic
 adminAxios.interceptors.response.use(
   (response) => response,
   async (error) => {
+    console.log('Interceptor triggered by request to:', originalRequest.url);
+    console.log('Error status:', error.response?.status);
     const originalRequest = error.config;
 
     // If not a 401 error or already retried, immediately reject

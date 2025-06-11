@@ -145,21 +145,21 @@ const AdminUsers = () => {
       <div className="flex justify-between items-center mb-4">
   <h1 className="text-3xl font-bold">User Management</h1>
   <div className="flex gap-3">
-    <Button
+    {/* <Button
       variant="outline"
       onClick={() => navigate("/admin/mentors")}
       className="flex items-center gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
     >
       <span>Mentor requests</span>
-    </Button>
-    <Button
+    </Button> */}
+    {/* <Button
       variant="outline"
       onClick={handleLogout}
       className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
     >
       <LogOut className="h-4 w-4" />
       Logout
-    </Button>
+    </Button> */}
   </div>
 </div>
         <div className="relative flex-1 max-w-md">
@@ -205,8 +205,8 @@ const AdminUsers = () => {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
+          <div className="overflow-x-auto rounded-md border border-gray-200">
+            <table className="w-full border-collapse  ">
               <thead>
                 <tr className="bg-gray-100">
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

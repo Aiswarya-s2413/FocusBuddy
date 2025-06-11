@@ -3,6 +3,7 @@ import AdminLogin from "../pages/admin/AdminLogin";
 import AdminUsers from "../pages/admin/AdminUsers";
 import { useSelector } from "react-redux";
 import AdminMentorsApproval from "../pages/admin/AdminMentorsApproval";
+import AdminLayout from "../components/admin/AdminLayout";
 
 const ProtectedAdminRoute = ({ children }) => {
   const { admin } = useSelector((state) => state.admin);
@@ -25,7 +26,7 @@ const AdminRoutes = () => {
         path="/users"
         element={
           <ProtectedAdminRoute>
-            <AdminUsers />
+           <AdminLayout> <AdminUsers /></AdminLayout>
           </ProtectedAdminRoute>
         }
       />
@@ -33,7 +34,7 @@ const AdminRoutes = () => {
         path="/mentors"
         element={
           <ProtectedAdminRoute>
-            <AdminMentorsApproval />
+            <AdminLayout><AdminMentorsApproval /></AdminLayout>
           </ProtectedAdminRoute>
         }
         />

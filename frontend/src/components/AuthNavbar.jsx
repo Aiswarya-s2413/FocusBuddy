@@ -64,7 +64,7 @@ const AuthNavbar = () => {
             </NavLink>
 
             <NavLink
-              to="/statistics"
+              to="/mentors"
               className={({ isActive }) => cn(
                 "flex items-center px-3 py-2 rounded-md text-sm font-medium",
                 isActive
@@ -73,7 +73,7 @@ const AuthNavbar = () => {
               )}
             >
               <BarChart2 className="h-4 w-4 mr-2" />
-              Statistics
+              Mentors
             </NavLink>
 
             <NavLink
