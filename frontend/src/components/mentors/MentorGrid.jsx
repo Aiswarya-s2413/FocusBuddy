@@ -1,10 +1,81 @@
 import React from "react";
+import { useState } from "react";
 import PropTypes from "prop-types";
 import { Star, Clock } from "lucide-react";
 import { Button } from "../../components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Card, CardContent, CardFooter } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
+
+const Avatar = ({ children, className = "" }) => (
+  <div className={`rounded-full bg-gray-200 flex items-center justify-center ${className}`}>
+    {children}
+  </div>
+);
+
+const AvatarImage = ({ src, alt, className = "" }) => {
+  const [imageError, setImageError] = useState(false);
+  
+  if (!src) return null;
+
+  let fixedSrc = src;
+  
+  // Handle different URL formats
+  if (src.includes('cloudinary.com')) {
+    // If it's already a full Cloudinary URL, check if it needs fixing
+    if (src.includes('/v1/')) {
+      // Replace generic /v1/ with the specific version number and add .jpg extension
+      fixedSrc = src.replace('/v1/', '/v1749732168/');
+      
+      // Add .jpg.jpg extension if it ends with .jpg but not .jpg.jpg
+      if (fixedSrc.endsWith('.jpg') && !fixedSrc.endsWith('.jpg.jpg')) {
+        fixedSrc = fixedSrc + '.jpg';
+      }
+    } else {
+      // Use the URL as is if it already has a proper version or no version
+      fixedSrc = src;
+    }
+  } else if (src.startsWith('mentors/') || src.includes('/')) {
+    // If it's just the path from database, construct the full Cloudinary URL
+    // Remove any leading slash and ensure proper format
+    const cleanPath = src.startsWith('/') ? src.substring(1) : src;
+    
+    // For mentor images, add .jpg.jpg as that seems to be the pattern
+    let finalPath = cleanPath;
+    if (cleanPath.includes('mentors/') && cleanPath.endsWith('.jpg') && !cleanPath.endsWith('.jpg.jpg')) {
+      finalPath = `${cleanPath}.jpg`;
+    } else if (!cleanPath.includes('.')) {
+      finalPath = `${cleanPath}.jpg`;
+    }
+    
+    // Use the specific version number
+    fixedSrc = `https://res.cloudinary.com/dnq1fzs1l/image/upload/v1749732168/${finalPath}`;
+  }
+  
+  console.log('Original URL:', src);
+  console.log('Fixed URL:', fixedSrc);
+  
+  // Use a default image if image failed to load
+  const defaultImage = "https://via.placeholder.com/150/cccccc/666666?text=No+Image";
+  const imageSrc = imageError ? defaultImage : fixedSrc;
+  
+  return (
+    <img 
+      src={imageSrc} 
+      alt={alt || "Avatar"} 
+      className={`w-full h-full object-cover rounded-full ${className}`}
+      onError={(e) => {
+        console.log('Image failed to load:', e.target.src);
+        if (!imageError) {
+          setImageError(true);
+        }
+      }}
+    />
+  );
+};
+const AvatarFallback = ({ children, className = "" }) => (
+  <div className={`text-gray-600 font-medium ${className}`}>{children}</div>
+);
+
 
 const MentorGrid = ({ mentors, onViewProfile }) => {
   return (
@@ -21,7 +92,7 @@ const MentorGrid = ({ mentors, onViewProfile }) => {
                     e.target.style.display = 'none';
                   }}
                 />
-                <AvatarFallback>{mentor.name?.charAt(0) || 'M'}</AvatarFallback>
+                {/* <AvatarFallback>{mentor.name?.charAt(0) || 'M'}</AvatarFallback> */}
               </Avatar>
               <div className="space-y-1">
                 <h3 className="font-medium text-lg">{mentor.name}</h3>

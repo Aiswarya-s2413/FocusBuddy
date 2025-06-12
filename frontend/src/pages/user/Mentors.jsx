@@ -10,7 +10,7 @@ const Mentors = () => {
     subjects: [],
     expertise_level: [],
     rating: 0,
-    hourly_rate: [0, 100]
+    hourly_rate: [0, 1000]
   });
   const [selectedMentor, setSelectedMentor] = useState(null);
   const [mentors, setMentors] = useState([]);

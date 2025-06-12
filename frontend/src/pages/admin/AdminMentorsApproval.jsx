@@ -36,16 +36,51 @@ const Avatar = ({ children, className = "" }) => (
 );
 
 const AvatarImage = ({ src, alt, className = "" }) => {
+  const [imageError, setImageError] = useState(false);
+  
+  // Use a default image if no src provided or if image failed to load
+  const defaultImage = "https://via.placeholder.com/150/cccccc/666666?text=No+Image";
+  const imageSrc = (!src || imageError) ? defaultImage : src;
+
+  let fixedSrc = imageSrc;
   if (!src) return null;
+
+  
+  
+  // Handle different URL formats
+  if (src.includes('cloudinary.com')) {
+    // If it's already a full Cloudinary URL with generic v1, remove it and reconstruct
+    if (src.includes('/v1/')) {
+      // Extract the path after v1/ 
+      const pathAfterV1 = src.split('/v1/')[1];
+      const baseUrl = src.split('/v1/')[0];
+      
+      // Reconstruct without version (let Cloudinary handle it automatically)
+      fixedSrc = `${baseUrl}/${pathAfterV1}`;
+      
+      // Add extra .jpg extension if the original has .jpg but not .jpg.jpg
+      if (!fixedSrc.endsWith('.jpg.jpg') && fixedSrc.endsWith('.jpg')) {
+        fixedSrc = fixedSrc + '.jpg';
+      }
+    }
+  } else if (src.startsWith('mentors/') || src.includes('/')) {
+    // If it's just the path from database, construct the full Cloudinary URL without version
+    fixedSrc = `https://res.cloudinary.com/dnq1fzs1l/image/upload/${src}.jpg`;
+  }
+  
+  console.log('Original URL:', src);
+  console.log('Fixed URL:', fixedSrc);
   
   return (
     <img 
-      src={src} 
+      src={fixedSrc} 
       alt={alt || "Avatar"} 
       className={`w-full h-full object-cover rounded-full ${className}`}
       onError={(e) => {
-        // Hide broken image and show fallback
-        e.target.style.display = 'none';
+        console.log('Image failed to load:', e.target.src);
+        if (!imageError) {
+          setImageError(true);
+        }
       }}
     />
   );
@@ -430,9 +465,9 @@ const AdminMentorsApproval = () => {
                   <div className="flex items-start gap-4 mb-4">
                     <Avatar className="h-16 w-16">
                       <AvatarImage src={mentor.profile_image_url} alt={mentor.name} />
-                      <AvatarFallback>
+                      {/* <AvatarFallback>
                         {mentor.name?.charAt(0) || 'M'}
-                      </AvatarFallback>
+                      </AvatarFallback> */}
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-lg truncate">{mentor.name}</h3>
@@ -566,9 +601,9 @@ const AdminMentorsApproval = () => {
                       src={selectedMentor.profile_image_url} 
                       alt={selectedMentor.name} 
                     />
-                    <AvatarFallback className="text-lg">
+                    {/* <AvatarFallback className="text-lg">
                       {selectedMentor.name?.charAt(0) || 'M'}
-                    </AvatarFallback>
+                    </AvatarFallback> */}
                   </Avatar>
                   <div className="flex-1">
                     <h3 className="text-xl font-semibold">{selectedMentor.name}</h3>
