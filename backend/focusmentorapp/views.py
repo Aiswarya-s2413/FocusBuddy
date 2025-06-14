@@ -13,8 +13,9 @@ import logging
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from userapp.authentication import MentorCookieJWTAuthentication
+from django.shortcuts import get_object_or_404
 
 
 logger = logging.getLogger(__name__)
@@ -405,3 +406,160 @@ class MentorProfileUploadView(APIView):
     @transaction.atomic
     def post(self, request):
         return self.put(request)
+
+class MentorProfileDisplayView(APIView):
+    authentication_classes = [MentorCookieJWTAuthentication]  
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    
+    def get(self, request, mentor_id=None):
+        """Get mentor profile data"""
+        try:
+            if mentor_id:
+                # Get specific mentor profile (for viewing others)
+                mentor = get_object_or_404(
+                    Mentor.objects.select_related('user').prefetch_related('user__subjects'),
+                    user__id=mentor_id,
+                    is_approved=True
+                )
+            else:
+                # Get current user's mentor profile
+                mentor = get_object_or_404(
+                    Mentor.objects.select_related('user').prefetch_related('user__subjects'),
+                    user=request.user
+                )
+                
+                # Ensure user is marked as mentor
+                if not request.user.is_mentor:
+                    request.user.is_mentor = True
+                    request.user.save()
+            
+            serializer = MentorProfileDisplaySerializer(mentor)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error fetching mentor profile: {str(e)}")
+            return Response(
+                {"error": "Failed to fetch mentor profile data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @transaction.atomic
+    def put(self, request):
+        """Update current user's mentor profile"""
+        try:
+            # Get current user's mentor profile
+            mentor = get_object_or_404(Mentor, user=request.user)
+            
+            # Handle form data with JSON
+            data = request.data.copy()
+            
+            # Parse JSON data if present (similar to your upload view)
+            if 'data' in data:
+                json_data = json.loads(data.get('data', '{}'))
+                
+                # Map JSON fields to serializer fields
+                field_mapping = {
+                    'name': 'name',
+                    'bio': 'bio',
+                    'subjects': 'subjects',
+                    'experience': 'experience',
+                    'expertise_level': 'expertise_level',
+                    'hourly_rate': 'hourly_rate',
+                    'availability': 'availability',
+                    'is_available': 'is_available'
+                }
+                
+                for json_field, data_field in field_mapping.items():
+                    if json_field in json_data:
+                        if json_field == 'subjects' and isinstance(json_data[json_field], list):
+                            data[data_field] = ','.join(json_data[json_field])
+                        else:
+                            data[data_field] = json_data[json_field]
+            
+            serializer = MentorProfileEditSerializer(mentor, data=data, partial=True)
+            
+            if serializer.is_valid():
+                updated_mentor = serializer.save()
+                return Response({
+                    "message": "Profile updated successfully",
+                    "profile": serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                logger.error(f"Validation errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error updating mentor profile: {str(e)}")
+            return Response(
+                {"error": f"An error occurred while updating the profile: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class MentorAvailabilityView(APIView):
+    authentication_classes = [MentorCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get mentor's availability"""
+        try:
+            mentor = get_object_or_404(Mentor, user=request.user)
+            return Response({
+                'success': True,
+                'availability': mentor.availability
+            })
+        except Mentor.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Mentor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def put(self, request):
+        """Complete replacement of mentor's availability"""
+        try:
+            mentor = get_object_or_404(Mentor, user=request.user)
+            serializer = MentorAvailabilitySerializer(mentor, data=request.data)
+            
+            if serializer.is_valid():
+                updated_mentor = serializer.save()
+                return Response({
+                    'success': True,
+                    'message': 'Availability updated successfully',
+                    'availability': updated_mentor.availability
+                })
+            
+            return Response({
+                'success': False,
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Mentor.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Mentor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def patch(self, request):
+        """Partial update of mentor's availability"""
+        try:
+            mentor = get_object_or_404(Mentor, user=request.user)
+            serializer = MentorAvailabilitySerializer(mentor, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                updated_mentor = serializer.save()
+                return Response({
+                    'success': True,
+                    'message': 'Availability updated successfully',
+                    'availability': updated_mentor.availability
+                })
+            
+            return Response({
+                'success': False,
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Mentor.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Mentor profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)

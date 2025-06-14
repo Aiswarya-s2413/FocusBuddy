@@ -5,9 +5,9 @@ import MentorSignup from "../pages/mentor/MentorSignup";
 import MentorVerifyOtp from "../pages/mentor/MentorVerifyOtp";
 import MentorSelectSubjects from "../pages/mentor/MentorSelectSubjects";
 import MentorForgotPassword from "../pages/mentor/MentorForgotPassword";
-import MentorProfile from "../pages/mentor/MentorProfile";
 import MentorProfileUpload from "../pages/mentor/MentorProfileUpload";
 import MentorLayout from "../components/mentors/MentorLayout";
+import MentorProfileDisplay from "../pages/mentor/MentorProfileDisplay";
 
 // Protected route wrapper
 const PrivateRoute = ({ children }) => {
@@ -25,7 +25,6 @@ const MentorRoutes = () => {
             <Route path="/verify-otp" element={<MentorVerifyOtp />} />
             <Route path="/select-subjects" element={<MentorSelectSubjects />} />
             <Route path="/forgot-password" element={<MentorForgotPassword />} />
-            <Route path="/profile" element={<MentorProfile />} />
 
             {/* Protected Route */}
             <Route
@@ -33,6 +32,14 @@ const MentorRoutes = () => {
                 element={
                     <PrivateRoute>
                    <MentorLayout> <MentorProfileUpload /></MentorLayout>
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/profile-display"
+                element={
+                    <PrivateRoute>
+                   <MentorLayout> <MentorProfileDisplay /></MentorLayout>
                     </PrivateRoute>
                 }
             />

@@ -14,4 +14,9 @@ urlpatterns = [
     path('reset-password/', MentorResetPasswordView.as_view(), name='mentor-reset-password'),
     path('profile-upload/', MentorProfileUploadView.as_view(), name='mentor-profile-upload'),
     path('resend-otp/', MentorResendOtpView.as_view(), name='mentor-resend-otp'),
-] 
+    path('profile/', MentorProfileDisplayView.as_view(), name='mentor-profile-display'),
+    path('profile/<int:mentor_id>/', MentorProfileDisplayView.as_view(), name='mentor-profile-view'),
+    path('availability/', MentorAvailabilityView.as_view(), name='update_mentor_availability'),
+    
+]
+

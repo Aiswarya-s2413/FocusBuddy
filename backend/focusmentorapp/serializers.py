@@ -194,14 +194,13 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
     subjects = serializers.CharField(required=False, write_only=True)
     experience = serializers.CharField(source='user.experience', required=False)
     profile_image = serializers.ImageField(required=False)
-    expertise_level = serializers.CharField(required=False)  # Make sure this field is explicitly defined
+    expertise_level = serializers.CharField(required=False)  
     
     class Meta:
         model = Mentor
         fields = [
             'name', 'bio', 'subjects', 'experience', 'expertise_level',
             'hourly_rate', 'profile_image', 'is_available', 
-            # Add approval-related fields
             'submitted_for_approval', 'approval_status', 'submitted_at', 
             'approved_at', 'approved_by'
         ]
@@ -329,11 +328,11 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
         else:
             representation['profile_image_url'] = None
         
-        # Set expertise level to match frontend format 
+         
         if instance.expertise_level:
             representation['expertise_level'] = instance.get_expertise_level_display().title()
         
-        # Add approval-related fields with proper formatting
+        
         representation['submitted_for_approval'] = instance.submitted_for_approval
         representation['approval_status'] = instance.approval_status
         representation['submitted_at'] = instance.submitted_at.isoformat() if instance.submitted_at else None
@@ -344,3 +343,258 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
             representation['approved_by'] = None
     
         return representation
+
+class MentorProfileDisplaySerializer(serializers.ModelSerializer):
+    
+    # User fields
+    id = serializers.IntegerField(source='user.id', read_only=True)
+    name = serializers.CharField(source='user.name', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+    bio = serializers.CharField(source='user.bio', read_only=True)
+    experience = serializers.SerializerMethodField()
+    subjects = serializers.SerializerMethodField()
+    
+    # Mentor fields
+    profile_image_url = serializers.SerializerMethodField()
+    hourly_rate = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    rating = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
+    expertise_level = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Mentor
+        fields = [
+            'id', 'name', 'email', 'subjects', 'bio', 'experience', 
+            'expertise_level', 'hourly_rate', 'availability', 'rating', 
+            'total_sessions', 'total_students', 'is_available', 'profile_image_url'
+        ]
+
+    def get_profile_image_url(self, obj):
+        """Get profile image URL with fallback"""
+        if obj.profile_image:
+            if hasattr(obj.profile_image, 'url'):
+                return obj.profile_image.url
+            elif hasattr(obj.profile_image, 'build_url'):
+                return obj.profile_image.build_url()
+            else:
+                return str(obj.profile_image)
+        return "https://images.unsplash.com/photo-1649972904349-6e44c42644a7?w=300&h=300&fit=crop&crop=face"
+
+    def get_experience(self, obj):
+        """Format experience as string for display"""
+        experience = obj.user.experience
+        if experience == 0:
+            return "Less than 1 Year"
+        elif experience == 1:
+            return "1 Year"
+        else:
+            return f"{experience}+ Years"
+
+    def get_subjects(self, obj):
+        """Return subjects as list of strings for frontend"""
+        return [subject.name for subject in obj.user.subjects.all()]
+
+class MentorProfileEditSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='user.name')
+    bio = serializers.CharField(source='user.bio', required=False, allow_blank=True)
+    subjects = serializers.CharField(required=False, write_only=True)
+    experience = serializers.CharField(source='user.experience', required=False)
+    profile_image = serializers.ImageField(required=False)
+    expertise_level = serializers.CharField(required=False)
+    
+    class Meta:
+        model = Mentor
+        fields = [
+            'name', 'bio', 'subjects', 'experience', 'expertise_level',
+            'hourly_rate', 'availability', 'profile_image', 'is_available'
+        ]
+    
+    def validate_subjects(self, value):
+        """Validate and process subjects - handle both string and list"""
+        if not value:
+            return []
+        
+        # Handle comma-separated string
+        if isinstance(value, str):
+            subject_names = [name.strip() for name in value.split(',') if name.strip()]
+        # Handle list from frontend
+        elif isinstance(value, list):
+            subject_names = [str(name).strip() for name in value if str(name).strip()]
+        else:
+            subject_names = []
+        
+        if not subject_names:
+            raise serializers.ValidationError("Please provide at least one subject")
+            
+        return subject_names
+        
+    def validate_expertise_level(self, value):
+        """Ensure expertise level matches choices"""
+        if not value:
+            return value
+            
+        valid_choices = dict(Mentor._meta.get_field('expertise_level').choices)
+        
+        if value.lower() not in [choice.lower() for choice in valid_choices.keys()]:
+            raise serializers.ValidationError(
+                f"Expertise level must be one of: {', '.join(valid_choices.values())}"
+            )
+        
+        return value.lower()
+        
+    def validate_experience(self, value):
+        """Convert experience to integer"""
+        try:
+            if isinstance(value, str) and '+' in value:
+                return int(value.split('+')[0])
+            return int(value)
+        except (ValueError, TypeError):
+            return 0
+    
+    def validate_availability(self, value):
+        """Validate availability schedule format"""
+        if not value:
+            return {}
+            
+        valid_days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Availability must be a dictionary")
+        
+        for day, slots in value.items():
+            if day not in valid_days:
+                raise serializers.ValidationError(f"Invalid day: {day}")
+            
+            if not isinstance(slots, list):
+                raise serializers.ValidationError(f"Slots for {day} must be a list")
+                
+            # Validate time format (basic validation)
+            for slot in slots:
+                if not isinstance(slot, str) or ':' not in slot:
+                    raise serializers.ValidationError(f"Invalid time format in {day}: {slot}")
+        
+        return value
+            
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', {})
+        subjects_data = validated_data.pop('subjects', [])
+        profile_image = validated_data.pop('profile_image', None)
+        
+        # Update user model fields
+        user = instance.user
+        if 'name' in user_data:
+            user.name = user_data['name']
+        if 'bio' in user_data:
+            user.bio = user_data['bio']
+        if 'experience' in user_data:
+            user.experience = user_data['experience']
+            
+        # Process subjects
+        if subjects_data:
+            subjects = []
+            for subject_name in subjects_data:
+                subject, created = Subject.objects.get_or_create(name=subject_name)
+                subjects.append(subject)
+            user.subjects.set(subjects)
+            
+        # Handle profile image upload
+        if profile_image:
+            try:
+                upload_result = CloudinaryService.upload_image(profile_image)
+                if upload_result:
+                    instance.profile_image = upload_result['public_id']
+            except Exception as e:
+                logger.error(f"Error uploading profile image: {str(e)}")
+                # Continue without failing the entire update
+            
+        # Update mentor model fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+            
+        # Save both models
+        user.save()
+        instance.save()
+        
+        return instance
+        
+    def to_representation(self, instance):
+        """Format response to match display serializer structure"""
+        representation = {
+            'id': instance.user.id,
+            'name': instance.user.name,
+            'email': instance.user.email,
+            'bio': instance.user.bio,
+            'subjects': [subject.name for subject in instance.user.subjects.all()],
+            'experience': f"{instance.user.experience}+ Years" if instance.user.experience > 0 else "Less than 1 Year",
+            'expertise_level': instance.expertise_level,
+            'hourly_rate': float(instance.hourly_rate),
+            'availability': instance.availability,
+            'rating': float(instance.rating),
+            'total_sessions': instance.total_sessions,
+            'total_students': instance.total_students,
+            'is_available': instance.is_available,
+        }
+        
+        # Add profile image URL
+        if instance.profile_image:
+            if hasattr(instance.profile_image, 'url'):
+                representation['profile_image_url'] = instance.profile_image.url
+            elif hasattr(instance.profile_image, 'build_url'):
+                representation['profile_image_url'] = instance.profile_image.build_url()
+            else:
+                representation['profile_image_url'] = str(instance.profile_image)
+        else:
+            representation['profile_image_url'] = "https://images.unsplash.com/photo-1649972904349-6e44c42644a7?w=300&h=300&fit=crop&crop=face"
+        
+        return representation
+
+class MentorAvailabilitySerializer(serializers.ModelSerializer):
+    """
+    Serializer specifically for updating mentor availability
+    """
+    availability = serializers.JSONField()
+    
+    class Meta:
+        model = Mentor
+        fields = ['availability']
+    
+    def validate_availability(self, value):
+        """
+        Validate the availability JSON structure
+        """
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Availability must be a dictionary")
+        
+        # Valid days
+        valid_days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        
+        # Valid time slots
+        valid_times = [
+            "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", 
+            "3:00 PM", "4:00 PM", "5:00 PM", "6:00 PM", "7:00 PM", "8:00 PM"
+        ]
+        
+        # Validate each day
+        for day, times in value.items():
+            if day not in valid_days:
+                raise serializers.ValidationError(f"Invalid day: {day}")
+            
+            if not isinstance(times, list):
+                raise serializers.ValidationError(f"Times for {day} must be a list")
+            
+            # Validate time slots
+            for time in times:
+                if not isinstance(time, str):
+                    raise serializers.ValidationError(f"Time slots must be strings")
+                if time not in valid_times:
+                    raise serializers.ValidationError(f"Invalid time slot: {time}")
+        
+        return value
+    
+    def update(self, instance, validated_data):
+        """
+        Update the mentor's availability - completely replaces the existing availability
+        """
+        instance.availability = validated_data.get('availability', instance.availability)
+        instance.save()
+        return instance

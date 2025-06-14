@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "../../components/ui/form";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
-import { Camera, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react";
+import { Camera, CheckCircle, Clock, XCircle, AlertCircle, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -74,6 +74,7 @@ const MentorProfileUpload = () => {
               submitted_at: response.data.submitted_at,
               approved_at: response.data.approved_at,
               approved_by: response.data.approved_by,
+              is_approved: response.data.is_approved || false,
             });
             return; // Exit early if profile is submitted
           } else {
@@ -181,6 +182,7 @@ const MentorProfileUpload = () => {
             submitted_at: response.data.profile.submitted_at,
             approved_at: response.data.profile.approved_at,
             approved_by: response.data.profile.approved_by,
+            is_approved: response.data.profile.is_approved || false,
           });
         }
       } else {
@@ -190,6 +192,7 @@ const MentorProfileUpload = () => {
           submitted_at: new Date().toISOString(),
           approved_at: null,
           approved_by: null,
+          is_approved: false,
         });
       }
 
@@ -324,6 +327,10 @@ const MentorProfileUpload = () => {
     }
   };
 
+  const handleGoToProfile = () => {
+    navigate("/mentor/profile-display");
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -385,6 +392,12 @@ const MentorProfileUpload = () => {
               {approvalStatus.status === "rejected" && (
                 <Button onClick={handleResubmit} disabled={isLoading}>
                   {isLoading ? "Preparing..." : "Resubmit Profile"}
+                </Button>
+              )}
+              {(approvalStatus.status === "approved" || approvalStatus.is_approved) && (
+                <Button onClick={handleGoToProfile} className="bg-green-600 hover:bg-green-700">
+                  <User className="h-4 w-4 mr-2" />
+                  Go to Profile
                 </Button>
               )}
             </div>
