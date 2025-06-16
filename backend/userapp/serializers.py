@@ -249,3 +249,269 @@ class MentorSerializer(serializers.ModelSerializer):
 
     def get_rating(self, obj):
         return float(obj.rating)
+
+class MentorSessionSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    mentor_name = serializers.CharField(source='mentor.user.name', read_only=True)
+    mentor_profile_image = serializers.CharField(source='mentor.profile_image.url', read_only=True)
+    subjects_data = serializers.SerializerMethodField(read_only=True)
+    session_datetime = serializers.SerializerMethodField(read_only=True)
+    is_upcoming = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = MentorSession
+        fields = [
+            'id', 'student', 'mentor', 'scheduled_date', 'scheduled_time',
+            'duration_minutes', 'session_mode', 'status', 'meeting_link',
+            'meeting_id', 'meeting_password', 'session_notes', 'student_feedback',
+            'mentor_feedback', 'student_rating', 'mentor_rating', 'subjects',
+            'created_at', 'updated_at', 'confirmed_at', 'started_at', 'ended_at',
+            'cancelled_at', 'cancelled_by', 'cancellation_reason',
+            'student_name', 'mentor_name', 'mentor_profile_image', 'subjects_data',
+            'session_datetime', 'is_upcoming'
+        ]
+        read_only_fields = [
+            'created_at', 'updated_at', 'confirmed_at', 'started_at', 
+            'ended_at', 'cancelled_at'
+        ]
+    
+    def get_subjects_data(self, obj):
+        return [{'id': subject.id, 'name': subject.name} for subject in obj.subjects.all()]
+    
+    def get_session_datetime(self, obj):
+        return obj.session_datetime.isoformat() if obj.session_datetime else None
+    
+    def get_is_upcoming(self, obj):
+        return obj.is_upcoming
+
+
+class SessionPaymentSerializer(serializers.ModelSerializer):
+    session_details = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = SessionPayment
+        fields = [
+            'id', 'session', 'amount', 'currency', 'payment_method', 'status',
+            'transaction_id', 'gateway_payment_id', 'gateway_order_id',
+            'gateway_signature', 'base_amount', 'platform_fee', 'tax_amount',
+            'discount_amount', 'refund_amount', 'refund_reason', 'refunded_at',
+            'created_at', 'updated_at', 'paid_at', 'gateway_response',
+            'session_details'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'paid_at', 'refunded_at']
+    
+    def get_session_details(self, obj):
+        return {
+            'id': obj.session.id,
+            'student_name': obj.session.student.name,
+            'mentor_name': obj.session.mentor.user.name,
+            'scheduled_date': obj.session.scheduled_date,
+            'scheduled_time': obj.session.scheduled_time,
+        }
+
+
+class CreateOrderSerializer(serializers.Serializer):
+    """Serializer for creating Razorpay order (no DB save)"""
+    mentor_id = serializers.IntegerField()
+    scheduled_date = serializers.DateField()
+    scheduled_time = serializers.TimeField()
+    duration_minutes = serializers.ChoiceField(choices=[30, 60, 90, 120])
+    session_mode = serializers.ChoiceField(choices=['video', 'voice', 'chat'])
+    subjects = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True
+    )
+    
+    def validate_mentor_id(self, value):
+        try:
+            mentor = Mentor.objects.get(id=value, is_approved=True, is_available=True)
+            return mentor
+        except Mentor.DoesNotExist:
+            raise serializers.ValidationError("Mentor not found or not available")
+    
+    def validate_scheduled_date(self, value):
+        if value < timezone.now().date():
+            raise serializers.ValidationError("Cannot schedule sessions in the past")
+        return value
+    
+    def validate(self, data):
+        mentor = data['mentor_id']
+        scheduled_date = data['scheduled_date']
+        scheduled_time = data['scheduled_time']
+        
+        # Check if mentor is available on the selected day and time
+        day_name = scheduled_date.strftime('%A').lower()
+        mentor_availability = mentor.availability.get(day_name, [])
+        
+        # Convert time to string format for comparison
+        time_str = scheduled_time.strftime('%H:%M')
+        
+        # Check if the time slot is available
+        if not mentor_availability or time_str not in mentor_availability:
+            raise serializers.ValidationError(
+                f"Mentor is not available on {day_name} at {time_str}"
+            )
+        
+        # Check for conflicting sessions
+        conflicting_sessions = MentorSession.objects.filter(
+            mentor=mentor,
+            scheduled_date=scheduled_date,
+            scheduled_time=scheduled_time,
+            status__in=['pending', 'confirmed', 'ongoing']
+        )
+        
+        if conflicting_sessions.exists():
+            raise serializers.ValidationError(
+                "This time slot is already booked"
+            )
+        
+        return data
+
+class ConfirmBookingSerializer(serializers.Serializer):
+    """Serializer for confirming booking after successful payment"""
+    razorpay_payment_id = serializers.CharField()
+    razorpay_order_id = serializers.CharField()
+    razorpay_signature = serializers.CharField()
+    mentor_id = serializers.IntegerField()
+    scheduled_date = serializers.DateField()
+    scheduled_time = serializers.TimeField()
+    duration_minutes = serializers.ChoiceField(choices=[30, 60, 90, 120])
+    session_mode = serializers.ChoiceField(choices=['video', 'voice', 'chat'])
+    subjects = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True
+    )
+    
+    def validate(self, data):
+        # Verify payment signature
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+        
+        try:
+            client.utility.verify_payment_signature({
+                'razorpay_order_id': data['razorpay_order_id'],
+                'razorpay_payment_id': data['razorpay_payment_id'],
+                'razorpay_signature': data['razorpay_signature']
+            })
+        except Exception as e:
+            raise serializers.ValidationError("Payment verification failed")
+        
+        # Re-validate mentor availability (double-check)
+        mentor = Mentor.objects.get(id=data['mentor_id'])
+        scheduled_date = data['scheduled_date']
+        scheduled_time = data['scheduled_time']
+        
+        conflicting_sessions = MentorSession.objects.filter(
+            mentor=mentor,
+            scheduled_date=scheduled_date,
+            scheduled_time=scheduled_time,
+            status__in=['pending', 'confirmed', 'ongoing']
+        )
+        
+        if conflicting_sessions.exists():
+            raise serializers.ValidationError(
+                "This time slot was booked by someone else. Refund will be initiated."
+            )
+        
+        return data
+    
+    def create(self, validated_data):
+        user = self.context['request'].user
+        mentor = Mentor.objects.get(id=validated_data['mentor_id'])
+        subjects_ids = validated_data.pop('subjects', [])
+        
+        # Remove payment-related fields from session data
+        payment_data = {
+            'razorpay_payment_id': validated_data.pop('razorpay_payment_id'),
+            'razorpay_order_id': validated_data.pop('razorpay_order_id'),
+            'razorpay_signature': validated_data.pop('razorpay_signature'),
+        }
+        validated_data.pop('mentor_id')
+        
+        # Calculate amounts
+        duration_hours = validated_data['duration_minutes'] / 60
+        base_amount = Decimal(str(mentor.hourly_rate)) * Decimal(str(duration_hours))
+        platform_fee = base_amount * Decimal('0.10')
+        tax_amount = base_amount * Decimal('0.18')
+        total_amount = base_amount + platform_fee + tax_amount
+        
+        with transaction.atomic():
+            # Create the session
+            session = MentorSession.objects.create(
+                student=user,
+                mentor=mentor,
+                status='confirmed',  # Directly confirmed since payment is already successful
+                **validated_data
+            )
+            
+            # Add subjects if provided
+            if subjects_ids:
+                subjects = Subject.objects.filter(id__in=subjects_ids)
+                session.subjects.set(subjects)
+            
+            # Create payment record with successful status
+            payment = SessionPayment.objects.create(
+                session=session,
+                amount=total_amount,
+                currency='INR',
+                payment_method='razorpay',
+                base_amount=base_amount,
+                platform_fee=platform_fee,
+                tax_amount=tax_amount,
+                status='completed',
+                gateway_payment_id=payment_data['razorpay_payment_id'],
+                gateway_order_id=payment_data['razorpay_order_id'],
+                gateway_signature=payment_data['razorpay_signature'],
+                transaction_id=payment_data['razorpay_payment_id'],
+                paid_at=timezone.now()
+            )
+            
+            # Create earnings record for mentor
+            mentor_earning = base_amount - (base_amount * Decimal('0.10'))
+            MentorEarnings.objects.create(
+                mentor=mentor,
+                session=session,
+                session_amount=base_amount,
+                platform_commission=base_amount * Decimal('0.10'),
+                mentor_earning=mentor_earning
+            )
+        
+        return session
+
+
+class SessionReviewSerializer(serializers.ModelSerializer):
+    reviewer_name = serializers.CharField(source='reviewer.name', read_only=True)
+    session_details = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        model = SessionReview
+        fields = [
+            'id', 'session', 'reviewer', 'rating', 'review_text',
+            'communication_rating', 'knowledge_rating', 'helpfulness_rating',
+            'is_public', 'is_verified', 'created_at', 'updated_at',
+            'reviewer_name', 'session_details'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'is_verified']
+    
+    def get_session_details(self, obj):
+        return {
+            'id': obj.session.id,
+            'mentor_name': obj.session.mentor.user.name,
+            'scheduled_date': obj.session.scheduled_date,
+        }
+
+
+class SessionMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.CharField(source='sender.name', read_only=True)
+    
+    class Meta:
+        model = SessionMessage
+        fields = [
+            'id', 'session', 'sender', 'message', 'is_system_message',
+            'created_at', 'sender_name'
+        ]
+        read_only_fields = ['created_at']
+
+
+

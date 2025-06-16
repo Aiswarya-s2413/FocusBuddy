@@ -23,58 +23,92 @@ const Mentors = () => {
       setLoading(true);
       setError(null);
 
+      console.log("Fetching mentors with:", { query, currentFilters });
+
       // Build query parameters
       const params = new URLSearchParams();
       
-      if (query.trim()) {
-        params.append('search', query);
+      if (query && query.trim()) {
+        params.append('search', query.trim());
       }
       
-      if (currentFilters.subjects && currentFilters.subjects.length > 0) {
+      // Handle subjects array
+      if (currentFilters.subjects && Array.isArray(currentFilters.subjects) && currentFilters.subjects.length > 0) {
         params.append('subjects', currentFilters.subjects.join(','));
       }
       
-      if (currentFilters.expertise_level && currentFilters.expertise_level.length > 0) {
+      // Handle expertise level array
+      if (currentFilters.expertise_level && Array.isArray(currentFilters.expertise_level) && currentFilters.expertise_level.length > 0) {
         currentFilters.expertise_level.forEach(level => {
-          params.append('expertise_level', level);
+          if (level && level.trim()) {
+            params.append('expertise_level', level.trim());
+          }
         });
       }
       
-      if (currentFilters.rating > 0) {
+      // Handle rating
+      if (currentFilters.rating && currentFilters.rating > 0) {
         params.append('rating', currentFilters.rating.toString());
       }
       
-      if (currentFilters.hourly_rate) {
+      // Handle hourly rate range
+      if (currentFilters.hourly_rate && Array.isArray(currentFilters.hourly_rate) && currentFilters.hourly_rate.length === 2) {
         const [minRate, maxRate] = currentFilters.hourly_rate;
-        params.append('min_hourly_rate', minRate.toString());
-        params.append('max_hourly_rate', maxRate.toString());
+        if (typeof minRate === 'number' && typeof maxRate === 'number') {
+          params.append('min_hourly_rate', minRate.toString());
+          params.append('max_hourly_rate', maxRate.toString());
+        }
       }
 
+      const queryString = params.toString();
+      const url = queryString ? `mentors/?${queryString}` : 'mentors/';
+      
+      console.log("Making request to:", url);
+
       // Use userAxios instead of fetch - it handles auth automatically
-      const response = await userAxios.get(`mentors/?${params.toString()}`);
+      const response = await userAxios.get(url);
+      
+      console.log("Response received:", response);
       
       // userAxios returns response.data directly
       const data = response.data;
       
-      if (data.success) {
-        setMentors(data.data);
+      if (data && data.success) {
+        console.log("Mentors fetched successfully:", data.data);
+        setMentors(data.data || []);
       } else {
-        throw new Error(data.error || 'Failed to fetch mentors');
+        console.error("API returned error:", data);
+        throw new Error(data?.error || 'Failed to fetch mentors');
       }
     } catch (err) {
       console.error('Error fetching mentors:', err);
       
-      // Handle different error scenarios
-      if (err.response?.status === 401) {
-        setError('Please log in to view mentors');
-        // Optionally redirect to login
-        // window.location.href = '/login';
-      } else if (err.response?.status === 403) {
-        setError('You do not have permission to view mentors');
-      } else {
-        setError(err.response?.data?.error || err.message || 'Failed to fetch mentors');
+      // More detailed error logging
+      if (err.response) {
+        console.error('Error response:', {
+          status: err.response.status,
+          statusText: err.response.statusText,
+          data: err.response.data,
+          headers: err.response.headers
+        });
       }
       
+      // Handle different error scenarios
+      let errorMessage = 'Failed to fetch mentors';
+      
+      if (err.response?.status === 401) {
+        errorMessage = 'Please log in to view mentors';
+      } else if (err.response?.status === 403) {
+        errorMessage = 'You do not have permission to view mentors';
+      } else if (err.response?.status === 500) {
+        errorMessage = err.response?.data?.error || 'Server error - please try again later';
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
       setMentors([]);
     } finally {
       setLoading(false);
@@ -84,18 +118,36 @@ const Mentors = () => {
   // Fetch mentor details when viewing profile using userAxios
   const fetchMentorDetails = async (mentorId) => {
     try {
+      console.log("Fetching mentor details for ID:", mentorId);
+      
+      if (!mentorId) {
+        throw new Error('Invalid mentor ID');
+      }
+      
       // Use userAxios for authenticated requests
       const response = await userAxios.get(`mentors/${mentorId}/`);
       
+      console.log("Mentor details response:", response);
+      
       const data = response.data;
       
-      if (data.success) {
+      if (data && data.success) {
+        console.log("Mentor details fetched successfully:", data.data);
         return data.data;
       } else {
-        throw new Error(data.error || 'Failed to fetch mentor details');
+        console.error("API returned error for mentor details:", data);
+        throw new Error(data?.error || 'Failed to fetch mentor details');
       }
     } catch (err) {
       console.error('Error fetching mentor details:', err);
+      
+      if (err.response) {
+        console.error('Error response for mentor details:', {
+          status: err.response.status,
+          statusText: err.response.statusText,
+          data: err.response.data
+        });
+      }
       
       if (err.response?.status === 401) {
         throw new Error('Please log in to view mentor details');
@@ -111,15 +163,18 @@ const Mentors = () => {
 
   // Initial load
   useEffect(() => {
+    console.log("Component mounted, fetching mentors...");
     fetchMentors();
   }, []);
 
   const handleSearch = (query) => {
+    console.log("Search triggered with query:", query);
     setSearchQuery(query);
     fetchMentors(query, filters);
   };
 
   const handleFilterChange = (newFilters) => {
+    console.log("Filters changed:", newFilters);
     const updatedFilters = { ...filters, ...newFilters };
     setFilters(updatedFilters);
     fetchMentors(searchQuery, updatedFilters);
@@ -127,6 +182,12 @@ const Mentors = () => {
 
   const handleViewProfile = async (mentor) => {
     try {
+      console.log("Viewing profile for mentor:", mentor);
+      
+      if (!mentor || !mentor.id) {
+        throw new Error('Invalid mentor data');
+      }
+      
       // Fetch detailed mentor information
       const detailedMentor = await fetchMentorDetails(mentor.id);
       setSelectedMentor(detailedMentor);
@@ -139,6 +200,7 @@ const Mentors = () => {
         setError('Please log in to view mentor profiles');
       } else {
         // Use basic mentor data as fallback
+        console.log("Using basic mentor data as fallback");
         setSelectedMentor(mentor);
       }
     }
@@ -146,6 +208,11 @@ const Mentors = () => {
 
   const handleCloseModal = () => {
     setSelectedMentor(null);
+  };
+
+  const handleRetry = () => {
+    console.log("Retrying fetch mentors...");
+    fetchMentors(searchQuery, filters);
   };
 
   // Loading state
@@ -184,7 +251,7 @@ const Mentors = () => {
           <p className="text-gray-500 mb-4">{error}</p>
           <div className="space-x-4">
             <button
-              onClick={() => fetchMentors(searchQuery, filters)}
+              onClick={handleRetry}
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
             >
               Try Again

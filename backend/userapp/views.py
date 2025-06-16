@@ -15,6 +15,8 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
+from rest_framework.pagination import PageNumberPagination
 
 logger = logging.getLogger(__name__)
 
@@ -521,13 +523,19 @@ class MentorListAPIView(APIView):
     
     def get(self, request):
         try:
-            # Get query parameters
+            logger.info(f"Mentor list request with params: {request.query_params}")
+            
+            # Get query parameters with better validation
             search_query = request.query_params.get('search', '').strip()
-            subjects_param = request.query_params.get('subjects', '')
+            subjects_param = request.query_params.get('subjects', '').strip()
             expertise_levels = request.query_params.getlist('expertise_level')
-            min_rating = request.query_params.get('rating', 0)
-            min_hourly_rate = request.query_params.get('min_hourly_rate', 0)
-            max_hourly_rate = request.query_params.get('max_hourly_rate', 1000)
+            min_rating = request.query_params.get('rating', '0')
+            min_hourly_rate = request.query_params.get('min_hourly_rate', '0')
+            max_hourly_rate = request.query_params.get('max_hourly_rate', '1000')
+            
+            logger.info(f"Parsed params - search: '{search_query}', subjects: '{subjects_param}', "
+                       f"expertise: {expertise_levels}, rating: '{min_rating}', "
+                       f"rate_range: '{min_hourly_rate}'-'{max_hourly_rate}'")
             
             # Base queryset - only approved mentors
             mentors = Mentor.objects.filter(
@@ -535,58 +543,100 @@ class MentorListAPIView(APIView):
                 approval_status='approved'
             ).select_related('user').prefetch_related('user__subjects')
             
+            logger.info(f"Base queryset count: {mentors.count()}")
+            
             # Apply search filter
             if search_query:
-                mentors = mentors.filter(
-                    Q(user__name__icontains=search_query) |
-                    Q(user__bio__icontains=search_query) |
-                    Q(user__subjects__name__icontains=search_query)
-                ).distinct()
+                try:
+                    mentors = mentors.filter(
+                        Q(user__name__icontains=search_query) |
+                        Q(user__bio__icontains=search_query) |
+                        Q(user__subjects__name__icontains=search_query)
+                    ).distinct()
+                    logger.info(f"After search filter count: {mentors.count()}")
+                except Exception as e:
+                    logger.error(f"Error applying search filter: {e}")
+                    # Continue without search filter rather than failing
             
             # Apply subject filter
             if subjects_param:
-                subject_names = [s.strip() for s in subjects_param.split(',') if s.strip()]
-                if subject_names:
-                    mentors = mentors.filter(
-                        user__subjects__name__in=subject_names
-                    ).distinct()
+                try:
+                    subject_names = [s.strip() for s in subjects_param.split(',') if s.strip()]
+                    if subject_names:
+                        logger.info(f"Filtering by subjects: {subject_names}")
+                        mentors = mentors.filter(
+                            user__subjects__name__in=subject_names
+                        ).distinct()
+                        logger.info(f"After subject filter count: {mentors.count()}")
+                except Exception as e:
+                    logger.error(f"Error applying subject filter: {e}")
+                    # Continue without subject filter
             
             # Apply expertise level filter
             if expertise_levels:
-                mentors = mentors.filter(expertise_level__in=expertise_levels)
+                try:
+                    # Clean the expertise levels
+                    clean_levels = [level.strip() for level in expertise_levels if level.strip()]
+                    if clean_levels:
+                        logger.info(f"Filtering by expertise levels: {clean_levels}")
+                        mentors = mentors.filter(expertise_level__in=clean_levels)
+                        logger.info(f"After expertise filter count: {mentors.count()}")
+                except Exception as e:
+                    logger.error(f"Error applying expertise filter: {e}")
+                    # Continue without expertise filter
             
             # Apply rating filter
             try:
-                min_rating = float(min_rating)
-                if min_rating > 0:
-                    mentors = mentors.filter(rating__gte=min_rating)
-            except (ValueError, TypeError):
-                pass
+                min_rating_val = float(min_rating) if min_rating else 0
+                if min_rating_val > 0:
+                    logger.info(f"Filtering by min rating: {min_rating_val}")
+                    mentors = mentors.filter(rating__gte=min_rating_val)
+                    logger.info(f"After rating filter count: {mentors.count()}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid min_rating value '{min_rating}': {e}")
+                # Continue without rating filter
             
             # Apply hourly rate filter
             try:
-                min_rate = float(min_hourly_rate)
-                max_rate = float(max_hourly_rate)
+                min_rate = float(min_hourly_rate) if min_hourly_rate else 0
+                max_rate = float(max_hourly_rate) if max_hourly_rate else 1000
+                
+                logger.info(f"Filtering by rate range: {min_rate} - {max_rate}")
                 mentors = mentors.filter(
                     hourly_rate__gte=min_rate,
                     hourly_rate__lte=max_rate
                 )
-            except (ValueError, TypeError):
-                pass
+                logger.info(f"After rate filter count: {mentors.count()}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid hourly rate values '{min_hourly_rate}'-'{max_hourly_rate}': {e}")
+                # Continue without rate filter
+            
+            # Limit results to prevent timeouts
+            mentors = mentors[:100]  # Limit to 100 mentors
             
             # Serialize the data
-            serializer = MentorSerializer(mentors, many=True)
+            try:
+                serializer = MentorSerializer(mentors, many=True)
+                serialized_data = serializer.data
+                logger.info(f"Successfully serialized {len(serialized_data)} mentors")
+            except Exception as e:
+                logger.error(f"Serialization error: {e}")
+                return Response({
+                    'success': False,
+                    'error': 'Error processing mentor data'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             return Response({
                 'success': True,
-                'count': len(serializer.data),
-                'data': serializer.data
+                'count': len(serialized_data),
+                'data': serialized_data
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.error(f"Unexpected error in MentorListAPIView: {e}", exc_info=True)
             return Response({
                 'success': False,
-                'error': str(e)
+                'error': 'An unexpected error occurred while fetching mentors'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -594,27 +644,521 @@ class MentorDetailAPIView(APIView):
     
     def get(self, request, mentor_id):
         try:
-            mentor = Mentor.objects.select_related('user').prefetch_related('user__subjects').get(
-                id=mentor_id,
-                is_approved=True,
-                approval_status='approved'
-            )
+            logger.info(f"Fetching mentor details for ID: {mentor_id}")
             
-            serializer = MentorSerializer(mentor)
+            # Validate mentor_id
+            try:
+                mentor_id = int(mentor_id)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid mentor_id format: {mentor_id}")
+                return Response({
+                    'success': False,
+                    'error': 'Invalid mentor ID format'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                mentor = Mentor.objects.select_related('user').prefetch_related(
+                    'user__subjects'
+                ).get(
+                    id=mentor_id,
+                    is_approved=True,
+                    approval_status='approved'
+                )
+                logger.info(f"Found mentor: {mentor.user.name}")
+            except Mentor.DoesNotExist:
+                logger.warning(f"Mentor not found or not approved: {mentor_id}")
+                return Response({
+                    'success': False,
+                    'error': 'Mentor not found or not approved'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Serialize the mentor
+            try:
+                serializer = MentorSerializer(mentor)
+                serialized_data = serializer.data
+                logger.info(f"Successfully serialized mentor {mentor_id}")
+            except Exception as e:
+                logger.error(f"Serialization error for mentor {mentor_id}: {e}")
+                return Response({
+                    'success': False,
+                    'error': 'Error processing mentor data'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             return Response({
                 'success': True,
-                'data': serializer.data
+                'data': serialized_data
             }, status=status.HTTP_200_OK)
             
-        except Mentor.DoesNotExist:
-            return Response({
-                'success': False,
-                'error': 'Mentor not found or not approved'
-            }, status=status.HTTP_404_NOT_FOUND)
-            
         except Exception as e:
+            logger.error(f"Unexpected error in MentorDetailAPIView for ID {mentor_id}: {e}", exc_info=True)
             return Response({
                 'success': False,
-                'error': str(e)
+                'error': 'An unexpected error occurred while fetching mentor details'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class CreateOrderAPIView(APIView):
+    """API view to create Razorpay order (Step 1)"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = CreateOrderSerializer(data=request.data)
+        if serializer.is_valid():
+            validated_data = serializer.validated_data
+            mentor = validated_data['mentor_id']
+            
+            # Calculate amount
+            duration_hours = validated_data['duration_minutes'] / 60
+            base_amount = Decimal(str(mentor.hourly_rate)) * Decimal(str(duration_hours))
+            platform_fee = base_amount * Decimal('0.10')
+            tax_amount = base_amount * Decimal('0.18')
+            total_amount = base_amount + platform_fee + tax_amount
+            
+            # Create Razorpay order
+            client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+            
+            try:
+                order_data = {
+                    'amount': int(total_amount * 100),  # Razorpay expects amount in paise
+                    'currency': 'INR',
+                    'receipt': f'session_{request.user.id}_{timezone.now().timestamp()}',
+                    'notes': {
+                        'mentor_id': mentor.id,
+                        'student_id': request.user.id,
+                        'duration_minutes': validated_data['duration_minutes'],
+                        'scheduled_date': validated_data['scheduled_date'].isoformat(),
+                        'scheduled_time': validated_data['scheduled_time'].isoformat(),
+                        'session_mode': validated_data['session_mode'],
+                        'subjects': ','.join(map(str, validated_data.get('subjects', [])))
+                    }
+                }
+                
+                razorpay_order = client.order.create(order_data)
+                
+                return Response({
+                    'success': True,
+                    'message': 'Order created successfully',
+                    'order_id': razorpay_order['id'],
+                    'amount': total_amount,
+                    'currency': 'INR',
+                    'razorpay_key': settings.RAZORPAY_KEY_ID,
+                    'session_details': {
+                        'mentor_name': mentor.user.get_full_name(),
+                        'scheduled_date': validated_data['scheduled_date'],
+                        'scheduled_time': validated_data['scheduled_time'],
+                        'duration_minutes': validated_data['duration_minutes'],
+                        'session_mode': validated_data['session_mode'],
+                    }
+                }, status=status.HTTP_200_OK)
+                
+            except Exception as e:
+                return Response({
+                    'success': False,
+                    'message': 'Failed to create payment order',
+                    'error': str(e)
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+class ConfirmBookingAPIView(APIView):
+    """API view to confirm booking after successful payment (Step 2)"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = ConfirmBookingSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            try:
+                session = serializer.save()
+                
+                # Return the created session with payment details
+                session_serializer = MentorSessionSerializer(session)
+                payment_serializer = SessionPaymentSerializer(session.payment)
+                
+                return Response({
+                    'success': True,
+                    'message': 'Session booked successfully',
+                    'session': session_serializer.data,
+                    'payment': payment_serializer.data
+                }, status=status.HTTP_201_CREATED)
+                
+            except Exception as e:
+                return Response({
+                    'success': False,
+                    'message': 'Failed to create session',
+                    'error': str(e)
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class UserSessionsListAPIView(APIView):
+    """API view to list user's sessions (both as student and mentor)"""
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    
+    def get_queryset(self, request):
+        user = request.user
+        user_type = request.query_params.get('type', 'all')  # 'student', 'mentor', 'all'
+        
+        if user_type == 'student':
+            queryset = MentorSession.objects.filter(student=user)
+        elif user_type == 'mentor' and hasattr(user, 'mentor_profile'):
+            queryset = MentorSession.objects.filter(mentor=user.mentor_profile)
+        else:
+            # Return both student and mentor sessions
+            queryset = MentorSession.objects.filter(
+                Q(student=user) | 
+                Q(mentor__user=user)
+            )
+        
+        # Filter by status if provided
+        session_status = request.query_params.get('status')
+        if session_status:
+            queryset = queryset.filter(status=session_status)
+        
+        # Filter by upcoming/past
+        time_filter = request.query_params.get('time_filter')
+        if time_filter == 'upcoming':
+            current_datetime = timezone.now()
+            queryset = queryset.filter(
+                scheduled_date__gte=current_datetime.date()
+            ).filter(
+                Q(scheduled_date__gt=current_datetime.date()) |
+                Q(scheduled_date=current_datetime.date(), scheduled_time__gt=current_datetime.time())
+            )
+        elif time_filter == 'past':
+            current_datetime = timezone.now()
+            queryset = queryset.filter(
+                Q(scheduled_date__lt=current_datetime.date()) |
+                Q(scheduled_date=current_datetime.date(), scheduled_time__lt=current_datetime.time())
+            )
+        
+        return queryset.order_by('-scheduled_date', '-scheduled_time')
+    
+    def get(self, request):
+        queryset = self.get_queryset(request)
+        
+        # Paginate results
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request)
+        
+        if page is not None:
+            serializer = MentorSessionSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = MentorSessionSerializer(queryset, many=True)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+
+
+class SessionDetailAPIView(APIView):
+    """API view to retrieve and update session details"""
+    permission_classes = [IsAuthenticated]
+    
+    def get_object(self, request, pk):
+        user = request.user
+        queryset = MentorSession.objects.filter(
+            Q(student=user) | Q(mentor__user=user)
+        )
+        return get_object_or_404(queryset, id=pk)
+    
+    def get(self, request, pk):
+        session = self.get_object(request, pk)
+        serializer = MentorSessionSerializer(session)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    
+    def put(self, request, pk):
+        session = self.get_object(request, pk)
+        serializer = MentorSessionSerializer(session, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Session updated successfully',
+                'data': serializer.data
+            })
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def patch(self, request, pk):
+        session = self.get_object(request, pk)
+        serializer = MentorSessionSerializer(session, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Session updated successfully',
+                'data': serializer.data
+            })
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CancelSessionAPIView(APIView):
+    """API view to cancel a session"""
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, pk):
+        user = request.user
+        session = get_object_or_404(
+            MentorSession.objects.filter(
+                Q(student=user) | Q(mentor__user=user)
+            ),
+            id=pk
+        )
+        
+        if session.status not in ['pending', 'confirmed']:
+            return Response({
+                'success': False,
+                'error': 'Cannot cancel session in current status'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if cancellation is allowed (e.g., at least 24 hours before session)
+        session_datetime = timezone.datetime.combine(session.scheduled_date, session.scheduled_time)
+        if session_datetime <= timezone.now() + timezone.timedelta(hours=24):
+            return Response({
+                'success': False,
+                'error': 'Cannot cancel session less than 24 hours before scheduled time'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        reason = request.data.get('reason', '')
+        session.cancel_session(user, reason)
+        
+        # Handle refund if payment was made
+        if hasattr(session, 'payment') and session.payment.status == 'completed':
+            payment = session.payment
+            payment.status = 'refunded'
+            payment.refund_amount = payment.amount
+            payment.refund_reason = f"Session cancelled by {'student' if session.student == user else 'mentor'}"
+            payment.refunded_at = timezone.now()
+            payment.save()
+        
+        serializer = MentorSessionSerializer(session)
+        return Response({
+            'success': True,
+            'message': 'Session cancelled successfully',
+            'data': serializer.data
+        })
+
+
+class SessionPaymentAPIView(APIView):
+    """API view to handle session payments"""
+    permission_classes = [IsAuthenticated]
+    
+    def get_object(self, request, session_id):
+        session = get_object_or_404(
+            MentorSession.objects.filter(student=request.user),
+            id=session_id
+        )
+        return get_object_or_404(SessionPayment, session=session)
+    
+    def get(self, request, session_id):
+        payment = self.get_object(request, session_id)
+        serializer = SessionPaymentSerializer(payment)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    
+    def patch(self, request, session_id):
+        """Update payment status (used for payment gateway callbacks)"""
+        payment = self.get_object(request, session_id)
+        
+        # Update payment details from gateway response
+        gateway_payment_id = request.data.get('gateway_payment_id')
+        gateway_signature = request.data.get('gateway_signature')
+        payment_status = request.data.get('status', 'completed')
+        
+        if gateway_payment_id:
+            payment.gateway_payment_id = gateway_payment_id
+        if gateway_signature:
+            payment.gateway_signature = gateway_signature
+        
+        payment.gateway_response = request.data
+        
+        if payment_status == 'completed':
+            payment.mark_as_paid()
+        else:
+            payment.status = payment_status
+            payment.save()
+        
+        serializer = SessionPaymentSerializer(payment)
+        return Response({
+            'success': True,
+            'message': 'Payment updated successfully',
+            'data': serializer.data
+        })
+
+
+class CreateSessionReviewAPIView(APIView):
+    """API view to create session review"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, session_id):
+        session = get_object_or_404(
+            MentorSession.objects.filter(
+                Q(student=request.user) | Q(mentor__user=request.user),
+                status='completed'
+            ),
+            id=session_id
+        )
+        
+        serializer = SessionReviewSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(reviewer=request.user, session=session)
+            return Response({
+                'success': True,
+                'message': 'Review created successfully',
+                'data': serializer.data
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SessionReviewsListAPIView(APIView):
+    """API view to list session reviews"""
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    
+    def get(self, request, session_id):
+        session = get_object_or_404(
+            MentorSession.objects.filter(
+                Q(student=request.user) | Q(mentor__user=request.user)
+            ),
+            id=session_id
+        )
+        
+        reviews = SessionReview.objects.filter(session=session)
+        
+        # Paginate results
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(reviews, request)
+        
+        if page is not None:
+            serializer = SessionReviewSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = SessionReviewSerializer(reviews, many=True)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+
+
+class SessionMessagesAPIView(APIView):
+    """API view to list and create session messages"""
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    
+    def get_session(self, request, session_id):
+        return get_object_or_404(
+            MentorSession.objects.filter(
+                Q(student=request.user) | Q(mentor__user=request.user)
+            ),
+            id=session_id
+        )
+    
+    def get(self, request, session_id):
+        session = self.get_session(request, session_id)
+        messages = SessionMessage.objects.filter(session=session).order_by('created_at')
+        
+        # Paginate results
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(messages, request)
+        
+        if page is not None:
+            serializer = SessionMessageSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = SessionMessageSerializer(messages, many=True)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    
+    def post(self, request, session_id):
+        session = self.get_session(request, session_id)
+        
+        serializer = SessionMessageSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(sender=request.user, session=session)
+            return Response({
+                'success': True,
+                'message': 'Message sent successfully',
+                'data': serializer.data
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SessionStatsAPIView(APIView):
+    """API endpoint to get session statistics for the user"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        # Student stats
+        student_sessions = MentorSession.objects.filter(student=user)
+        student_stats = {
+            'total_sessions': student_sessions.count(),
+            'completed_sessions': student_sessions.filter(status='completed').count(),
+            'upcoming_sessions': student_sessions.filter(
+                scheduled_date__gte=timezone.now().date(),
+                status__in=['pending', 'confirmed']
+            ).count(),
+            'cancelled_sessions': student_sessions.filter(status='cancelled').count(),
+        }
+        
+        # Mentor stats (if user is a mentor)
+        mentor_stats = {}
+        if hasattr(user, 'mentor_profile'):
+            mentor_sessions = MentorSession.objects.filter(mentor=user.mentor_profile)
+            mentor_stats = {
+                'total_sessions': mentor_sessions.count(),
+                'completed_sessions': mentor_sessions.filter(status='completed').count(),
+                'upcoming_sessions': mentor_sessions.filter(
+                    scheduled_date__gte=timezone.now().date(),
+                    status__in=['pending', 'confirmed']
+                ).count(),
+                'total_earnings': sum(
+                    earning.mentor_earning for earning in 
+                    MentorEarnings.objects.filter(mentor=user.mentor_profile)
+                ),
+            }
+        
+        return Response({
+            'success': True,
+            'data': {
+                'student_stats': student_stats,
+                'mentor_stats': mentor_stats,
+                'is_mentor': hasattr(user, 'mentor_profile')
+            }
+        })

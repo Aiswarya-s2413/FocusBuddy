@@ -2,6 +2,8 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
 from cloudinary.models import CloudinaryField
+from django.core.validators import MinValueValidator, MaxValueValidator
+from decimal import Decimal
 
 class Subject(models.Model):
     name = models.CharField(max_length=100)
@@ -222,3 +224,251 @@ class Journal(models.Model):
 
     def __str__(self):
         return f"{self.user.name} - {self.date} ({self.mood})"
+
+
+
+class MentorSession(models.Model):
+    SESSION_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('confirmed', 'Confirmed'),
+        ('ongoing', 'Ongoing'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+        ('no_show', 'No Show'),
+    ]
+    
+    SESSION_MODE_CHOICES = [
+        ('video', 'Video'),
+        ('voice', 'Voice'),
+        ('chat', 'Chat'),
+    ]
+    
+    DURATION_CHOICES = [
+        (30, '30 minutes'),
+        (60, '1 hour'),
+        (90, '1.5 hours'),
+        (120, '2 hours'),
+    ]
+
+    # Core session details
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='student_sessions')
+    mentor = models.ForeignKey(Mentor, on_delete=models.CASCADE, related_name='mentor_sessions')
+    
+    # Session scheduling
+    scheduled_date = models.DateField()
+    scheduled_time = models.TimeField()
+    duration_minutes = models.IntegerField(choices=DURATION_CHOICES, default=30)
+    
+    # Session details
+    session_mode = models.CharField(max_length=10, choices=SESSION_MODE_CHOICES, default='video')
+    status = models.CharField(max_length=15, choices=SESSION_STATUS_CHOICES, default='pending')
+    
+    # Meeting details (populated when session is confirmed)
+    meeting_link = models.URLField(blank=True, null=True)
+    meeting_id = models.CharField(max_length=100, blank=True, null=True)
+    meeting_password = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Session notes and feedback
+    session_notes = models.TextField(blank=True, null=True, help_text="Notes from the session")
+    student_feedback = models.TextField(blank=True, null=True)
+    mentor_feedback = models.TextField(blank=True, null=True)
+    
+    # Ratings
+    student_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        blank=True, 
+        null=True,
+        help_text="Student's rating of the mentor (1-5)"
+    )
+    mentor_rating = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        blank=True, 
+        null=True,
+        help_text="Mentor's rating of the student (1-5)"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    confirmed_at = models.DateTimeField(blank=True, null=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    ended_at = models.DateTimeField(blank=True, null=True)
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    
+    # Cancellation details
+    cancelled_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        blank=True, 
+        null=True,
+        related_name='cancelled_sessions'
+    )
+    cancellation_reason = models.TextField(blank=True, null=True)
+    
+    # Subjects covered in the session
+    subjects = models.ManyToManyField(Subject, blank=True)
+    
+    class Meta:
+        ordering = ['-scheduled_date', '-scheduled_time']
+        unique_together = ['mentor', 'scheduled_date', 'scheduled_time']
+    
+    def __str__(self):
+        return f"{self.student.name} - {self.mentor.user.name} ({self.scheduled_date} {self.scheduled_time})"
+    
+    @property
+    def is_upcoming(self):
+        """Check if the session is in the future"""
+        session_datetime = timezone.datetime.combine(self.scheduled_date, self.scheduled_time)
+        return session_datetime > timezone.now()
+    
+    @property
+    def session_datetime(self):
+        """Return combined datetime for the session"""
+        return timezone.datetime.combine(self.scheduled_date, self.scheduled_time)
+    
+    def cancel_session(self, cancelled_by_user, reason=None):
+        """Cancel the session"""
+        self.status = 'cancelled'
+        self.cancelled_by = cancelled_by_user
+        self.cancelled_at = timezone.now()
+        if reason:
+            self.cancellation_reason = reason
+        self.save()
+
+
+class SessionPayment(models.Model):
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('refunded', 'Refunded'),
+        ('partially_refunded', 'Partially Refunded'),
+    ]
+    
+    PAYMENT_METHOD_CHOICES = [
+        ('razorpay', 'Razorpay'),
+        ('stripe', 'Stripe'),
+        ('paypal', 'PayPal'),
+        ('wallet', 'Wallet'),
+        ('free', 'Free Session'),
+    ]
+
+    session = models.OneToOneField(MentorSession, on_delete=models.CASCADE, related_name='payment')
+    
+    # Payment details
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, default='INR')
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    
+    # External payment gateway details
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    gateway_payment_id = models.CharField(max_length=100, blank=True, null=True)
+    gateway_order_id = models.CharField(max_length=100, blank=True, null=True)
+    gateway_signature = models.CharField(max_length=200, blank=True, null=True)
+    
+    # Payment breakdown
+    base_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    platform_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Refund details
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    refund_reason = models.TextField(blank=True, null=True)
+    refunded_at = models.DateTimeField(blank=True, null=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    paid_at = models.DateTimeField(blank=True, null=True)
+    
+    # Gateway response (store full response for debugging)
+    gateway_response = models.JSONField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Payment for {self.session} - {self.amount} {self.currency} ({self.status})"
+    
+    def mark_as_paid(self):
+        """Mark payment as completed"""
+        self.status = 'completed'
+        self.paid_at = timezone.now()
+        self.save()
+        
+        # Also confirm the session
+        if self.session.status == 'pending':
+            self.session.status = 'confirmed'
+            self.session.confirmed_at = timezone.now()
+            self.session.save()
+
+
+class SessionReview(models.Model):
+    session = models.OneToOneField(MentorSession, on_delete=models.CASCADE, related_name='review')
+    reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='session_reviews')
+    
+    # Review details
+    rating = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    review_text = models.TextField()
+   
+    # Meta information
+    is_public = models.BooleanField(default=True)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['session', 'reviewer']
+    
+    def __str__(self):
+        return f"Review by {self.reviewer.name} for session {self.session.id}"
+
+
+class SessionMessage(models.Model):
+    session = models.ForeignKey(MentorSession, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_session_messages')
+    
+    message = models.TextField()
+    is_system_message = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"Message from {self.sender.name} in session {self.session.id}"
+
+
+class MentorEarnings(models.Model):
+    PAYOUT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+    
+    mentor = models.ForeignKey(Mentor, on_delete=models.CASCADE, related_name='earnings')
+    session = models.ForeignKey(MentorSession, on_delete=models.CASCADE, related_name='earnings')
+    
+    # Earnings calculation
+    session_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    platform_commission = models.DecimalField(max_digits=10, decimal_places=2)
+    mentor_earning = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    # Payout details
+    payout_status = models.CharField(max_length=20, choices=PAYOUT_STATUS_CHOICES, default='pending')
+    payout_date = models.DateTimeField(blank=True, null=True)
+    payout_reference = models.CharField(max_length=100, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Earnings for {self.mentor.user.name} - Session {self.session.id}"

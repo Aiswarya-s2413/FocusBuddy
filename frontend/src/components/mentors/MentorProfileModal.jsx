@@ -1,11 +1,67 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
-import { Star, Calendar, Clock, MessageCircle, Video, User, Award, Globe } from "lucide-react";
-import { Calendar as CalendarComponent } from "../../components/ui/calender";
+import { Star, Calendar, Clock, MessageCircle, Video, User, Award, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Badge } from "../../components/ui/badge";
 import { useToast } from "../../hooks/use-toast";
+import { DayPicker } from "react-day-picker";
+import { cn } from "../../lib/utils";
+
+// Calendar Component
+const CalendarComponent = ({
+  className,
+  classNames,
+  showOutsideDays = true,
+  ...props
+}) => {
+  return (
+    <DayPicker
+      showOutsideDays={showOutsideDays}
+      className={cn("p-4", className)}
+      classNames={{
+        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+        month: "space-y-4 w-full",
+        caption: "flex justify-center pt-1 relative items-center mb-4",
+        caption_label: "text-sm font-medium text-gray-900",
+        nav: "space-x-1 flex items-center",
+        nav_button: cn(
+          "h-7 w-7 bg-white border border-gray-300 rounded-md p-0 hover:bg-gray-50 transition-colors flex items-center justify-center"
+        ),
+        nav_button_previous: "absolute left-1",
+        nav_button_next: "absolute right-1",
+        table: "w-full border-collapse",
+        head_row: "flex mb-2",
+        head_cell: "text-gray-500 rounded-md w-9 font-medium text-xs text-center flex items-center justify-center h-9 uppercase",
+        row: "flex w-full",
+        cell: cn(
+          "relative p-0 text-center text-sm",
+          "h-9 w-9 m-0.5",
+          "focus-within:relative focus-within:z-20"
+        ),
+        day: cn(
+          "h-8 w-8 p-0 font-normal rounded-md transition-colors",
+          "hover:bg-purple-50 hover:text-purple-900",
+          "focus:bg-purple-100 focus:text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2",
+          "aria-selected:opacity-100"
+        ),
+        day_range_end: "day-range-end",
+        day_selected: "bg-purple-600 text-white hover:bg-purple-700 hover:text-white focus:bg-purple-700 focus:text-white",
+        day_today: "bg-gray-100 text-gray-900 font-semibold",
+        day_outside: "text-gray-400 opacity-50 aria-selected:bg-purple-100 aria-selected:text-purple-900 aria-selected:opacity-30",
+        day_disabled: "text-gray-300 opacity-50 cursor-not-allowed hover:bg-transparent",
+        day_range_middle: "aria-selected:bg-purple-100 aria-selected:text-purple-900",
+        day_hidden: "invisible",
+        ...classNames,
+      }}
+      components={{
+        IconLeft: () => <ChevronLeft className="h-4 w-4" />,
+        IconRight: () => <ChevronRight className="h-4 w-4" />,
+      }}
+      {...props}
+    />
+  );
+};
 
 const Avatar = ({ children, className = "" }) => (
   <div className={`rounded-full bg-gray-200 flex items-center justify-center ${className}`}>
@@ -78,6 +134,73 @@ const AvatarFallback = ({ children, className = "" }) => (
   <div className={`text-gray-600 font-medium ${className}`}>{children}</div>
 );
 
+// Component for displaying availability schedule
+const AvailabilitySchedule = ({ availability }) => {
+  // Define days of the week in order
+  const daysOrder = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const dayNames = {
+    monday: 'Monday',
+    tuesday: 'Tuesday', 
+    wednesday: 'Wednesday',
+    thursday: 'Thursday',
+    friday: 'Friday',
+    saturday: 'Saturday',
+    sunday: 'Sunday'
+  };
+
+  // Function to format time slots
+  const formatTimeSlots = (times) => {
+    if (!times) return 'Not available';
+    if (Array.isArray(times)) return times.join(', ');
+    return times;
+  };
+
+  // Check if availability data exists
+  if (!availability || Object.keys(availability).length === 0) {
+    return (
+      <div className="bg-gray-50 rounded-lg p-4 text-center">
+        <Clock className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+        <p className="text-gray-500">Availability schedule not set</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {daysOrder.map((day) => {
+        const times = availability[day.toLowerCase()];
+        const isAvailable = times && (Array.isArray(times) ? times.length > 0 : times !== '');
+        
+        return (
+          <div 
+            key={day} 
+            className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+              isAvailable 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-gray-50 border-gray-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-3 h-3 rounded-full ${
+                isAvailable ? 'bg-green-500' : 'bg-gray-300'
+              }`} />
+              <span className="font-medium text-gray-900">
+                {dayNames[day]}
+              </span>
+            </div>
+            <div className="text-right">
+              <span className={`text-sm ${
+                isAvailable ? 'text-green-700' : 'text-gray-500'
+              }`}>
+                {isAvailable ? formatTimeSlots(times) : 'Not available'}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
   const { toast } = useToast();
@@ -91,10 +214,44 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
     return null;
   }
 
-  const timeSlots = [
-    "9:00 AM", "10:00 AM", "11:00 AM", 
-    "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"
-  ];
+  // Function to get day name from date
+  const getDayName = (date) => {
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    return days[date.getDay()];
+  };
+
+  // Get available time slots for the selected date
+  const availableTimeSlots = useMemo(() => {
+    if (!date || !mentor.availability) {
+      return [];
+    }
+
+    const dayName = getDayName(date);
+    const dayAvailability = mentor.availability[dayName];
+
+    if (!dayAvailability) {
+      return [];
+    }
+
+    // If dayAvailability is an array, return it directly
+    if (Array.isArray(dayAvailability)) {
+      return dayAvailability;
+    }
+
+    // If it's a string, split by comma and clean up
+    if (typeof dayAvailability === 'string') {
+      return dayAvailability.split(',').map(time => time.trim()).filter(time => time);
+    }
+
+    return [];
+  }, [date, mentor.availability]);
+
+  // Reset selected slot when date changes and slots are different
+  React.useEffect(() => {
+    if (selectedSlot && !availableTimeSlots.includes(selectedSlot)) {
+      setSelectedSlot(null);
+    }
+  }, [availableTimeSlots, selectedSlot]);
 
   const handleBookSession = () => {
     toast({
@@ -108,6 +265,33 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
   const calculatePrice = () => {
     const rate = mentor.hourly_rate || 25;
     return duration === "30 mins" ? (rate / 2).toFixed(2) : rate.toFixed(2);
+  };
+
+  // Check if a date should be disabled (no availability for that day)
+  const isDateDisabled = (date) => {
+    if (date < new Date(new Date().setHours(0, 0, 0, 0))) {
+      return true; // Disable past dates
+    }
+
+    if (!mentor.availability) {
+      return true; // No availability data
+    }
+
+    const dayName = getDayName(date);
+    const dayAvailability = mentor.availability[dayName];
+    
+    // Check if there are any time slots available for this day
+    if (!dayAvailability) return true;
+    
+    if (Array.isArray(dayAvailability)) {
+      return dayAvailability.length === 0;
+    }
+    
+    if (typeof dayAvailability === 'string') {
+      return dayAvailability.trim() === '';
+    }
+    
+    return true;
   };
 
   return (
@@ -163,14 +347,7 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
               </div>
             </div>
 
-            {/* <div className="space-y-2">
-              <h3 className="font-medium">Stats</h3>
-              <div className="text-sm text-gray-600">
-                <p>Total Sessions: {mentor.total_sessions}</p>
-                <p>Total Students: {mentor.total_students}</p>
-                <p>Expertise Level: {mentor.expertise_level}</p>
-              </div>
-            </div> */}
+            
           </div>
 
           <div className="md:col-span-2">
@@ -180,66 +357,85 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
                 <TabsTrigger value="booking">Book Session</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="about" className="space-y-4">
+              <TabsContent value="about" className="space-y-6">
                 <div>
-                  <h3 className="font-medium mb-2">Bio & Background</h3>
-                  <p className="text-gray-600">{mentor.bio || 'No bio available'}</p>
+                  <h3 className="font-medium mb-3 text-lg">Bio & Background</h3>
+                  <p className="text-gray-600 leading-relaxed">{mentor.bio || 'No bio available'}</p>
                 </div>
                 
                 <div>
-                  <h3 className="font-medium mb-2">Contact Information</h3>
-                  <p className="text-gray-600">Email: {mentor.email}</p>
+                  <h3 className="font-medium mb-3 text-lg">Contact Information</h3>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-gray-700">📧 {mentor.email}</p>
+                  </div>
                 </div>
 
                 <div>
-                  <h3 className="font-medium mb-2">Availability</h3>
-                  <div className="text-gray-600">
-                    {mentor.availability && Object.keys(mentor.availability).length > 0 ? (
-                      <div className="space-y-1">
-                        {Object.entries(mentor.availability).map(([day, times]) => (
-                          <div key={day} className="flex justify-between">
-                            <span className="capitalize font-medium">{day}:</span>
-                            <span>{Array.isArray(times) ? times.join(', ') : times}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Availability schedule not set</p>
-                    )}
-                  </div>
+                  <h3 className="font-medium mb-4 text-lg flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-purple-600" />
+                    Weekly Availability
+                  </h3>
+                  <AvailabilitySchedule availability={mentor.availability} />
                 </div>
               </TabsContent>
               
               <TabsContent value="booking" className="space-y-6">
-                <div className="space-y-2">
-                  <h3 className="font-medium">Select Date</h3>
-                  <div className="border rounded-md p-3 bg-white shadow-sm">
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-900">Select Date</h3>
+                  <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
                     <CalendarComponent
                       mode="single"
                       selected={date}
                       onSelect={setDate}
-                      className="rounded-md pointer-events-auto"
-                      disabled={(date) => {
-                        return date < new Date(new Date().setHours(0, 0, 0, 0));
+                      className="w-full"
+                      disabled={isDateDisabled}
+                      modifiers={{
+                        available: (date) => !isDateDisabled(date)
+                      }}
+                      modifiersStyles={{
+                        available: {
+                          backgroundColor: '#f0f9ff',
+                          color: '#0369a1'
+                        }
                       }}
                     />
                   </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <h3 className="font-medium">Select Time Slot</h3>
-                  <div className="grid grid-cols-3 gap-2">
-                    {timeSlots.map((slot) => (
-                      <Button
-                        key={slot}
-                        variant={selectedSlot === slot ? "default" : "outline"}
-                        className={selectedSlot === slot ? "bg-purple-600 hover:bg-purple-700" : ""}
-                        onClick={() => setSelectedSlot(slot)}
-                      >
-                        {slot}
-                      </Button>
-                    ))}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">Select Time Slot</h3>
+                    {date && (
+                      <span className="text-sm text-gray-500">
+                        {date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
                   </div>
+                  
+                  {availableTimeSlots.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {availableTimeSlots.map((slot) => (
+                        <Button
+                          key={slot}
+                          variant={selectedSlot === slot ? "default" : "outline"}
+                          className={selectedSlot === slot ? "bg-purple-600 hover:bg-purple-700" : ""}
+                          onClick={() => setSelectedSlot(slot)}
+                        >
+                          {slot}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 rounded-lg p-4 text-center">
+                      <Clock className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-500">
+                        {date 
+                          ? `No time slots available for ${date.toLocaleDateString('en-US', { weekday: 'long' })}`
+                          : 'Please select a date to see available time slots'
+                        }
+                      </p>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
@@ -295,18 +491,23 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Estimated Price:</span>
-                      <span className="font-medium">${calculatePrice()}</span>
+                      <span className="font-medium">Rs.{calculatePrice()}</span>
                     </div>
                   </div>
                 </div>
                 
                 <Button 
                   className="w-full bg-purple-600 hover:bg-purple-700"
-                  disabled={!selectedSlot || !date || !mentor.is_available}
+                  disabled={!selectedSlot || !date || !mentor.is_available || availableTimeSlots.length === 0}
                   onClick={handleBookSession}
                 >
                   <Calendar className="mr-2 h-4 w-4" />
-                  {mentor.is_available ? 'Confirm Booking' : 'Mentor Unavailable'}
+                  {!mentor.is_available 
+                    ? 'Mentor Unavailable' 
+                    : availableTimeSlots.length === 0 
+                      ? 'No Time Slots Available'
+                      : 'Confirm Booking'
+                  }
                 </Button>
               </TabsContent>
             </Tabs>

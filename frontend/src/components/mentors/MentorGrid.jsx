@@ -111,7 +111,7 @@ const MentorGrid = ({ mentors, onViewProfile }) => {
               </p>
 
               <p className="text-gray-600 text-sm">
-                <span className="font-medium">Hourly Rate:</span> ${mentor.hourly_rate || 0}/hr
+                <span className="font-medium">Hourly Rate:</span> Rs.{mentor.hourly_rate || 0}/hr
               </p>
 
               {mentor.subjects && mentor.subjects.length > 0 && (
