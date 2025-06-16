@@ -189,7 +189,7 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
 CSRF_COOKIE_SECURE = False
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=120),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_COOKIE': 'access',
     'AUTH_COOKIE_REFRESH': 'refresh',
@@ -231,4 +231,7 @@ cloudinary.config(
   api_secret = config('CLOUDINARY_API_SECRET').strip(),
   secure = True
 )
+
+RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID')
+RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET')
 

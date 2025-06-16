@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
+import razorpay
 
 logger = logging.getLogger(__name__)
 
@@ -710,9 +711,24 @@ class CreateOrderAPIView(APIView):
         serializer = CreateOrderSerializer(data=request.data)
         if serializer.is_valid():
             validated_data = serializer.validated_data
-            mentor = validated_data['mentor_id']
             
-            # Calculate amount
+            # Get the mentor object, not just the ID
+            mentor_id = validated_data['mentor_id']
+            
+            # Option 1: Use the stored mentor object from serializer validation
+            mentor = getattr(serializer, '_mentor_obj', None)
+            
+            # Option 2: Fallback - fetch mentor if not available from serializer
+            if not mentor:
+                try:
+                    mentor = Mentor.objects.get(id=mentor_id, is_approved=True, is_available=True)
+                except Mentor.DoesNotExist:
+                    return Response({
+                        'success': False,
+                        'message': 'Mentor not found or not available'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Calculate amount using the mentor object
             duration_hours = validated_data['duration_minutes'] / 60
             base_amount = Decimal(str(mentor.hourly_rate)) * Decimal(str(duration_hours))
             platform_fee = base_amount * Decimal('0.10')
@@ -728,7 +744,7 @@ class CreateOrderAPIView(APIView):
                     'currency': 'INR',
                     'receipt': f'session_{request.user.id}_{timezone.now().timestamp()}',
                     'notes': {
-                        'mentor_id': mentor.id,
+                        'mentor_id': mentor.id,  # Now using mentor object
                         'student_id': request.user.id,
                         'duration_minutes': validated_data['duration_minutes'],
                         'scheduled_date': validated_data['scheduled_date'].isoformat(),
@@ -748,7 +764,7 @@ class CreateOrderAPIView(APIView):
                     'currency': 'INR',
                     'razorpay_key': settings.RAZORPAY_KEY_ID,
                     'session_details': {
-                        'mentor_name': mentor.user.get_full_name(),
+                        'mentor_name': mentor.user.name,  # Now using mentor object
                         'scheduled_date': validated_data['scheduled_date'],
                         'scheduled_time': validated_data['scheduled_time'],
                         'duration_minutes': validated_data['duration_minutes'],

@@ -326,7 +326,9 @@ class CreateOrderSerializer(serializers.Serializer):
     def validate_mentor_id(self, value):
         try:
             mentor = Mentor.objects.get(id=value, is_approved=True, is_available=True)
-            return mentor
+            # Store the mentor object for later use but return the ID
+            self._mentor_obj = mentor
+            return value  # Return the original ID, not the mentor object
         except Mentor.DoesNotExist:
             raise serializers.ValidationError("Mentor not found or not available")
     
@@ -336,7 +338,15 @@ class CreateOrderSerializer(serializers.Serializer):
         return value
     
     def validate(self, data):
-        mentor = data['mentor_id']
+    # Get the mentor object that we stored during field validation
+        mentor = getattr(self, '_mentor_obj', None)
+        if not mentor:
+            # Fallback if _mentor_obj wasn't set
+            try:
+                mentor = Mentor.objects.get(id=data['mentor_id'], is_approved=True, is_available=True)
+            except Mentor.DoesNotExist:
+                raise serializers.ValidationError("Mentor not found or not available")
+        
         scheduled_date = data['scheduled_date']
         scheduled_time = data['scheduled_time']
         
@@ -344,13 +354,43 @@ class CreateOrderSerializer(serializers.Serializer):
         day_name = scheduled_date.strftime('%A').lower()
         mentor_availability = mentor.availability.get(day_name, [])
         
-        # Convert time to string format for comparison
-        time_str = scheduled_time.strftime('%H:%M')
+        # Debug: Show the actual date and calculated day
+        print(f"Debug - Scheduled date: {scheduled_date}")
+        print(f"Debug - Scheduled date type: {type(scheduled_date)}")
+        print(f"Debug - Calculated day name: {day_name}")
+        print(f"Debug - Date weekday number: {scheduled_date.weekday()}")  # Monday=0, Sunday=6
+        
+        # Convert scheduled time to 12-hour format to match availability storage
+        scheduled_time_12hr = scheduled_time.strftime('%I:%M %p').lstrip('0')
+        # Remove leading zero from hour (e.g., "08:00 PM" becomes "8:00 PM")
+        
+        # Also try alternative formats
+        time_formats_to_check = [
+            scheduled_time_12hr,                    # "8:00 PM"
+            scheduled_time.strftime('%I:%M %p'),    # "08:00 PM" (with leading zero)
+            scheduled_time.strftime('%H:%M'),       # "20:00" (24-hour format)
+            scheduled_time.strftime('%H:%M:%S'),    # "20:00:00"
+        ]
+        
+        # Debug logging (remove after fixing)
+        print(f"Debug - Mentor availability for {day_name}: {mentor_availability}")
+        print(f"Debug - All mentor availability: {mentor.availability}")
+        print(f"Debug - Scheduled time formats to check: {time_formats_to_check}")
         
         # Check if the time slot is available
-        if not mentor_availability or time_str not in mentor_availability:
+        time_available = False
+        if mentor_availability:
+            for time_format in time_formats_to_check:
+                if time_format in mentor_availability:
+                    time_available = True
+                    print(f"Debug - Match found: {time_format}")
+                    break
+        
+        if not time_available:
+            available_times = ", ".join(mentor_availability) if mentor_availability else "None"
             raise serializers.ValidationError(
-                f"Mentor is not available on {day_name} at {time_str}"
+                f"Mentor is not available on {day_name} at {scheduled_time_12hr}. "
+                f"Available times for {day_name}: {available_times}"
             )
         
         # Check for conflicting sessions
