@@ -4,7 +4,6 @@ import { Button } from "../../components/ui/button";
 import { Star, Calendar, Clock, MessageCircle, Video, User, Award, Globe, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Badge } from "../../components/ui/badge";
-import { useToast } from "../../hooks/use-toast";
 import { DayPicker } from "react-day-picker";
 import { cn } from "../../lib/utils";
 import { userAxios } from "../../utils/axios";
@@ -212,8 +211,7 @@ const loadRazorpayScript = () => {
   });
 };
 
-const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
-  const { toast } = useToast();
+const MentorProfileModal = ({ mentor, isOpen, onClose, toast }) => {
   const [date, setDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [duration, setDuration] = useState("30 mins");
@@ -279,225 +277,255 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
   };
 
   // Helper function to format time for backend
-  const formatTimeForBackend = (timeStr) => {
-    // Convert "14:30" or "2:30 PM" format to "14:30:00"
-    const time24 = timeStr.includes('AM') || timeStr.includes('PM') 
-      ? convertTo24Hour(timeStr) 
-      : timeStr;
-    
-    // Ensure seconds are included
-    return time24.includes(':') && time24.split(':').length === 2 
-      ? `${time24}:00` 
-      : time24;
-  };
+const formatTimeForBackend = (timeStr) => {
+  // Convert "14:30" or "2:30 PM" format to "14:30:00"
+  const time24 = timeStr.includes('AM') || timeStr.includes('PM') 
+    ? convertTo24Hour(timeStr) 
+    : timeStr;
+  
+  // Ensure seconds are included
+  return time24.includes(':') && time24.split(':').length === 2 
+    ? `${time24}:00` 
+    : time24;
+};
 
-  // Helper function to convert 12-hour to 24-hour format
-  const convertTo24Hour = (time12h) => {
-    const [time, modifier] = time12h.split(' ');
-    let [hours, minutes] = time.split(':');
+// Fixed helper function to convert 12-hour to 24-hour format
+const convertTo24Hour = (time12h) => {
+  const [time, modifier] = time12h.trim().split(' ');
+  let [hours, minutes] = time.split(':');
+  
+  // Convert hours to integer
+  hours = parseInt(hours, 10);
+  
+  
+  if (modifier === 'AM') {
+    if (hours === 12) {
+      hours = 0; // 12 AM = 00:xx
+    }
+  } else if (modifier === 'PM') {
+    if (hours !== 12) {
+      hours = hours + 12; // PM hours except 12 PM
+    }
+    // 12 PM stays as 12
+  }
+  
+  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+};
+
+// Additional helper function to convert 24-hour to 12-hour format (for display)
+const convertTo12Hour = (time24h) => {
+  const [hours, minutes] = time24h.split(':');
+  const hour = parseInt(hours, 10);
+  
+  if (hour === 0) {
+    return `12:${minutes} AM`;
+  } else if (hour < 12) {
+    return `${hour}:${minutes} AM`;
+  } else if (hour === 12) {
+    return `12:${minutes} PM`;
+  } else {
+    return `${hour - 12}:${minutes} PM`;
+  }
+};
+
+const handleBookSession = async () => {
+  console.log('Button clicked')
+  if (!selectedSlot || !date || !mentor.is_available || availableTimeSlots.length === 0) {
+    toast.error("Please select a valid date and time slot.");
+    return;
+  }
+
+  setIsBooking(true);
+
+  try {
+    // STEP 1: Create Razorpay order via sessions/create-order/
+    console.log('Step 1: Creating order...');
     
-    if (hours === '12') {
-      hours = '00';
+    const orderData = {
+      mentor_id: mentor.id,
+      scheduled_date: date.getFullYear() + '-' + 
+              String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+              String(date.getDate()).padStart(2, '0'),
+      scheduled_time: formatTimeForBackend(selectedSlot),
+      duration_minutes: getDurationInMinutes(duration),
+      session_mode: getSessionMode(mode),
+      subjects: mentor.subjects?.map(s => s.id || s) || []
+    };
+
+    console.log('Order data:', orderData);
+    
+    // Enhanced validation logging
+    console.log('Validation check:');
+    console.log('- mentor_id:', mentor.id, typeof mentor.id);
+    console.log('- scheduled_date:', orderData.scheduled_date, 'is valid date?', !isNaN(new Date(orderData.scheduled_date)));
+    console.log('- scheduled_time:', orderData.scheduled_time, 'format check');
+    console.log('- duration_minutes:', orderData.duration_minutes, typeof orderData.duration_minutes);
+    console.log('- session_mode:', orderData.session_mode, typeof orderData.session_mode);
+    console.log('- subjects:', orderData.subjects, 'length:', orderData.subjects.length);
+    
+    // Check if all required fields are present and valid
+    if (!orderData.mentor_id || orderData.mentor_id <= 0) {
+      throw new Error('Invalid mentor ID');
     }
     
-    if (modifier === 'PM') {
-      hours = parseInt(hours, 10) + 12;
+    if (!orderData.scheduled_date || isNaN(new Date(orderData.scheduled_date))) {
+      throw new Error('Invalid scheduled date');
     }
     
-    return `${hours.toString().padStart(2, '0')}:${minutes}`;
-  };
-
-  const handleBookSession = async () => {
-    console.log('Button clicked')
-    if (!selectedSlot || !date || !mentor.is_available || availableTimeSlots.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please select a valid date and time slot.",
-        variant: "destructive",
-      });
-      return;
+    if (!orderData.scheduled_time || !/^\d{2}:\d{2}:\d{2}$/.test(orderData.scheduled_time)) {
+      throw new Error('Invalid scheduled time format. Expected HH:MM:SS');
     }
-  
-    setIsBooking(true);
-  
-    try {
-      // STEP 1: Create Razorpay order via sessions/create-order/
-      console.log('Step 1: Creating order...');
-      
-      const orderData = {
-        mentor_id: mentor.id,
-        scheduled_date: date.getFullYear() + '-' + 
-                String(date.getMonth() + 1).padStart(2, '0') + '-' + 
-                String(date.getDate()).padStart(2, '0'),
-        scheduled_time: formatTimeForBackend(selectedSlot),
-        duration_minutes: getDurationInMinutes(duration),
-        session_mode: getSessionMode(mode),
-        subjects: mentor.subjects?.map(s => s.id || s) || []
-      };
-  
-      console.log('Order data:', orderData);
-      
-      // Enhanced validation logging
-      console.log('Validation check:');
-      console.log('- mentor_id:', mentor.id, typeof mentor.id);
-      console.log('- scheduled_date:', orderData.scheduled_date, 'is valid date?', !isNaN(new Date(orderData.scheduled_date)));
-      console.log('- scheduled_time:', orderData.scheduled_time, 'format check');
-      console.log('- duration_minutes:', orderData.duration_minutes, typeof orderData.duration_minutes);
-      console.log('- session_mode:', orderData.session_mode, typeof orderData.session_mode);
-      console.log('- subjects:', orderData.subjects, 'length:', orderData.subjects.length);
-      
-      // Check if all required fields are present and valid
-      if (!orderData.mentor_id || orderData.mentor_id <= 0) {
-        throw new Error('Invalid mentor ID');
-      }
-      
-      if (!orderData.scheduled_date || isNaN(new Date(orderData.scheduled_date))) {
-        throw new Error('Invalid scheduled date');
-      }
-      
-      if (!orderData.scheduled_time || !/^\d{2}:\d{2}:\d{2}$/.test(orderData.scheduled_time)) {
-        throw new Error('Invalid scheduled time format. Expected HH:MM:SS');
-      }
-      
-      if (!orderData.duration_minutes || orderData.duration_minutes <= 0) {
-        throw new Error('Invalid duration');
-      }
-      
-      if (!orderData.session_mode || !['video', 'audio', 'chat'].includes(orderData.session_mode)) {
-        throw new Error('Invalid session mode');
-      }
+    
+    if (!orderData.duration_minutes || orderData.duration_minutes <= 0) {
+      throw new Error('Invalid duration');
+    }
+    
+    if (!orderData.session_mode || !['video', 'audio', 'chat'].includes(orderData.session_mode)) {
+      throw new Error('Invalid session mode');
+    }
 
-      const orderResponse = await userAxios.post('sessions/create-order/', orderData);
-      
-      if (!orderResponse.data.success) {
-        throw new Error(orderResponse.data.message || 'Failed to create order');
-      }
+    const orderResponse = await userAxios.post('sessions/create-order/', orderData);
+    
+    if (!orderResponse.data.success) {
+      throw new Error(orderResponse.data.message || 'Failed to create order');
+    }
 
-      console.log('Order created successfully:', orderResponse.data);
+    console.log('Order created successfully:', orderResponse.data);
 
-      const { order_id, amount, razorpay_key, session_details } = orderResponse.data;
+    const { order_id, amount, razorpay_key, session_details } = orderResponse.data;
 
-      // STEP 2: Load Razorpay script
-      console.log('Step 2: Loading Razorpay script...');
-      
-      const scriptLoaded = await loadRazorpayScript();
-      
-      if (!scriptLoaded) {
-        throw new Error('Failed to load payment gateway');
-      }
+    // STEP 2: Load Razorpay script
+    console.log('Step 2: Loading Razorpay script...');
+    
+    const scriptLoaded = await loadRazorpayScript();
+    
+    if (!scriptLoaded) {
+      throw new Error('Failed to load payment gateway');
+    }
 
-      console.log('Razorpay script loaded');
+    console.log('Razorpay script loaded');
 
-      // STEP 3: Configure and open Razorpay payment
-      console.log('Step 3: Opening payment gateway...');
-      
-      const options = {
-        key: razorpay_key,
-        amount: amount * 100, // Convert to paise
-        currency: 'INR',
-        name: 'MentorConnect',
-        description: `Session with ${session_details.mentor_name}`,
-        order_id: order_id,
-        handler: async function (response) {
-          try {
-            // STEP 4: Confirm booking after successful payment via sessions/confirm-booking/
-            console.log('Payment successful! Step 4: Confirming booking...');
-            console.log('Payment response:', response);
+    // STEP 3: Configure and open Razorpay payment
+    console.log('Step 3: Opening payment gateway...');
+    
+    // Store reference to mentor modal before Razorpay opens
+    const mentorModalElement = document.querySelector('[role="dialog"]');
+    
+    const options = {
+      key: razorpay_key,
+      amount: amount * 100, // Convert to paise
+      currency: 'INR',
+      name: 'MentorConnect',
+      description: `Session with ${session_details.mentor_name}`,
+      order_id: order_id,
+      handler: async function (response) {
+        try {
+          const confirmData = {
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+            ...orderData // Include all the original order data
+          };
+
+          console.log('Confirm data:', confirmData);
+
+          const confirmResponse = await userAxios.post('sessions/confirm-booking/', confirmData);
+          
+          if (confirmResponse.data.success) {
+            console.log('Booking confirmed successfully:', confirmResponse.data);
             
-            const confirmData = {
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-              ...orderData // Include all the original order data
-            };
-
-            console.log('Confirm data:', confirmData);
-
-            const confirmResponse = await userAxios.post('sessions/confirm-booking/', confirmData);
+            toast.success("Session Booked Successfully! ");
             
-            if (confirmResponse.data.success) {
-              console.log('Booking confirmed successfully:', confirmResponse.data);
-              
-              toast({
-                title: "Session Booked Successfully! ",
-                description: `Your ${duration} ${mode.toLowerCase()} session with ${mentor.name} has been confirmed for ${date.toDateString()} at ${selectedSlot}.`,
-              });
-              
-              // Close modal and reset form
-              onClose();
-              setSelectedSlot(null);
-              setDate(new Date());
-            } else {
-              throw new Error(confirmResponse.data.message || 'Failed to confirm booking');
-            }
-            
-          } catch (confirmError) {
-            console.error('Booking confirmation error:', confirmError);
-            toast({
-              title: "Booking Confirmation Failed",
-              description: confirmError.response?.data?.message || confirmError.message || "Please contact support for assistance.",
-              variant: "destructive",
-            });
+            // Close modal and reset form
+            onClose();
+            setSelectedSlot(null);
+            setDate(new Date());
+          } else {
+            throw new Error(confirmResponse.data.message || 'Failed to confirm booking');
           }
-        },
-        prefill: {
-          name: 'Student', // You can get this from user context
-          email: 'student@example.com', // You can get this from user context
-        },
-        theme: {
-          color: '#7C3AED' // Purple color to match your theme
-        },
-        modal: {
-          ondismiss: function() {
-            console.log('Payment cancelled by user');
-            setIsBooking(false);
-            toast({
-              title: "Payment Cancelled",
-              description: "The payment was cancelled. You can try booking again.",
-              variant: "destructive",
-            });
-          }
+          
+        } catch (confirmError) {
+          console.error('Booking confirmation error:', confirmError);
+          toast.error("Failed to confirm booking. Please try again.");
         }
-      };
-
-      // Open Razorpay checkout
-      const razorpay = new window.Razorpay(options);
-      razorpay.open();
-
-    } catch (error) {
-      console.error('Booking error:', error);
-      
-      // Enhanced error logging
-      if (error.response) {
-        console.error('Error response status:', error.response.status);
-        console.error('Error response data:', error.response.data);
-        console.error('Error response headers:', error.response.headers);
+      },
+      prefill: {
+        name: 'Student', // You can get this from user context
+        email: 'student@example.com', // You can get this from user context
+      },
+      theme: {
+        color: '#7C3AED' // Purple color to match your theme
+      },
+      modal: {
+        // FIXED: Prevent mentor modal from closing
+        backdrop_close: false, // Prevent closing on backdrop click
+        escape: false, // Prevent closing on escape key
+        ondismiss: function() {
+          console.log('Payment cancelled by user');
+          setIsBooking(false);
+          toast.warning("Payment cancelled. Please try again if you wish to book a session.");
+          
+          // Restore mentor modal focus and visibility
+          setTimeout(() => {
+            if (mentorModalElement) {
+              mentorModalElement.style.display = '';
+              mentorModalElement.style.visibility = '';
+              mentorModalElement.focus();
+            }
+          }, 100);
+        }
       }
-      
-      let errorMessage = "An unexpected error occurred. Please try again.";
-      
-      if (error.response?.data?.errors) {
-        // Handle validation errors
-        const errors = error.response.data.errors;
-        errorMessage = Object.values(errors).flat().join(', ');
-        console.error('Validation errors:', errors);
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+    };
 
-      toast({
-        title: "Booking Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsBooking(false);
+    // FIXED: Prevent mentor modal from being affected by Razorpay
+    if (mentorModalElement) {
+      // Increase z-index to ensure it stays above Razorpay when needed
+      mentorModalElement.style.zIndex = '9999';
+      // Prevent the modal from being hidden
+      mentorModalElement.style.position = 'fixed';
     }
-  };
+
+    // Open Razorpay checkout
+    const razorpay = new window.Razorpay(options);
+    razorpay.open();
+
+  } catch (error) {
+    console.error('Booking error:', error);
+    
+    // Enhanced error logging
+    if (error.response) {
+      console.error('Error response status:', error.response.status);
+      console.error('Error response data:', error.response.data);
+      console.error('Error response headers:', error.response.headers);
+    }
+    
+    let errorMessage = "An unexpected error occurred. Please try again.";
+    
+    if (error.response?.data?.errors) {
+      // Handle validation errors
+      const errors = error.response.data.errors;
+      errorMessage = Object.values(errors).flat().join(', ');
+      console.error('Validation errors:', errors);
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    } else if (error.response?.data?.detail) {
+      errorMessage = error.response.data.detail;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    toast.error(errorMessage);
+  } finally {
+    setIsBooking(false);
+    
+    // Reset mentor modal z-index after payment process
+    const mentorModalElement = document.querySelector('[role="dialog"]');
+    if (mentorModalElement) {
+      mentorModalElement.style.zIndex = '';
+      mentorModalElement.style.position = '';
+    }
+  }
+};
   // Calculate price based on duration and hourly rate
   const calculatePrice = () => {
     const rate = mentor.hourly_rate || 25;
@@ -537,7 +565,7 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto ">
         <DialogHeader>
           <DialogTitle className="text-xl">Mentor Profile</DialogTitle>
         </DialogHeader>
@@ -768,6 +796,7 @@ const MentorProfileModal = ({ mentor, isOpen, onClose }) => {
           </div>
         </div>
       </DialogContent>
+      
     </Dialog>
   );
 };

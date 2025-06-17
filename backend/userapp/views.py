@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 import razorpay
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -794,18 +795,43 @@ class ConfirmBookingAPIView(APIView):
             try:
                 session = serializer.save()
                 
-                # Return the created session with payment details
-                session_serializer = MentorSessionSerializer(session)
-                payment_serializer = SessionPaymentSerializer(session.payment)
-                
-                return Response({
-                    'success': True,
-                    'message': 'Session booked successfully',
-                    'session': session_serializer.data,
-                    'payment': payment_serializer.data
-                }, status=status.HTTP_201_CREATED)
+                # Get the payment object
+                try:
+                    # Try to get payment from the stored reference first
+                    if hasattr(session, '_payment'):
+                        payment = session._payment
+                    else:
+                        # Fallback: query the payment
+                        payment = SessionPayment.objects.get(session=session)
+                    
+                    # Return the created session with payment details
+                    session_serializer = MentorSessionSerializer(session)
+                    payment_serializer = SessionPaymentSerializer(payment)
+                    
+                    return Response({
+                        'success': True,
+                        'message': 'Session booked successfully',
+                        'session': session_serializer.data,
+                        'payment': payment_serializer.data
+                    }, status=status.HTTP_201_CREATED)
+                    
+                except SessionPayment.DoesNotExist:
+                    # If payment not found, still return session data but log the issue
+                    session_serializer = MentorSessionSerializer(session)
+                    print("Warning: Payment object not found for session")
+                    
+                    return Response({
+                        'success': True,
+                        'message': 'Session booked successfully',
+                        'session': session_serializer.data,
+                        'payment': None
+                    }, status=status.HTTP_201_CREATED)
                 
             except Exception as e:
+                print(f"Error in confirm booking: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                
                 return Response({
                     'success': False,
                     'message': 'Failed to create session',

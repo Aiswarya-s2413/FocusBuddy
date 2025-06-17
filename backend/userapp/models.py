@@ -4,6 +4,8 @@ from django.utils import timezone
 from cloudinary.models import CloudinaryField
 from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
+from datetime import datetime
+
 
 class Subject(models.Model):
     name = models.CharField(max_length=100)
@@ -334,6 +336,15 @@ class MentorSession(models.Model):
         if reason:
             self.cancellation_reason = reason
         self.save()
+
+    @property
+    def is_upcoming(self):
+        session_datetime = datetime.combine(self.scheduled_date, self.scheduled_time)
+        
+        if timezone.is_naive(session_datetime):
+            session_datetime = timezone.make_aware(session_datetime)
+        
+        return session_datetime > timezone.now()
 
 
 class SessionPayment(models.Model):

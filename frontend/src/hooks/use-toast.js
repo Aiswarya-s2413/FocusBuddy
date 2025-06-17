@@ -1,7 +1,7 @@
 import * as React from "react";
 
-const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_LIMIT = 3;
+const TOAST_REMOVE_DELAY = 5000; // 5 seconds instead of 1000000ms
 
 let count = 0;
 
@@ -90,7 +90,6 @@ const reducer = (state, action) => {
 };
 
 const listeners = [];
-
 let memoryState = { toasts: [] };
 
 function dispatch(action) {
@@ -109,11 +108,18 @@ function toast(props) {
       toast: { ...updatedProps, id },
     });
 
-  const dismiss = () =>
+  const dismiss = () => {
+    // Clear any existing timeout for this toast
+    if (toastTimeouts.has(id)) {
+      clearTimeout(toastTimeouts.get(id));
+      toastTimeouts.delete(id);
+    }
+    
     dispatch({
       type: "DISMISS_TOAST",
       toastId: id,
     });
+  };
 
   dispatch({
     type: "ADD_TOAST",
@@ -126,6 +132,13 @@ function toast(props) {
       },
     },
   });
+
+  // Auto-dismiss after delay (unless it's a persistent toast)
+  if (!props.persistent) {
+    setTimeout(() => {
+      dismiss();
+    }, props.duration || TOAST_REMOVE_DELAY);
+  }
 
   return {
     id,

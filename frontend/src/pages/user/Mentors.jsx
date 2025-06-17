@@ -3,6 +3,7 @@ import MentorHeader from "../../components/mentors/MentorHeader";
 import MentorGrid from "../../components/mentors/MentorGrid";
 import MentorProfileModal from "../../components/mentors/MentorProfileModal";
 import { userAxios } from "../../utils/axios"; 
+import { useSimpleToast } from "../../components/ui/toast";
 
 const Mentors = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -16,6 +17,7 @@ const Mentors = () => {
   const [mentors, setMentors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { toast, ToastContainer } = useSimpleToast();
 
   // Fetch mentors from backend using userAxios
   const fetchMentors = async (query = "", currentFilters = filters) => {
@@ -295,8 +297,10 @@ const Mentors = () => {
           mentor={selectedMentor}
           isOpen={!!selectedMentor}
           onClose={handleCloseModal}
+          toast={toast}
         />
       )}
+       <ToastContainer />
     </div>
   );
 };

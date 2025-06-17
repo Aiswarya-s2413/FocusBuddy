@@ -5,6 +5,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 import random
 from django.utils import timezone
 import logging
+import razorpay
+from django.conf import settings
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -435,10 +438,15 @@ class ConfirmBookingSerializer(serializers.Serializer):
                 'razorpay_signature': data['razorpay_signature']
             })
         except Exception as e:
-            raise serializers.ValidationError("Payment verification failed")
+            raise serializers.ValidationError(f"Payment verification failed: {str(e)}")
+        
+        # Validate mentor exists
+        try:
+            mentor = Mentor.objects.get(id=data['mentor_id'])
+        except Mentor.DoesNotExist:
+            raise serializers.ValidationError("Invalid mentor ID")
         
         # Re-validate mentor availability (double-check)
-        mentor = Mentor.objects.get(id=data['mentor_id'])
         scheduled_date = data['scheduled_date']
         scheduled_time = data['scheduled_time']
         
@@ -458,7 +466,12 @@ class ConfirmBookingSerializer(serializers.Serializer):
     
     def create(self, validated_data):
         user = self.context['request'].user
-        mentor = Mentor.objects.get(id=validated_data['mentor_id'])
+        
+        try:
+            mentor = Mentor.objects.get(id=validated_data['mentor_id'])
+        except Mentor.DoesNotExist:
+            raise serializers.ValidationError("Mentor not found")
+        
         subjects_ids = validated_data.pop('subjects', [])
         
         # Remove payment-related fields from session data
@@ -476,6 +489,9 @@ class ConfirmBookingSerializer(serializers.Serializer):
         tax_amount = base_amount * Decimal('0.18')
         total_amount = base_amount + platform_fee + tax_amount
         
+        session = None
+        payment = None
+        
         with transaction.atomic():
             # Create the session
             session = MentorSession.objects.create(
@@ -487,8 +503,12 @@ class ConfirmBookingSerializer(serializers.Serializer):
             
             # Add subjects if provided
             if subjects_ids:
-                subjects = Subject.objects.filter(id__in=subjects_ids)
-                session.subjects.set(subjects)
+                try:
+                    subjects = Subject.objects.filter(id__in=subjects_ids)
+                    if subjects.exists():
+                        session.subjects.set(subjects)
+                except Exception as e:
+                    print(f"Error setting subjects: {e}")
             
             # Create payment record with successful status
             payment = SessionPayment.objects.create(
@@ -517,6 +537,8 @@ class ConfirmBookingSerializer(serializers.Serializer):
                 mentor_earning=mentor_earning
             )
         
+        # Store payment reference for API view access
+        session._payment = payment
         return session
 
 
