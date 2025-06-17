@@ -51,6 +51,19 @@ const AuthNavbar = () => {
             </NavLink>
 
             <NavLink
+              to="/focus-buddy"
+              className={({ isActive }) => cn(
+                "flex items-center px-3 py-2 rounded-md text-sm font-medium",
+                isActive
+                  ? "bg-[#F8F6FB] text-[#7E69AB]"
+                  : "text-gray-600 hover:text-[#7E69AB] hover:bg-[#F8F6FB]"
+              )}
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              Focus Buddy
+            </NavLink>
+
+            <NavLink
               to="/my-sessions"
               className={({ isActive }) => cn(
                 "flex items-center px-3 py-2 rounded-md text-sm font-medium",

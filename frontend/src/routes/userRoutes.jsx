@@ -11,6 +11,7 @@ import Journal from "../pages/user/Journal";
 import { useSelector } from "react-redux";
 import AuthLayout from "../components/AuthLayout";
 import Mentors from "../pages/user/Mentors";
+import FocusBuddy from "../pages/user/FocusBuddy";
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useSelector((state) => state.user);
@@ -63,6 +64,14 @@ const UserRoutes = () => {
         element={
           <ProtectedRoute>
             <AuthLayout><Mentors /></AuthLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/focus-buddy"
+        element={
+          <ProtectedRoute>
+            <AuthLayout><FocusBuddy /></AuthLayout>
           </ProtectedRoute>
         }
       />
