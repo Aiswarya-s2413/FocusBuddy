@@ -20,6 +20,8 @@ from rest_framework.pagination import PageNumberPagination
 import razorpay
 from django.conf import settings
 from django.db.models import Count
+from django.db import IntegrityError
+from rest_framework.exceptions import ValidationError
 
 
 logger = logging.getLogger(__name__)
@@ -1316,6 +1318,7 @@ class FocusBuddySessionDetailView(APIView):
 
 
 
+
 class JoinSessionView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1327,46 +1330,37 @@ class JoinSessionView(APIView):
             session = get_object_or_404(FocusBuddySession, id=session_id)
             print(f"DEBUG: Session found - Status: {session.status}, Creator: {session.creator.id}")
             
-            # Check if user is already in session
-            existing_participant = FocusBuddyParticipant.objects.filter(
-                session=session, 
-                user=request.user, 
-                left_at__isnull=True
-            ).first()
-            
-            if existing_participant:
-                print(f"DEBUG: User already in session as participant {existing_participant.id}")
-                return Response(
-                    {'error': 'You are already in this session'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
             # Check if user is the creator
             if session.creator == request.user:
                 print("DEBUG: User is the session creator")
-                # Decide if creators can join as participants or handle differently
-                # Option 1: Allow creator to join as participant
-                # Option 2: Return session data without creating participant record
-                # Option 3: Return error explaining creators don't need to join
-                
-                # For now, let's try Option 3:
                 return Response(
                     {'error': 'Session creators do not need to join - you are automatically the host'}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Check session capacity
-            current_participants = FocusBuddyParticipant.objects.filter(
-                session=session, 
-                left_at__isnull=True
-            ).count()
-            print(f"DEBUG: Current participants: {current_participants}/{session.max_participants}")
-            
-            if current_participants >= session.max_participants:
-                return Response(
-                    {'error': 'Session is full'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # Check if already in session (race-condition safe)
+            participant, created = FocusBuddyParticipant.objects.get_or_create(
+                session=session,
+                user=request.user,
+                defaults={
+                    'camera_enabled': request.data.get('camera_enabled', True),
+                    'microphone_enabled': request.data.get('microphone_enabled', True)
+                }
+            )
+
+            if not created:
+                if participant.left_at is None:
+                    print(f"DEBUG: User already in session as participant {participant.id}")
+                    return Response(
+                        {'error': 'You are already in this session'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                else:
+                    print(f"DEBUG: Rejoining session - updating left_at = None for {participant.id}")
+                    participant.left_at = None
+                    participant.camera_enabled = request.data.get('camera_enabled', True)
+                    participant.microphone_enabled = request.data.get('microphone_enabled', True)
+                    participant.save()
             
             # Check session status
             if session.status not in ['waiting', 'active']:
@@ -1376,25 +1370,33 @@ class JoinSessionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Create participant
-            participant = FocusBuddyParticipant.objects.create(
-                session=session,
-                user=request.user,
-                camera_enabled=request.data.get('camera_enabled', True),
-                microphone_enabled=request.data.get('microphone_enabled', True)
-            )
-            print(f"DEBUG: Participant created successfully: {participant.id}")
+            # Check capacity *after* confirming not already in
+            current_participants = FocusBuddyParticipant.objects.filter(
+                session=session, 
+                left_at__isnull=True
+            ).count()
+            print(f"DEBUG: Current participants: {current_participants}/{session.max_participants}")
             
-            # Update session status if needed
+            if current_participants > session.max_participants:
+                # Undo if newly created
+                if created:
+                    print(f"DEBUG: Rolling back participant creation due to full session")
+                    participant.delete()
+                return Response(
+                    {'error': 'Session is full'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Activate session if waiting
             if session.status == 'waiting':
                 session.status = 'active'
                 session.started_at = timezone.now()
                 session.save()
                 print("DEBUG: Session status updated to active")
             
-            serializer = FocusBuddySessionSerializer(session)
+            serializer = FocusBuddySessionDetailSerializer(session)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
+
         except Exception as e:
             print(f"DEBUG: Exception in join session: {str(e)}")
             print(f"DEBUG: Exception type: {type(e)}")
@@ -1404,6 +1406,7 @@ class JoinSessionView(APIView):
                 {'error': 'Internal server error'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 
 class LeaveSessionView(APIView):
