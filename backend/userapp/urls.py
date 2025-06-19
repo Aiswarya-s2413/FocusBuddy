@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 
+
 urlpatterns = [
     # Authentication URLs
     path('signup/', SignupView.as_view(), name='signup'),
@@ -30,7 +31,7 @@ urlpatterns = [
     path('sessions/confirm-booking/', ConfirmBookingAPIView.as_view(), name='confirm-booking'),
     path('sessions/<int:pk>/', PomodoroSessionDetailAPIView.as_view(), name='session-detail'),
     path('sessions/<int:pk>/complete/', CompleteSessionAPIView.as_view(), name='session-complete'),
-    path('sessions/<int:session_id>/messages/', FocusSessionMessagesView.as_view(), name='session-messages'),
+   
     
     # Settings
     path('settings/', PomodoroSettingsAPIView.as_view(), name='pomodoro-settings'),
@@ -52,17 +53,7 @@ urlpatterns = [
     path('list/', UserSessionsListAPIView.as_view(), name='user-sessions-list'),
     path('stats/', SessionStatsAPIView.as_view(), name='session-stats'),
     
-    # Focus Buddy URLs 
-    path('availability/', FocusBuddyAvailabilityView.as_view(), name='availability'),
-    path('start-session/', StartFocusSessionView.as_view(), name='start-session'),
-    path('current-session/', CurrentFocusSessionView.as_view(), name='current-session'),
-    path('end-session/', EndFocusSessionView.as_view(), name='end-session'),
-    path('cancel-session/', CancelFocusSessionView.as_view(), name='cancel-session'),
-    path('match-response/', FocusSessionMatchResponseView.as_view(), name='match-response'),
-    path('feedback/', FocusSessionFeedbackView.as_view(), name='session-feedback'),
-    path('buddy-stats/', FocusBuddyStatsView.as_view(), name='user-stats'),
-    path('history/', FocusSessionHistoryView.as_view(), name='session-history'),
-    path('available-users/', AvailableUsersView.as_view(), name='available-users'),
+
     
     # Generic patterns with parameters 
     path('<int:pk>/', SessionDetailAPIView.as_view(), name='session-detail'),
@@ -71,4 +62,23 @@ urlpatterns = [
     path('<int:session_id>/reviews/create/', CreateSessionReviewAPIView.as_view(), name='create-session-review'),
     path('<int:session_id>/reviews/', SessionReviewsListAPIView.as_view(), name='session-reviews-list'),
     path('<int:session_id>/messages/', SessionMessagesAPIView.as_view(), name='session-messages'),
+
+    # Session management
+    path('focus-sessions/', FocusBuddySessionListView.as_view(), name='session-list-create'),
+    path('focus-sessions/<int:session_id>/', FocusBuddySessionDetailView.as_view(), name='session-detail'),
+    path('focus-sessions/<int:session_id>/join/', JoinSessionView.as_view(), name='join-session'),
+    path('focus-sessions/<int:session_id>/leave/', LeaveSessionView.as_view(), name='leave-session'),
+    path('focus-sessions/<int:session_id>/participant/', UpdateParticipantView.as_view(), name='update-participant'),
+    
+    # Chat functionality
+    path('focus-sessions/<int:session_id>/messages/', SessionMessagesView.as_view(), name='session-messages'),
+    
+    # Feedback
+    path('focus-sessions/<int:session_id>/feedback/', SessionFeedbackView.as_view(), name='session-feedback'),
+    
+    # Statistics
+    path('focus-stats/', SessionStatsView.as_view(), name='session-stats'),
+
+    path('webrtc/config/', WebRTCConfigView.as_view(), name='webrtc-config'),
+
 ]

@@ -576,90 +576,60 @@ class SessionMessageSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at']
 
-
-
-class UserBasicSerializer(serializers.ModelSerializer):
-    """Basic user info for focus buddy features"""
-    class Meta:
-        model = User
-        fields = ['id', 'name']  
-
-
-class SubjectBasicSerializer(serializers.ModelSerializer):
-    """Basic subject info for focus buddy features"""
-    class Meta:
-        model = Subject
-        fields = ['id', 'name', 'color']  
-
-
-class FocusBuddyAvailabilitySerializer(serializers.ModelSerializer):
-    """Serializer for user availability status"""
-    user = UserBasicSerializer(read_only=True)
-    is_expired = serializers.ReadOnlyField()
-    time_remaining = serializers.SerializerMethodField()
+class ParticipantSerializer(serializers.ModelSerializer):
+    """Serializer for session participants"""
+    user_name = serializers.CharField(source='user.name', read_only=True)
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    participation_duration = serializers.IntegerField(source='participation_duration_minutes', read_only=True)
     
     class Meta:
-        model = FocusBuddyAvailability
+        model = FocusBuddyParticipant
         fields = [
-            'id', 'user', 'is_available', 'duration_minutes', 
-            'available_until', 'is_expired', 'time_remaining',
-            'created_at', 'updated_at'
+            'id', 'user_id', 'user_name', 'joined_at', 'left_at', 
+            'camera_enabled', 'microphone_enabled', 'is_active', 
+            'participation_duration'
         ]
-        read_only_fields = ['available_until', 'created_at', 'updated_at']
-    
-    def get_time_remaining(self, obj):
-        """Get remaining availability time in seconds"""
-        if not obj.is_available or not obj.available_until:
-            return 0
-        remaining = (obj.available_until - timezone.now()).total_seconds()
-        return max(0, int(remaining))
-    
-    def update(self, instance, validated_data):
-        """Handle availability toggle logic"""
-        is_available = validated_data.get('is_available', instance.is_available)
-        duration_minutes = validated_data.get('duration_minutes', instance.duration_minutes)
-        
-        if is_available and not instance.is_available:
-            # User becoming available
-            validated_data['available_until'] = timezone.now() + timedelta(minutes=duration_minutes)
-        elif not is_available:
-            # User becoming unavailable
-            validated_data['available_until'] = None
-            
-        return super().update(instance, validated_data)
+        read_only_fields = ['id', 'joined_at', 'left_at', 'is_active']
 
 
-class FocusBuddySessionSerializer(serializers.ModelSerializer):
-    """Main serializer for focus buddy sessions"""
-    user1 = UserBasicSerializer(read_only=True)
-    user2 = UserBasicSerializer(read_only=True)
-    common_subjects = SubjectBasicSerializer(many=True, read_only=True)
-    is_expired = serializers.ReadOnlyField()
-    remaining_time_seconds = serializers.ReadOnlyField()
-    other_user = serializers.SerializerMethodField()
+class FocusBuddySessionListSerializer(serializers.ModelSerializer):
+    """Serializer for listing active sessions that users can join"""
+    creator_name = serializers.CharField(source='creator.name', read_only=True)
+    participant_count = serializers.IntegerField(source='annotated_participant_count', read_only=True)
+    remaining_time_seconds = serializers.IntegerField(read_only=True)
+    can_join = serializers.BooleanField(read_only=True)
+    is_full = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = FocusBuddySession
         fields = [
-            'id', 'user1', 'user2', 'session_type', 'status', 
-            'duration_minutes', 'common_subjects', 'started_at', 
-            'ended_at', 'expires_at', 'matched_at', 'match_timeout_at',
-            'is_expired', 'remaining_time_seconds', 'other_user',
-            'created_at', 'updated_at'
+            'id', 'creator_name', 'title', 'session_type', 'status',
+            'duration_minutes', 'max_participants', 'participant_count',
+            'started_at', 'ends_at', 'remaining_time_seconds', 
+            'can_join', 'is_full', 'created_at'
         ]
-        read_only_fields = [
-            'user1', 'user2', 'matched_at', 'match_timeout_at',
-            'started_at', 'ended_at', 'expires_at', 'created_at', 'updated_at'
-        ]
+
+
+class FocusBuddySessionDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for individual session with participants"""
+    creator_name = serializers.CharField(source='creator.name', read_only=True)
+    creator_id = serializers.IntegerField(source='creator.id', read_only=True)
+    participants = ParticipantSerializer(many=True, read_only=True)
+    participant_count = serializers.IntegerField(read_only=True)
+    remaining_time_seconds = serializers.IntegerField(read_only=True)
+    can_join = serializers.BooleanField(read_only=True)
+    is_full = serializers.BooleanField(read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
     
-    def get_other_user(self, obj):
-        """Get the other user in the session relative to current user"""
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            other_user = obj.get_other_user(request.user)
-            if other_user:
-                return UserBasicSerializer(other_user).data
-        return None
+    class Meta:
+        model = FocusBuddySession
+        fields = [
+            'id', 'creator_id', 'creator_name', 'title', 'session_type', 
+            'status', 'duration_minutes', 'max_participants', 
+            'participants', 'participant_count', 'started_at', 'ends_at', 
+            'ended_at', 'remaining_time_seconds', 'can_join', 'is_full', 
+            'is_expired', 'created_at', 'updated_at'
+        ]
 
 
 class FocusBuddySessionCreateSerializer(serializers.ModelSerializer):
@@ -667,197 +637,122 @@ class FocusBuddySessionCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = FocusBuddySession
-        fields = ['session_type', 'duration_minutes']
-    
+        fields = [
+            'title', 'session_type', 'duration_minutes', 'max_participants'
+        ]
+        
     def validate_duration_minutes(self, value):
         """Validate duration is one of the allowed choices"""
-        allowed_durations = [choice[0] for choice in FocusBuddyAvailability.DURATION_CHOICES]
+        allowed_durations = [choice[0] for choice in FocusBuddySession.DURATION_CHOICES]
         if value not in allowed_durations:
-            raise serializers.ValidationError(f"Duration must be one of: {allowed_durations}")
+            raise serializers.ValidationError(
+                f"Duration must be one of: {allowed_durations}"
+            )
+        return value
+    
+    def validate_max_participants(self, value):
+        """Validate max participants is reasonable"""
+        if value < 2:
+            raise serializers.ValidationError("Session must allow at least 2 participants")
+        if value > 50:
+            raise serializers.ValidationError("Maximum 50 participants allowed")
         return value
     
     def create(self, validated_data):
-        """Create session and set user1 from request"""
-        request = self.context.get('request')
-        validated_data['user1'] = request.user
+        """Create session with auto-calculated end time"""
+        validated_data['creator'] = self.context['request'].user
+        validated_data['started_at'] = timezone.now()
+        validated_data['ends_at'] = timezone.now() + timedelta(
+            minutes=validated_data['duration_minutes']
+        )
         return super().create(validated_data)
 
 
+class JoinSessionSerializer(serializers.Serializer):
+    """Serializer for joining a session"""
+    camera_enabled = serializers.BooleanField(default=True)
+    microphone_enabled = serializers.BooleanField(default=True)
+    
+    def validate(self, data):
+        """Validate session can be joined"""
+        session = self.context['session']
+        user = self.context['request'].user
+        
+        # Check if session can be joined
+        if not session.can_join:
+            if session.status != 'active':
+                raise serializers.ValidationError("Session is not active")
+            elif session.is_expired:
+                raise serializers.ValidationError("Session has expired")
+            elif session.is_full:
+                raise serializers.ValidationError("Session is full")
+        
+        # Check if user is already in session
+        if session.participants.filter(user=user, left_at__isnull=True).exists():
+            raise serializers.ValidationError("You are already in this session")
+            
+        return data
+
+
+class UpdateParticipantSerializer(serializers.ModelSerializer):
+    """Serializer for updating participant settings"""
+    
+    class Meta:
+        model = FocusBuddyParticipant
+        fields = ['camera_enabled', 'microphone_enabled']
+
+
 class FocusBuddyMessageSerializer(serializers.ModelSerializer):
-    """Serializer for focus buddy chat messages"""
-    sender = UserBasicSerializer(read_only=True)
-    sender_name = serializers.SerializerMethodField()
+    """Serializer for chat messages"""
+    sender_name = serializers.CharField(source='sender.name', read_only=True)
+    sender_id = serializers.IntegerField(source='sender.id', read_only=True)
     
     class Meta:
         model = FocusBuddyMessage
         fields = [
-            'id', 'session', 'sender', 'sender_name', 'message', 
+            'id', 'sender_id', 'sender_name', 'message', 
             'is_system_message', 'created_at'
         ]
-        read_only_fields = ['sender', 'is_system_message', 'created_at']
-    
-    def get_sender_name(self, obj):
-        """Get sender name, handling system messages"""
-        if obj.is_system_message:
-            return "System"
-        return obj.sender.name if obj.sender else "Unknown"
+        read_only_fields = ['id', 'sender_id', 'sender_name', 'created_at']
     
     def create(self, validated_data):
-        """Set sender from request user"""
-        request = self.context.get('request')
-        validated_data['sender'] = request.user
+        """Create message with sender from request"""
+        validated_data['sender'] = self.context['request'].user
+        validated_data['session'] = self.context['session']
         return super().create(validated_data)
 
 
 class FocusBuddyFeedbackSerializer(serializers.ModelSerializer):
     """Serializer for session feedback"""
-    reviewer = UserBasicSerializer(read_only=True)
-    reviewed_user = UserBasicSerializer(read_only=True)
+    participant_name = serializers.CharField(source='participant.user.name', read_only=True)
     
     class Meta:
         model = FocusBuddyFeedback
         fields = [
-            'id', 'session', 'reviewer', 'reviewed_user', 'rating',
-            'feedback_text', 'would_study_again', 'created_at'
+            'id', 'session_rating', 'feedback_text', 'would_join_again',
+            'session_helpful', 'good_environment', 'participant_name', 'created_at'
         ]
-        read_only_fields = ['reviewer', 'reviewed_user', 'created_at']
+        read_only_fields = ['id', 'participant_name', 'created_at']
     
-    def validate_rating(self, value):
+    def validate_session_rating(self, value):
         """Validate rating is within allowed range"""
         if value < 1 or value > 5:
             raise serializers.ValidationError("Rating must be between 1 and 5")
         return value
     
     def create(self, validated_data):
-        """Set reviewer and reviewed_user from context"""
-        request = self.context.get('request')
-        session = validated_data['session']
-        
-        validated_data['reviewer'] = request.user
-        validated_data['reviewed_user'] = session.get_other_user(request.user)
-        
-        if not validated_data['reviewed_user']:
-            raise serializers.ValidationError("Cannot provide feedback - other user not found")
-        
+        """Create feedback for the participant"""
+        validated_data['participant'] = self.context['participant']
+        validated_data['session'] = self.context['participant'].session
         return super().create(validated_data)
 
 
-class FocusBuddyStatsSerializer(serializers.ModelSerializer):
-    """Serializer for user focus buddy statistics"""
-    user = UserBasicSerializer(read_only=True)
-    completion_rate = serializers.SerializerMethodField()
-    average_session_duration = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = FocusBuddyStats
-        fields = [
-            'id', 'user', 'total_sessions', 'completed_sessions',
-            'total_focus_minutes', 'average_rating', 'total_ratings_received',
-            'current_streak', 'longest_streak', 'last_session_date',
-            'completion_rate', 'average_session_duration', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['created_at', 'updated_at']
-    
-    def get_completion_rate(self, obj):
-        """Calculate session completion rate as percentage"""
-        if obj.total_sessions == 0:
-            return 0.0
-        return round((obj.completed_sessions / obj.total_sessions) * 100, 2)
-    
-    def get_average_session_duration(self, obj):
-        """Calculate average session duration in minutes"""
-        if obj.completed_sessions == 0:
-            return 0.0
-        return round(obj.total_focus_minutes / obj.completed_sessions, 2)
-
-
-class FocusBuddyMatchSerializer(serializers.Serializer):
-    """Serializer for handling match requests and responses"""
-    session_id = serializers.IntegerField()
-    action = serializers.ChoiceField(choices=['accept', 'decline'])
-    
-    def validate_session_id(self, value):
-        """Validate session exists and user is part of it"""
-        request = self.context.get('request')
-        try:
-            session = FocusBuddySession.objects.get(id=value)
-            if request.user not in [session.user1, session.user2]:
-                raise serializers.ValidationError("You are not part of this session")
-            if session.status != 'matched':
-                raise serializers.ValidationError("Session is not in matched state")
-            return value
-        except FocusBuddySession.DoesNotExist:
-            raise serializers.ValidationError("Session not found")
-
-
-class FocusBuddySessionDetailSerializer(FocusBuddySessionSerializer):
-    """Detailed serializer with messages and feedback"""
-    messages = FocusBuddyMessageSerializer(many=True, read_only=True)
-    feedback = FocusBuddyFeedbackSerializer(many=True, read_only=True)
-    my_feedback = serializers.SerializerMethodField()
-    
-    class Meta(FocusBuddySessionSerializer.Meta):
-        fields = FocusBuddySessionSerializer.Meta.fields + [
-            'messages', 'feedback', 'my_feedback'
-        ]
-    
-    def get_my_feedback(self, obj):
-        """Get current user's feedback for this session"""
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            feedback = obj.feedback.filter(reviewer=request.user).first()
-            if feedback:
-                return FocusBuddyFeedbackSerializer(feedback).data
-        return None
-
-
-# Specialized serializers for different use cases
-class AvailableUsersSerializer(serializers.ModelSerializer):
-    """Serializer for showing available users for matching"""
-    user = UserBasicSerializer(read_only=True)
-    common_subjects_count = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = FocusBuddyAvailability
-        fields = ['user', 'duration_minutes', 'available_until', 'common_subjects_count']
-    
-    def get_common_subjects_count(self, obj):
-        """Get count of common subjects with current user"""
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            # This would need to be implemented based on your User-Subject relationship
-            # Assuming users have a subjects field
-            if hasattr(request.user, 'subjects') and hasattr(obj.user, 'subjects'):
-                common = set(request.user.subjects.values_list('id', flat=True)) & \
-                        set(obj.user.subjects.values_list('id', flat=True))
-                return len(common)
-        return 0
-
-
-class SessionHistorySerializer(serializers.ModelSerializer):
-    """Simplified serializer for session history"""
-    other_user = serializers.SerializerMethodField()
-    duration_display = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = FocusBuddySession
-        fields = [
-            'id', 'other_user', 'status', 'duration_minutes', 
-            'duration_display', 'started_at', 'ended_at', 'created_at'
-        ]
-    
-    def get_other_user(self, obj):
-        """Get the other user's basic info"""
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            other_user = obj.get_other_user(request.user)
-            if other_user:
-                return UserBasicSerializer(other_user).data
-        return None
-    
-    def get_duration_display(self, obj):
-        """Get human-readable duration"""
-        return f"{obj.duration_minutes} minutes"
+class SessionStatsSerializer(serializers.Serializer):
+    """Serializer for session statistics"""
+    total_active_sessions = serializers.IntegerField()
+    total_participants_online = serializers.IntegerField()
+    sessions_by_duration = serializers.DictField()
+    sessions_by_type = serializers.DictField()
 
 
 

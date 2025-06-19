@@ -19,6 +19,8 @@ from django.db.models import Q
 from rest_framework.pagination import PageNumberPagination
 import razorpay
 from django.conf import settings
+from django.db.models import Count
+
 
 logger = logging.getLogger(__name__)
 
@@ -1205,584 +1207,560 @@ class SessionStatsAPIView(APIView):
             }
         })
 
-class FocusBuddyAvailabilityView(APIView):
+
+
+class FocusBuddySessionListView(APIView):
     """
-    Handle user availability status for focus buddy sessions
-    GET: Get current availability status
-    POST/PUT: Toggle availability status
+    GET: List all active sessions that users can view and join
+    POST: Create a new focus buddy session
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Get user's current availability status"""
-        try:
-            availability = FocusBuddyAvailability.objects.get(user=request.user)
-            serializer = FocusBuddyAvailabilitySerializer(availability)
-            return Response(serializer.data)
-        except FocusBuddyAvailability.DoesNotExist:
-            # Create default availability record
-            availability = FocusBuddyAvailability.objects.create(user=request.user)
-            serializer = FocusBuddyAvailabilitySerializer(availability)
-            return Response(serializer.data)
+        """Get list of active sessions"""
+        # Filter only active sessions that haven't expired
+        sessions = FocusBuddySession.objects.filter(
+            status='active'
+        ).annotate(
+    annotated_participant_count=Count('participants', filter=Q(participants__left_at__isnull=True))
+).order_by('-created_at')
+        
+        # Remove expired sessions (cleanup)
+        expired_sessions = []
+        for session in sessions:
+            if session.is_expired and session.status == 'active':
+                session.end_session('expired')
+                expired_sessions.append(session.id)
+        
+        # Filter out expired sessions from queryset
+        if expired_sessions:
+            sessions = sessions.exclude(id__in=expired_sessions)
+        
+        serializer = FocusBuddySessionListSerializer(sessions, many=True)
+        return Response({
+            'sessions': serializer.data,
+            'total_active_sessions': sessions.count()
+        })
     
     def post(self, request):
-        """Toggle or update availability status"""
-        try:
-            availability = FocusBuddyAvailability.objects.get(user=request.user)
-        except FocusBuddyAvailability.DoesNotExist:
-            availability = FocusBuddyAvailability.objects.create(user=request.user)
+        """Create a new focus buddy session"""
+        serializer = FocusBuddySessionCreateSerializer(
+            data=request.data, 
+            context={'request': request}
+        )
+        if serializer.is_valid():
+            session = serializer.save()
+            
+            # Create welcome system message
+            FocusBuddyMessage.objects.create(
+                session=session,
+                sender=request.user,
+                message=f"Welcome to the {session.duration_minutes}-minute focus session!",
+                is_system_message=True
+            )
+            
+            # Return detailed session info
+            detail_serializer = FocusBuddySessionDetailSerializer(session)
+            return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
         
-        serializer = FocusBuddyAvailabilitySerializer(
-            availability, 
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class FocusBuddySessionDetailView(APIView):
+    """
+    GET: Get detailed information about a specific session
+    DELETE: End/cancel a session (only creator can do this)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, session_id):
+        """Get detailed session information"""
+        session = get_object_or_404(FocusBuddySession, id=session_id)
+        
+        # Check if session expired and update status
+        if session.is_expired and session.status == 'active':
+            session.end_session('expired')
+        
+        serializer = FocusBuddySessionDetailSerializer(session)
+        return Response(serializer.data)
+    
+    def delete(self, request, session_id):
+        """End or cancel a session (only creator)"""
+        session = get_object_or_404(FocusBuddySession, id=session_id)
+        
+        # Only creator can end the session
+        if session.creator != request.user:
+            return Response(
+                {'error': 'Only the session creator can end the session'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if session.status != 'active':
+            return Response(
+                {'error': 'Session is not active'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # End the session
+        reason = 'cancelled' if not session.is_expired else 'completed'
+        session.end_session(reason)
+        
+        # Create system message about session ending
+        FocusBuddyMessage.objects.create(
+            session=session,
+            sender=request.user,
+            message="Session ended by creator",
+            is_system_message=True
+        )
+        
+        return Response({'message': f'Session {reason} successfully'})
+
+
+
+class JoinSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, session_id):
+        print(f"DEBUG: Join request - User: {request.user.id}, Session: {session_id}")
+        print(f"DEBUG: Request data: {request.data}")
+        
+        try:
+            session = get_object_or_404(FocusBuddySession, id=session_id)
+            print(f"DEBUG: Session found - Status: {session.status}, Creator: {session.creator.id}")
+            
+            # Check if user is already in session
+            existing_participant = FocusBuddyParticipant.objects.filter(
+                session=session, 
+                user=request.user, 
+                left_at__isnull=True
+            ).first()
+            
+            if existing_participant:
+                print(f"DEBUG: User already in session as participant {existing_participant.id}")
+                return Response(
+                    {'error': 'You are already in this session'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user is the creator
+            if session.creator == request.user:
+                print("DEBUG: User is the session creator")
+                # Decide if creators can join as participants or handle differently
+                # Option 1: Allow creator to join as participant
+                # Option 2: Return session data without creating participant record
+                # Option 3: Return error explaining creators don't need to join
+                
+                # For now, let's try Option 3:
+                return Response(
+                    {'error': 'Session creators do not need to join - you are automatically the host'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check session capacity
+            current_participants = FocusBuddyParticipant.objects.filter(
+                session=session, 
+                left_at__isnull=True
+            ).count()
+            print(f"DEBUG: Current participants: {current_participants}/{session.max_participants}")
+            
+            if current_participants >= session.max_participants:
+                return Response(
+                    {'error': 'Session is full'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check session status
+            if session.status not in ['waiting', 'active']:
+                print(f"DEBUG: Session not joinable - status: {session.status}")
+                return Response(
+                    {'error': f'Cannot join session in {session.status} status'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Create participant
+            participant = FocusBuddyParticipant.objects.create(
+                session=session,
+                user=request.user,
+                camera_enabled=request.data.get('camera_enabled', True),
+                microphone_enabled=request.data.get('microphone_enabled', True)
+            )
+            print(f"DEBUG: Participant created successfully: {participant.id}")
+            
+            # Update session status if needed
+            if session.status == 'waiting':
+                session.status = 'active'
+                session.started_at = timezone.now()
+                session.save()
+                print("DEBUG: Session status updated to active")
+            
+            serializer = FocusBuddySessionSerializer(session)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            print(f"DEBUG: Exception in join session: {str(e)}")
+            print(f"DEBUG: Exception type: {type(e)}")
+            import traceback
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
+            return Response(
+                {'error': 'Internal server error'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class LeaveSessionView(APIView):
+    """
+    POST: Leave a focus buddy session
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, session_id):
+        """Leave a focus buddy session"""
+        session = get_object_or_404(FocusBuddySession, id=session_id)
+        
+        try:
+            participant = FocusBuddyParticipant.objects.get(
+                session=session, 
+                user=request.user, 
+                left_at__isnull=True
+            )
+        except FocusBuddyParticipant.DoesNotExist:
+            return Response(
+                {'error': 'You are not currently in this session'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        with transaction.atomic():
+            # Mark participant as left
+            participant.leave_session()
+            
+            # Create system message about user leaving
+            FocusBuddyMessage.objects.create(
+                session=session,
+                sender=request.user,
+                message=f"{request.user.name} left the session",
+                is_system_message=True
+            )
+            
+            # If creator left and there are other participants, 
+            # transfer ownership to the next participant
+            if session.creator == request.user:
+                remaining_participants = session.participants.filter(
+                    left_at__isnull=True
+                ).exclude(user=request.user).order_by('joined_at')
+                
+                if remaining_participants.exists():
+                    new_creator = remaining_participants.first().user
+                    session.creator = new_creator
+                    session.save()
+                    
+                    FocusBuddyMessage.objects.create(
+                        session=session,
+                        sender=new_creator,
+                        message=f"{new_creator.name} is now the session host",
+                        is_system_message=True
+                    )
+                else:
+                    # No participants left, end session
+                    session.end_session('completed')
+        
+        return Response({'message': 'Successfully left session'})
+
+
+class UpdateParticipantView(APIView):
+    """
+    PATCH: Update participant settings (camera/microphone)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def patch(self, request, session_id):
+        """Update participant camera/microphone settings"""
+        session = get_object_or_404(FocusBuddySession, id=session_id)
+        
+        try:
+            participant = FocusBuddyParticipant.objects.get(
+                session=session, 
+                user=request.user, 
+                left_at__isnull=True
+            )
+        except FocusBuddyParticipant.DoesNotExist:
+            return Response(
+                {'error': 'You are not currently in this session'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = UpdateParticipantSerializer(
+            participant, 
             data=request.data, 
             partial=True
         )
         
         if serializer.is_valid():
-            # Check if user is currently in an active session
-            active_session = FocusBuddySession.objects.filter(
-                Q(user1=request.user) | Q(user2=request.user),
-                status__in=['matching', 'matched', 'active']
-            ).first()
-            
-            if active_session and request.data.get('is_available', False):
-                return Response(
-                    {'error': 'Cannot become available while in an active session'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
             serializer.save()
             return Response(serializer.data)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class StartFocusSessionView(APIView):
+class SessionMessagesView(APIView):
     """
-    Start a new focus session and find a match
-    POST: Create session and match with available user
-    """
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        """Create a new focus session and find a match"""
-        serializer = FocusBuddySessionCreateSerializer(
-            data=request.data,
-            context={'request': request}
-        )
-        
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check if user is already in an active session
-        existing_session = FocusBuddySession.objects.filter(
-            Q(user1=request.user) | Q(user2=request.user),
-            status__in=['matching', 'matched', 'active']
-        ).first()
-        
-        if existing_session:
-            return Response(
-                {'error': 'You are already in an active session'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        with transaction.atomic():
-            # Create the session
-            session = serializer.save()
-            
-            # Set user as available
-            availability, created = FocusBuddyAvailability.objects.get_or_create(
-                user=request.user,
-                defaults={'duration_minutes': session.duration_minutes}
-            )
-            availability.is_available = True
-            availability.duration_minutes = session.duration_minutes
-            availability.save()
-            
-            # Try to find a match
-            match_found = self._find_match(session)
-            
-            if match_found:
-                response_serializer = FocusBuddySessionSerializer(session, context={'request': request})
-                return Response({
-                    'session': response_serializer.data,
-                    'match_found': True,
-                    'message': 'Match found! Waiting for acceptance.'
-                })
-            else:
-                response_serializer = FocusBuddySessionSerializer(session, context={'request': request})
-                return Response({
-                    'session': response_serializer.data,
-                    'match_found': False,
-                    'message': 'Searching for a study buddy...'
-                })
-    
-    def _find_match(self, session):
-        """Find and match with an available user"""
-        user = session.user1
-        
-        # Get user's subjects (assuming User has a subjects relationship)
-        if not hasattr(user, 'subjects'):
-            return False
-        
-        user_subjects = set(user.subjects.values_list('id', flat=True))
-        
-        if not user_subjects:
-            return False
-        
-        # Find available users with matching duration and common subjects
-        available_users = FocusBuddyAvailability.objects.filter(
-            is_available=True,
-            duration_minutes=session.duration_minutes
-        ).exclude(
-            user=user
-        ).select_related('user')
-        
-        # Filter users with common subjects
-        potential_matches = []
-        for availability in available_users:
-            if hasattr(availability.user, 'subjects'):
-                other_subjects = set(availability.user.subjects.values_list('id', flat=True))
-                common_subjects = user_subjects.intersection(other_subjects)
-                
-                if common_subjects:
-                    potential_matches.append({
-                        'availability': availability,
-                        'common_subjects': common_subjects,
-                        'common_count': len(common_subjects)
-                    })
-        
-        if not potential_matches:
-            return False
-        
-        # Sort by number of common subjects (descending) and randomly select from top matches
-        potential_matches.sort(key=lambda x: x['common_count'], reverse=True)
-        
-        # Select randomly from users with the highest common subject count
-        max_common = potential_matches[0]['common_count']
-        top_matches = [m for m in potential_matches if m['common_count'] == max_common]
-        selected_match = random.choice(top_matches)
-        
-        # Update session with match
-        session.user2 = selected_match['availability'].user
-        session.status = 'matched'
-        session.matched_at = timezone.now()
-        session.match_timeout_at = timezone.now() + timedelta(minutes=5)  # 5 min to accept
-        session.save()
-        
-        # Add common subjects to session
-        common_subject_ids = selected_match['common_subjects']
-        session.common_subjects.set(common_subject_ids)
-        
-        # Mark both users as unavailable for new matches
-        selected_match['availability'].is_available = False
-        selected_match['availability'].save()
-        
-        return True
-
-
-class FocusSessionMatchResponseView(APIView):
-    """
-    Handle match acceptance/decline
-    POST: Accept or decline a match
-    """
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        """Accept or decline a focus session match"""
-        serializer = FocusBuddyMatchSerializer(
-            data=request.data,
-            context={'request': request}
-        )
-        
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        session_id = serializer.validated_data['session_id']
-        action = serializer.validated_data['action']
-        
-        try:
-            session = FocusBuddySession.objects.get(id=session_id)
-        except FocusBuddySession.DoesNotExist:
-            return Response(
-                {'error': 'Session not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Check if match has timed out
-        if session.match_timeout_at and timezone.now() > session.match_timeout_at:
-            session.status = 'expired'
-            session.save()
-            return Response(
-                {'error': 'Match has expired'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        with transaction.atomic():
-            if action == 'accept':
-                # Both users need to accept
-                # For simplicity, we'll start the session immediately
-                # In a real app, you might want both users to explicitly accept
-                session.start_session()
-                
-                # Create initial system message
-                FocusBuddyMessage.objects.create(
-                    session=session,
-                    message=f"Focus session started! Duration: {session.duration_minutes} minutes. Good luck with your studies!",
-                    is_system_message=True
-                )
-                
-                # Update user stats
-                for user in [session.user1, session.user2]:
-                    stats, created = FocusBuddyStats.objects.get_or_create(user=user)
-                    if created:
-                        stats.update_stats(session)
-                
-                message = 'Session started successfully!'
-                
-            else:  # decline
-                session.end_session('cancelled')
-                
-                # Make both users available again
-                for user in [session.user1, session.user2]:
-                    if user:
-                        availability, created = FocusBuddyAvailability.objects.get_or_create(user=user)
-                        availability.is_available = True
-                        availability.save()
-                
-                message = 'Match declined. You are now available for new matches.'
-        
-        response_serializer = FocusBuddySessionSerializer(session, context={'request': request})
-        return Response({
-            'session': response_serializer.data,
-            'message': message
-        })
-
-
-class CurrentFocusSessionView(APIView):
-    """
-    Get current active focus session
-    GET: Retrieve current session details
-    """
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        """Get user's current active session"""
-        session = FocusBuddySession.objects.filter(
-            Q(user1=request.user) | Q(user2=request.user),
-            status__in=['matching', 'matched', 'active']
-        ).select_related('user1', 'user2').prefetch_related(
-            'common_subjects', 'messages', 'feedback'
-        ).first()
-        
-        if not session:
-            return Response(
-                {'message': 'No active session found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Check if session has expired
-        if session.is_expired and session.status == 'active':
-            session.end_session('expired')
-        
-        serializer = FocusBuddySessionDetailSerializer(session, context={'request': request})
-        return Response(serializer.data)
-
-
-class EndFocusSessionView(APIView):
-    """
-    End current focus session
-    POST: End the active session
-    """
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        """End the current focus session"""
-        session = FocusBuddySession.objects.filter(
-            Q(user1=request.user) | Q(user2=request.user),
-            status='active'
-        ).first()
-        
-        if not session:
-            return Response(
-                {'error': 'No active session found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        with transaction.atomic():
-            session.end_session('completed')
-            
-            # Create completion message
-            FocusBuddyMessage.objects.create(
-                session=session,
-                message="Focus session completed! Great job studying together!",
-                is_system_message=True
-            )
-            
-            # Update stats for both users
-            for user in [session.user1, session.user2]:
-                if user:
-                    stats, created = FocusBuddyStats.objects.get_or_create(user=user)
-                    stats.update_stats(session)
-        
-        serializer = FocusBuddySessionSerializer(session, context={'request': request})
-        return Response({
-            'session': serializer.data,
-            'message': 'Session ended successfully!'
-        })
-
-
-class FocusSessionMessagesView(APIView):
-    """
-    Handle chat messages in focus sessions
-    GET: Get messages for a session
-    POST: Send a new message
+    GET: Get chat messages for a session
+    POST: Send a chat message to a session
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request, session_id):
-        """Get messages for a specific session"""
-        try:
-            session = FocusBuddySession.objects.get(
-                id=session_id,
-                status__in=['matched', 'active', 'completed']
-            )
-        except FocusBuddySession.DoesNotExist:
-            return Response(
-                {'error': 'Session not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        """Get chat messages for a session"""
+        session = get_object_or_404(FocusBuddySession, id=session_id)
         
-        # Check if user is part of the session
-        if request.user not in [session.user1, session.user2]:
+        # Check if user is participant in session
+        if not session.participants.filter(user=request.user, left_at__isnull=True).exists():
             return Response(
-                {'error': 'You are not part of this session'},
+                {'error': 'You must be a participant to view messages'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        messages = session.messages.all()
+        messages = session.messages.all().order_by('-created_at')[:50]  # Last 50 messages
         serializer = FocusBuddyMessageSerializer(messages, many=True)
-        return Response(serializer.data)
+        
+        return Response({
+            'messages': serializer.data[::-1],  # Reverse to show oldest first
+            'total_messages': session.messages.count()
+        })
     
     def post(self, request, session_id):
-        """Send a message in the session"""
-        try:
-            session = FocusBuddySession.objects.get(
-                id=session_id,
-                status__in=['matched', 'active']
-            )
-        except FocusBuddySession.DoesNotExist:
-            return Response(
-                {'error': 'Session not found or not active'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        """Send a chat message to a session"""
+        session = get_object_or_404(FocusBuddySession, id=session_id)
         
-        # Check if user is part of the session
-        if request.user not in [session.user1, session.user2]:
+        # Check if user is participant in session
+        if not session.participants.filter(user=request.user, left_at__isnull=True).exists():
             return Response(
-                {'error': 'You are not part of this session'},
+                {'error': 'You must be a participant to send messages'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        data = request.data.copy()
-        data['session'] = session_id
+        # Check if session is still active
+        if session.status != 'active' or session.is_expired:
+            return Response(
+                {'error': 'Cannot send messages to inactive sessions'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         serializer = FocusBuddyMessageSerializer(
-            data=data,
-            context={'request': request}
+            data=request.data, 
+            context={'request': request, 'session': session}
         )
         
         if serializer.is_valid():
-            serializer.save()
+            message = serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class FocusSessionFeedbackView(APIView):
+class SessionFeedbackView(APIView):
     """
-    Handle session feedback
     POST: Submit feedback for a completed session
+    GET: Get feedback for a session (session creator only)
     """
     permission_classes = [IsAuthenticated]
     
-    def post(self, request):
-        """Submit feedback for a completed session"""
-        serializer = FocusBuddyFeedbackSerializer(
-            data=request.data,
-            context={'request': request}
-        )
+    def post(self, request, session_id):
+        """Submit feedback for a session"""
+        session = get_object_or_404(FocusBuddySession, id=session_id)
         
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        session_id = request.data.get('session')
+        # Check if user participated in the session
         try:
-            session = FocusBuddySession.objects.get(
-                id=session_id,
-                status='completed'
+            participant = FocusBuddyParticipant.objects.get(
+                session=session, 
+                user=request.user
             )
-        except FocusBuddySession.DoesNotExist:
+        except FocusBuddyParticipant.DoesNotExist:
             return Response(
-                {'error': 'Completed session not found'},
-                status=status.HTTP_404_NOT_FOUND
+                {'error': 'You must have participated in this session to give feedback'}, 
+                status=status.HTTP_403_FORBIDDEN
             )
         
-        # Check if user already provided feedback
-        existing_feedback = FocusBuddyFeedback.objects.filter(
-            session=session,
-            reviewer=request.user
-        ).first()
-        
-        if existing_feedback:
+        # Check if session is completed
+        if session.status not in ['completed', 'expired']:
             return Response(
-                {'error': 'You have already provided feedback for this session'},
+                {'error': 'Can only give feedback for completed sessions'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        with transaction.atomic():
+        # Check if feedback already exists
+        if FocusBuddyFeedback.objects.filter(session=session, participant=participant).exists():
+            return Response(
+                {'error': 'You have already submitted feedback for this session'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = FocusBuddyFeedbackSerializer(
+            data=request.data, 
+            context={'participant': participant}
+        )
+        
+        if serializer.is_valid():
             feedback = serializer.save()
             
-            # Update the reviewed user's stats
-            reviewed_user = feedback.reviewed_user
-            stats, created = FocusBuddyStats.objects.get_or_create(user=reviewed_user)
-            stats.update_stats(session, feedback.rating)
+            # Update user stats if needed
+            if hasattr(request.user, 'focus_stats'):
+                request.user.focus_stats.update_stats_after_session(
+                    participant, 
+                    feedback.session_rating
+                )
+            
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def get(self, request, session_id):
+        """Get feedback for a session (creator only)"""
+        session = get_object_or_404(FocusBuddySession, id=session_id)
+        
+        # Only session creator can view feedback
+        if session.creator != request.user:
+            return Response(
+                {'error': 'Only session creator can view feedback'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        feedback = session.feedback.all()
+        serializer = FocusBuddyFeedbackSerializer(feedback, many=True)
+        
+        return Response({
+            'feedback': serializer.data,
+            'total_feedback': feedback.count(),
+            'average_rating': feedback.aggregate(
+                avg_rating=models.Avg('session_rating')
+            )['avg_rating'] or 0
+        })
 
 
-class FocusBuddyStatsView(APIView):
+class SessionStatsView(APIView):
     """
-    Get user's focus buddy statistics
-    GET: Retrieve current user's stats
+    GET: Get general statistics about focus buddy sessions
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Get user's focus buddy statistics"""
-        stats, created = FocusBuddyStats.objects.get_or_create(user=request.user)
-        serializer = FocusBuddyStatsSerializer(stats)
+        """Get general session statistics"""
+        # Active sessions count
+        active_sessions = FocusBuddySession.objects.filter(status='active')
+        
+        # Clean up expired sessions
+        for session in active_sessions:
+            if session.is_expired:
+                session.end_session('expired')
+        
+        # Refresh active sessions after cleanup
+        active_sessions = FocusBuddySession.objects.filter(status='active')
+        
+        # Total participants currently online
+        total_participants = FocusBuddyParticipant.objects.filter(
+            session__status='active',
+            left_at__isnull=True
+        ).count()
+        
+        # Sessions by duration
+        sessions_by_duration = dict(
+            active_sessions.values('duration_minutes').annotate(
+                count=Count('id')
+            ).values_list('duration_minutes', 'count')
+        )
+        
+        # Sessions by type
+        sessions_by_type = dict(
+            active_sessions.values('session_type').annotate(
+                count=Count('id')
+            ).values_list('session_type', 'count')
+        )
+        
+        stats_data = {
+            'total_active_sessions': active_sessions.count(),
+            'total_participants_online': total_participants,
+            'sessions_by_duration': sessions_by_duration,
+            'sessions_by_type': sessions_by_type
+        }
+        
+        serializer = SessionStatsSerializer(stats_data)
         return Response(serializer.data)
 
-
-class FocusSessionHistoryView(APIView):
+class WebRTCConfigView(APIView):
     """
-    Get user's session history
-    GET: Retrieve user's past sessions
+    API view to provide WebRTC configuration including ICE servers
     """
     permission_classes = [IsAuthenticated]
+    
+    def get_ice_servers(self):
+        """Get ICE servers configuration with free services"""
+        # Default STUN servers (public and free)
+        default_stun_servers = [
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302',
+            'stun:stun2.l.google.com:19302',
+        ]
+        
+        # FREE TURN/STUN servers - No signup required!
+        free_turn_servers = [
+            # Open Relay Project - Free TURN servers
+            {
+                'urls': 'turn:openrelay.metered.ca:80',
+                'username': 'openrelayproject',
+                'credential': 'openrelayproject'
+            },
+            {
+                'urls': 'turn:openrelay.metered.ca:443',
+                'username': 'openrelayproject',
+                'credential': 'openrelayproject'
+            },
+            {
+                'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
+                'username': 'openrelayproject',
+                'credential': 'openrelayproject'
+            },
+            
+            # Additional free TURN servers
+            {
+                'urls': 'turn:relay.backups.cz',
+                'username': 'webrtc',
+                'credential': 'webrtc'
+            },
+            {
+                'urls': 'turn:relay.backups.cz?transport=tcp',
+                'username': 'webrtc',
+                'credential': 'webrtc'
+            }
+        ]
+        
+        ice_servers = []
+        
+        # Add free STUN servers (always include these)
+        for stun_url in default_stun_servers:
+            ice_servers.append({'urls': stun_url})
+        
+        # Add free TURN servers
+        ice_servers.extend(free_turn_servers)
+        
+        # Check if custom ICE servers are configured in settings
+        if hasattr(settings, 'WEBRTC_CONFIG') and 'ICE_SERVERS' in settings.WEBRTC_CONFIG:
+            ice_servers.extend(settings.WEBRTC_CONFIG['ICE_SERVERS'])
+        
+        return ice_servers
     
     def get(self, request):
-        """Get user's session history"""
-        sessions = FocusBuddySession.objects.filter(
-            Q(user1=request.user) | Q(user2=request.user)
-        ).select_related('user1', 'user2').order_by('-created_at')
+        """Get WebRTC configuration including ICE servers"""
+        config = {
+            'iceServers': self.get_ice_servers(),
+            'iceTransportPolicy': 'all',  # Use both STUN and TURN
+            'iceCandidatePoolSize': 10,  
+        }
         
-        # Optional filtering
-        status_filter = request.query_params.get('status')
-        if status_filter:
-            sessions = sessions.filter(status=status_filter)
+        # Add additional config from settings if available
+        if hasattr(settings, 'WEBRTC_CONFIG'):
+            webrtc_settings = settings.WEBRTC_CONFIG
+            config.update({
+                'maxParticipants': webrtc_settings.get('MAX_PARTICIPANTS', 8),
+                'sessionDurations': webrtc_settings.get('SESSION_DURATIONS', [15, 25, 50]),
+                'enableChat': webrtc_settings.get('ENABLE_CHAT', True),
+            })
         
-        # Pagination
-        limit = int(request.query_params.get('limit', 20))
-        offset = int(request.query_params.get('offset', 0))
-        
-        total_count = sessions.count()
-        sessions = sessions[offset:offset + limit]
-        
-        serializer = SessionHistorySerializer(
-            sessions, 
-            many=True, 
-            context={'request': request}
-        )
-        
-        return Response({
-            'count': total_count,
-            'results': serializer.data
-        })
-
-
-class AvailableUsersView(APIView):
-    """
-    Get list of available users for matching
-    GET: Retrieve currently available users
-    """
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        """Get list of available users"""
-        duration = request.query_params.get('duration', 25)
-        
-        try:
-            duration = int(duration)
-        except ValueError:
-            duration = 25
-        
-        available_users = FocusBuddyAvailability.objects.filter(
-            is_available=True,
-            duration_minutes=duration
-        ).exclude(
-            user=request.user
-        ).select_related('user')
-        
-        # Filter out expired availabilities
-        valid_users = []
-        for availability in available_users:
-            if not availability.is_expired:
-                valid_users.append(availability)
-        
-        serializer = AvailableUsersSerializer(
-            valid_users, 
-            many=True, 
-            context={'request': request}
-        )
-        
-        return Response({
-            'count': len(valid_users),
-            'users': serializer.data
-        })
-
-
-class CancelFocusSessionView(APIView):
-    """
-    Cancel a focus session
-    POST: Cancel current session
-    """
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        """Cancel the current focus session"""
-        session = FocusBuddySession.objects.filter(
-            Q(user1=request.user) | Q(user2=request.user),
-            status__in=['matching', 'matched', 'active']
-        ).first()
-        
-        if not session:
-            return Response(
-                {'error': 'No active session found to cancel'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        with transaction.atomic():
-            session.end_session('cancelled')
-            
-            # Make both users available again if they want to be
-            for user in [session.user1, session.user2]:
-                if user:
-                    availability, created = FocusBuddyAvailability.objects.get_or_create(user=user)
-                    # Don't automatically make them available - let them choose
-                    availability.is_available = False
-                    availability.save()
-            
-            # Create cancellation message
-            FocusBuddyMessage.objects.create(
-                session=session,
-                message=f"Session cancelled by {request.user.name}",
-                is_system_message=True
-            )
-        
-        serializer = FocusBuddySessionSerializer(session, context={'request': request})
-        return Response({
-            'session': serializer.data,
-            'message': 'Session cancelled successfully'
-        })
+        return Response(config, status=status.HTTP_200_OK)

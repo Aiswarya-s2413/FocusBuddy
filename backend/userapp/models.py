@@ -7,6 +7,7 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 
 
+
 class Subject(models.Model):
     name = models.CharField(max_length=100)
 
@@ -486,45 +487,15 @@ class MentorEarnings(models.Model):
 
 
 
-class FocusBuddyAvailability(models.Model):
-    """Model to track user's availability for focus buddy sessions"""
+class FocusBuddySession(models.Model):
+    """Model for group focus buddy sessions that users can create and join"""
     DURATION_CHOICES = [
         (15, '15 minutes'),
         (25, '25 minutes'),
         (50, '50 minutes'),
     ]
     
-    user = models.OneToOneField('User', on_delete=models.CASCADE, related_name='focus_availability')
-    is_available = models.BooleanField(default=False)
-    duration_minutes = models.IntegerField(choices=DURATION_CHOICES, default=25)
-    available_until = models.DateTimeField(null=True, blank=True)  # Auto-calculated based on duration
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return f"{self.user.name} - {'Available' if self.is_available else 'Not Available'}"
-    
-    def save(self, *args, **kwargs):
-        # Set available_until when marking as available
-        if self.is_available and not self.available_until:
-            self.available_until = timezone.now() + timedelta(minutes=self.duration_minutes)
-        elif not self.is_available:
-            self.available_until = None
-        super().save(*args, **kwargs)
-    
-    @property
-    def is_expired(self):
-        """Check if availability has expired"""
-        if not self.is_available or not self.available_until:
-            return False
-        return timezone.now() > self.available_until
-
-
-class FocusBuddySession(models.Model):
-    """Model for focus buddy sessions between two users"""
     SESSION_STATUS_CHOICES = [
-        ('matching', 'Finding Match'),
-        ('matched', 'Match Found'),
         ('active', 'Active Session'),
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
@@ -532,30 +503,25 @@ class FocusBuddySession(models.Model):
     ]
     
     SESSION_TYPE_CHOICES = [
-        ('video', 'Video Call'),
-        ('chat', 'Chat Only'),
+        ('study', 'Study'),
+        ('work', 'Work'),
+        ('reading', 'Reading'),
     ]
     
-    # Session participants
-    user1 = models.ForeignKey('User', on_delete=models.CASCADE, related_name='focus_sessions_as_user1')
-    user2 = models.ForeignKey('User', on_delete=models.CASCADE, related_name='focus_sessions_as_user2', null=True, blank=True)
+    # Session creator
+    creator = models.ForeignKey('User', on_delete=models.CASCADE, related_name='created_focus_sessions')
     
     # Session details
+    title = models.CharField(max_length=200, blank=True, null=True)  # Optional session title
     session_type = models.CharField(max_length=10, choices=SESSION_TYPE_CHOICES, default='video')
-    status = models.CharField(max_length=15, choices=SESSION_STATUS_CHOICES, default='matching')
-    duration_minutes = models.IntegerField()
-    
-    # Common subjects (populated when match is found)
-    common_subjects = models.ManyToManyField('Subject', blank=True)
+    status = models.CharField(max_length=15, choices=SESSION_STATUS_CHOICES, default='active')
+    duration_minutes = models.IntegerField(choices=DURATION_CHOICES, default=25)
+    max_participants = models.IntegerField(default=10)  # Maximum number of participants
     
     # Session timing
-    started_at = models.DateTimeField(null=True, blank=True)
-    ended_at = models.DateTimeField(null=True, blank=True)
-    expires_at = models.DateTimeField(null=True, blank=True)  # When session should auto-end
-    
-    # Match details
-    matched_at = models.DateTimeField(null=True, blank=True)
-    match_timeout_at = models.DateTimeField(null=True, blank=True)  # Timeout for accepting match
+    started_at = models.DateTimeField(auto_now_add=True)  # Session starts when created
+    ends_at = models.DateTimeField()  # When session will auto-end
+    ended_at = models.DateTimeField(null=True, blank=True)  # Actual end time
     
     # Session metadata
     created_at = models.DateTimeField(auto_now_add=True)
@@ -565,45 +531,44 @@ class FocusBuddySession(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        if self.user2:
-            return f"Focus Session: {self.user1.name} & {self.user2.name} ({self.status})"
-        return f"Focus Session: {self.user1.name} (searching)"
+        title = self.title or f"{self.duration_minutes}min Focus Session"
+        return f"{title} by {self.creator.name} ({self.status})"
     
     def save(self, *args, **kwargs):
-        # Set expires_at when session becomes active
-        if self.status == 'active' and not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=self.duration_minutes)
+        # Set ends_at when session is created
+        if not self.ends_at:
+            self.ends_at = self.started_at + timedelta(minutes=self.duration_minutes)
         super().save(*args, **kwargs)
     
     @property
     def is_expired(self):
         """Check if session has expired"""
-        if not self.expires_at:
-            return False
-        return timezone.now() > self.expires_at
+        return timezone.now() > self.ends_at
     
     @property
     def remaining_time_seconds(self):
         """Get remaining time in seconds"""
-        if not self.expires_at or self.status != 'active':
+        if self.status != 'active':
             return 0
-        remaining = (self.expires_at - timezone.now()).total_seconds()
+        remaining = (self.ends_at - timezone.now()).total_seconds()
         return max(0, int(remaining))
     
-    def get_other_user(self, current_user):
-        """Get the other participant in the session"""
-        if current_user == self.user1:
-            return self.user2
-        elif current_user == self.user2:
-            return self.user1
-        return None
+    @property
+    def participant_count(self):
+        """Get current number of participants"""
+        return self.participants.filter(left_at__isnull=True).count()
     
-    def start_session(self):
-        """Start the focus session"""
-        self.status = 'active'
-        self.started_at = timezone.now()
-        self.expires_at = timezone.now() + timedelta(minutes=self.duration_minutes)
-        self.save()
+    @property
+    def is_full(self):
+        """Check if session is at maximum capacity"""
+        return self.participant_count >= self.max_participants
+    
+    @property
+    def can_join(self):
+        """Check if new users can join this session"""
+        return (self.status == 'active' and 
+                not self.is_expired and 
+                not self.is_full)
     
     def end_session(self, reason='completed'):
         """End the focus session"""
@@ -611,13 +576,51 @@ class FocusBuddySession(models.Model):
         self.ended_at = timezone.now()
         self.save()
         
-        # Mark both users as unavailable
-        if self.user1.focus_availability:
-            self.user1.focus_availability.is_available = False
-            self.user1.focus_availability.save()
-        if self.user2 and self.user2.focus_availability:
-            self.user2.focus_availability.is_available = False
-            self.user2.focus_availability.save()
+        # Mark all active participants as left
+        active_participants = self.participants.filter(left_at__isnull=True)
+        for participant in active_participants:
+            participant.left_at = timezone.now()
+            participant.save()
+
+
+class FocusBuddyParticipant(models.Model):
+    """Model to track participants in focus buddy sessions"""
+    session = models.ForeignKey(FocusBuddySession, on_delete=models.CASCADE, related_name='participants')
+    user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='focus_participations')
+    
+    # Participation timing
+    joined_at = models.DateTimeField(auto_now_add=True)
+    left_at = models.DateTimeField(null=True, blank=True)
+    
+    # Participation preferences
+    camera_enabled = models.BooleanField(default=True)
+    microphone_enabled = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['joined_at']
+        unique_together = ['session', 'user']  
+    
+    def __str__(self):
+        status = "Active" if not self.left_at else "Left"
+        return f"{self.user.name} in {self.session} ({status})"
+    
+    @property
+    def is_active(self):
+        """Check if participant is currently active in the session"""
+        return self.left_at is None
+    
+    @property
+    def participation_duration_minutes(self):
+        """Calculate how long the user has been/was in the session"""
+        end_time = self.left_at or timezone.now()
+        duration = (end_time - self.joined_at).total_seconds() / 60
+        return max(0, int(duration))
+    
+    def leave_session(self):
+        """Mark participant as having left the session"""
+        if not self.left_at:
+            self.left_at = timezone.now()
+            self.save()
 
 
 class FocusBuddyMessage(models.Model):
@@ -647,37 +650,53 @@ class FocusBuddyFeedback(models.Model):
     ]
     
     session = models.ForeignKey(FocusBuddySession, on_delete=models.CASCADE, related_name='feedback')
-    reviewer = models.ForeignKey('User', on_delete=models.CASCADE, related_name='focus_feedback_given')
-    reviewed_user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='focus_feedback_received')
+    participant = models.ForeignKey(FocusBuddyParticipant, on_delete=models.CASCADE, related_name='feedback_given')
     
-    rating = models.IntegerField(choices=RATING_CHOICES)
+    # Overall session rating
+    session_rating = models.IntegerField(choices=RATING_CHOICES)
     feedback_text = models.TextField(blank=True, null=True)
-    would_study_again = models.BooleanField(default=True)
+    would_join_again = models.BooleanField(default=True)
+    
+    # Session quality aspects
+    session_helpful = models.BooleanField(default=True)
+    good_environment = models.BooleanField(default=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         ordering = ['-created_at']
-        unique_together = ['session', 'reviewer']  # One feedback per user per session
+        unique_together = ['session', 'participant']  # One feedback per participant per session
     
     def __str__(self):
-        return f"Feedback by {self.reviewer.name} for {self.reviewed_user.name} - {self.rating}/5"
+        return f"Feedback by {self.participant.user.name} for session {self.session.id} - {self.session_rating}/5"
 
 
 class FocusBuddyStats(models.Model):
     """Model to track user's focus buddy statistics"""
     user = models.OneToOneField('User', on_delete=models.CASCADE, related_name='focus_stats')
     
-    total_sessions = models.IntegerField(default=0)
+    # Session statistics
+    total_sessions_joined = models.IntegerField(default=0)
+    total_sessions_created = models.IntegerField(default=0)
     completed_sessions = models.IntegerField(default=0)
     total_focus_minutes = models.IntegerField(default=0)
-    average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
-    total_ratings_received = models.IntegerField(default=0)
+    
+    # Rating statistics
+    average_session_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
+    total_ratings_given = models.IntegerField(default=0)
     
     # Streak tracking
-    current_streak = models.IntegerField(default=0)
+    current_streak = models.IntegerField(default=0)  # Days with at least one session
     longest_streak = models.IntegerField(default=0)
     last_session_date = models.DateField(null=True, blank=True)
+    
+    # Participation preferences
+    preferred_duration = models.IntegerField(choices=FocusBuddySession.DURATION_CHOICES, default=25)
+    preferred_session_type = models.CharField(
+        max_length=10, 
+        choices=FocusBuddySession.SESSION_TYPE_CHOICES, 
+        default='video'
+    )
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -685,13 +704,18 @@ class FocusBuddyStats(models.Model):
     def __str__(self):
         return f"Focus Stats for {self.user.name}"
     
-    def update_stats(self, session, rating=None):
-        """Update statistics after a session"""
-        self.total_sessions += 1
+    def update_stats_after_session(self, participant, session_rating=None):
+        """Update statistics after a session participation"""
+        self.total_sessions_joined += 1
         
-        if session.status == 'completed':
+        # Check if user created this session
+        if participant.session.creator == self.user:
+            self.total_sessions_created += 1
+        
+        # Update completed sessions and focus time
+        if participant.session.status == 'completed':
             self.completed_sessions += 1
-            self.total_focus_minutes += session.duration_minutes
+            self.total_focus_minutes += participant.participation_duration_minutes
             
             # Update streak
             today = timezone.now().date()
@@ -701,6 +725,7 @@ class FocusBuddyStats(models.Model):
                     self.current_streak += 1
                 elif days_diff > 1:  # Streak broken
                     self.current_streak = 1
+                # If same day, don't change streak
             else:
                 self.current_streak = 1
             
@@ -708,9 +733,23 @@ class FocusBuddyStats(models.Model):
             self.last_session_date = today
         
         # Update rating if provided
-        if rating:
-            total_rating_points = (self.average_rating * self.total_ratings_received) + rating
-            self.total_ratings_received += 1
-            self.average_rating = total_rating_points / self.total_ratings_received
+        if session_rating:
+            total_rating_points = (self.average_session_rating * self.total_ratings_given) + session_rating
+            self.total_ratings_given += 1
+            self.average_session_rating = total_rating_points / self.total_ratings_given
         
         self.save()
+    
+    @property
+    def completion_rate(self):
+        """Calculate session completion rate as percentage"""
+        if self.total_sessions_joined == 0:
+            return 0
+        return (self.completed_sessions / self.total_sessions_joined) * 100
+    
+    @property 
+    def average_session_duration(self):
+        """Calculate average session duration in minutes"""
+        if self.completed_sessions == 0:
+            return 0
+        return self.total_focus_minutes / self.completed_sessions

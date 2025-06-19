@@ -73,6 +73,8 @@ INSTALLED_APPS = [
     'focusmentorapp',
     'cloudinary',
     'cloudinary_storage',
+    'channels',
+    
 ]
 
 MIDDLEWARE = [
@@ -105,6 +107,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
+ASGI_APPLICATION = 'backend.asgi.application'
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -120,6 +124,11 @@ DATABASES = {
     }
 }
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -172,6 +181,10 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173"
 ]
+
+CORS_ALLOW_ALL_ORIGINS = True  # For development only
+CORS_ALLOWED_ORIGINS.append("ws://localhost:5173")
+CORS_ALLOWED_ORIGINS.append("wss://localhost:5173")
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -234,4 +247,22 @@ cloudinary.config(
 
 RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET')
+
+WEBRTC_CONFIG = {
+    'SESSION_DURATIONS': [
+        15,  # 15 minutes
+        25,  # 25 minutes
+        50   # 50 minutes
+    ],
+    'MAX_PARTICIPANTS': 8,  # Maximum participants per session
+    'ENABLE_CHAT': True,    # Enable chat alongside video
+    'ICE_SERVERS': [
+        {
+            'urls': [
+                'stun:stun.l.google.com:19302',
+                'stun:stun1.l.google.com:19302',
+            ]
+        }
+    ]
+}
 
