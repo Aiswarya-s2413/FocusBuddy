@@ -1252,20 +1252,30 @@ class FocusBuddySessionListView(APIView):
         )
         if serializer.is_valid():
             session = serializer.save()
-            
-            # Create welcome system message
+
+            print("Adding creator as a participant")
+            FocusBuddyParticipant.objects.create(
+                session=session,
+                user=request.user,
+                camera_enabled=True,        
+                microphone_enabled=True      
+            )
+            print("Creator added as participant successfully")
+
+            #  Create a welcome system message
             FocusBuddyMessage.objects.create(
                 session=session,
                 sender=request.user,
                 message=f"Welcome to the {session.duration_minutes}-minute focus session!",
                 is_system_message=True
             )
-            
-            # Return detailed session info
+
+            # Return full session info
             detail_serializer = FocusBuddySessionDetailSerializer(session)
             return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class FocusBuddySessionDetailView(APIView):
     """
@@ -1290,7 +1300,7 @@ class FocusBuddySessionDetailView(APIView):
         session = get_object_or_404(FocusBuddySession, id=session_id)
         
         # Only creator can end the session
-        if session.creator != request.user:
+        if session.creator_id != request.user:
             return Response(
                 {'error': 'Only the session creator can end the session'}, 
                 status=status.HTTP_403_FORBIDDEN
@@ -1328,10 +1338,10 @@ class JoinSessionView(APIView):
         
         try:
             session = get_object_or_404(FocusBuddySession, id=session_id)
-            print(f"DEBUG: Session found - Status: {session.status}, Creator: {session.creator.id}")
+            print(f"DEBUG: Session found - Status: {session.status}, Creator: {session.creator_id.id}")
             
             # Check if user is the creator
-            if session.creator == request.user:
+            if session.creator_id == request.user:
                 print("DEBUG: User is the session creator")
                 return Response(
                     {'error': 'Session creators do not need to join - you are automatically the host'}, 
@@ -1410,63 +1420,74 @@ class JoinSessionView(APIView):
 
 
 class LeaveSessionView(APIView):
-    """
-    POST: Leave a focus buddy session
-    """
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request, session_id):
-        """Leave a focus buddy session"""
         session = get_object_or_404(FocusBuddySession, id=session_id)
-        
+        user = request.user
+
+        # ✅ If creator leaves → end session directly
+        if session.creator_id == user.id:
+            print("DEBUG: Creator is leaving — ending session.")
+
+            try:
+                participant = FocusBuddyParticipant.objects.get(
+                    session=session,
+                    user=user,
+                    left_at__isnull=True
+                )
+            except FocusBuddyParticipant.DoesNotExist:
+                return Response(
+                    {"error": "Creator is not in the participant list"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            with transaction.atomic():
+                # Mark creator as left
+                participant.leave_session()
+
+                # End session regardless of other participants
+                session.end_session('completed')
+
+                FocusBuddyMessage.objects.create(
+                    session=session,
+                    sender=user,
+                    message=f"{user.name} (creator) ended the session by leaving",
+                    is_system_message=True
+                )
+
+            return Response(
+                {"message": "Session ended because the creator left"},
+                status=200
+            )
+
+        #  Normal participant leaves
         try:
             participant = FocusBuddyParticipant.objects.get(
-                session=session, 
-                user=request.user, 
+                session=session,
+                user=user,
                 left_at__isnull=True
             )
         except FocusBuddyParticipant.DoesNotExist:
             return Response(
-                {'error': 'You are not currently in this session'}, 
+                {"error": "You are not currently in this session"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         with transaction.atomic():
-            # Mark participant as left
             participant.leave_session()
-            
-            # Create system message about user leaving
+
             FocusBuddyMessage.objects.create(
                 session=session,
-                sender=request.user,
-                message=f"{request.user.name} left the session",
+                sender=user,
+                message=f"{user.name} left the session",
                 is_system_message=True
             )
-            
-            # If creator left and there are other participants, 
-            # transfer ownership to the next participant
-            if session.creator == request.user:
-                remaining_participants = session.participants.filter(
-                    left_at__isnull=True
-                ).exclude(user=request.user).order_by('joined_at')
-                
-                if remaining_participants.exists():
-                    new_creator = remaining_participants.first().user
-                    session.creator = new_creator
-                    session.save()
-                    
-                    FocusBuddyMessage.objects.create(
-                        session=session,
-                        sender=new_creator,
-                        message=f"{new_creator.name} is now the session host",
-                        is_system_message=True
-                    )
-                else:
-                    # No participants left, end session
-                    session.end_session('completed')
-        
-        return Response({'message': 'Successfully left session'})
 
+        return Response(
+            {"message": "Successfully left session"},
+            status=200
+        )
 
 class UpdateParticipantView(APIView):
     """
@@ -1620,7 +1641,7 @@ class SessionFeedbackView(APIView):
         session = get_object_or_404(FocusBuddySession, id=session_id)
         
         # Only session creator can view feedback
-        if session.creator != request.user:
+        if session.creator_id != request.user:
             return Response(
                 {'error': 'Only session creator can view feedback'}, 
                 status=status.HTTP_403_FORBIDDEN

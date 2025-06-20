@@ -594,7 +594,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
 
 class FocusBuddySessionListSerializer(serializers.ModelSerializer):
     """Serializer for listing active sessions that users can join"""
-    creator_name = serializers.CharField(source='creator.name', read_only=True)
+    creator_name = serializers.CharField(source='creator_id.name', read_only=True)
     participant_count = serializers.IntegerField(source='annotated_participant_count', read_only=True)
     remaining_time_seconds = serializers.IntegerField(read_only=True)
     can_join = serializers.BooleanField(read_only=True)
@@ -612,8 +612,8 @@ class FocusBuddySessionListSerializer(serializers.ModelSerializer):
 
 class FocusBuddySessionDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for individual session with participants"""
-    creator_name = serializers.CharField(source='creator.name', read_only=True)
-    creator_id = serializers.IntegerField(source='creator.id', read_only=True)
+    creator_name = serializers.CharField(source='creator_id.name', read_only=True)
+    creator_id = serializers.IntegerField(source='creator_id.id', read_only=True)
     participants = ParticipantSerializer(many=True, read_only=True)
     participant_count = serializers.IntegerField(read_only=True)
     remaining_time_seconds = serializers.IntegerField(read_only=True)
@@ -634,38 +634,41 @@ class FocusBuddySessionDetailSerializer(serializers.ModelSerializer):
 
 class FocusBuddySessionCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating new focus buddy sessions"""
-    
+
     class Meta:
         model = FocusBuddySession
         fields = [
             'title', 'session_type', 'duration_minutes', 'max_participants'
         ]
-        
+
     def validate_duration_minutes(self, value):
-        """Validate duration is one of the allowed choices"""
         allowed_durations = [choice[0] for choice in FocusBuddySession.DURATION_CHOICES]
         if value not in allowed_durations:
             raise serializers.ValidationError(
                 f"Duration must be one of: {allowed_durations}"
             )
         return value
-    
+
     def validate_max_participants(self, value):
-        """Validate max participants is reasonable"""
         if value < 2:
             raise serializers.ValidationError("Session must allow at least 2 participants")
         if value > 50:
             raise serializers.ValidationError("Maximum 50 participants allowed")
         return value
-    
+
     def create(self, validated_data):
-        """Create session with auto-calculated end time"""
-        validated_data['creator'] = self.context['request'].user
+        print("DEBUG: Serializer create() called")
+        print("DEBUG: Validated data:", validated_data)
+
+        validated_data['creator_id'] = self.context['request'].user
         validated_data['started_at'] = timezone.now()
         validated_data['ends_at'] = timezone.now() + timedelta(
             minutes=validated_data['duration_minutes']
         )
-        return super().create(validated_data)
+        session = super().create(validated_data)
+
+        print(f"DEBUG: FocusBuddySession created with ID {session.id}")
+        return session
 
 
 class JoinSessionSerializer(serializers.Serializer):

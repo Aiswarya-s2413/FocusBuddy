@@ -509,7 +509,7 @@ class FocusBuddySession(models.Model):
     ]
     
     # Session creator
-    creator = models.ForeignKey('User', on_delete=models.CASCADE, related_name='created_focus_sessions')
+    creator_id = models.ForeignKey('User', on_delete=models.CASCADE, related_name='created_focus_sessions')
     
     # Session details
     title = models.CharField(max_length=200, blank=True, null=True)  # Optional session title
