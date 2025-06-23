@@ -159,11 +159,11 @@ class LoginView(APIView):
             response = Response({"message": "Login successful", "user": data["user"]}, status=status.HTTP_200_OK)
             # Set JWT tokens in HttpOnly cookies
             response.set_cookie(
-                "access", data["access"], httponly=True, 
+                "access", data["access"], httponly=False, 
                 secure=False, samesite='Lax', path="/"
             )
             response.set_cookie(
-                "refresh", data["refresh"], httponly=True, 
+                "refresh", data["refresh"], httponly=False, 
                 secure=False, samesite='Lax', path="/"
             )
             return response

@@ -10,7 +10,7 @@ DEFAULT_STUN_SERVERS = [
     'stun:stun2.l.google.com:19302',
 ]
 
-# FREE TURN/STUN servers - No signup required!
+# FREE TURN/STUN servers 
 FREE_TURN_SERVERS = [
     # Open Relay Project - Free TURN servers
     {

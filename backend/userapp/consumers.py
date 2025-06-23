@@ -1,137 +1,181 @@
 import json
-import asyncio
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.db import database_sync_to_async
-from django.contrib.auth.models import AnonymousUser
-from .models import FocusBuddySession
 
 logger = logging.getLogger(__name__)
+
+active_participants = {}  # { session_id: set(user_id) }
 
 class WebRTCConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.session_id = self.scope['url_route']['kwargs']['session_id']
         self.room_group_name = f'webrtc_session_{self.session_id}'
+        self.user = self.scope['user']
+
+        logger.info(f"[WebSocket] Connection attempt for session {self.session_id}")
+        logger.info(f"[WebSocket] User from scope: {self.user}")
+        logger.info(f"[WebSocket] User type: {type(self.user)}")
+        logger.info(f"[WebSocket] Is anonymous: {self.user.is_anonymous}")
         
-        # Get the authenticated user from scope
-        self.user = self.scope["user"]
-        
-        # Log connection attempt
-        logger.info(f"WebSocket connection attempt started")
-        logger.info(f"Session ID: {self.session_id}")
-        logger.info(f"Room group name: {self.room_group_name}")
-        logger.info(f"User from scope: {self.user}")
-        
-        # Reject connection if user is not authenticated
+        if hasattr(self.user, 'id'):
+            logger.info(f"[WebSocket] User ID: {self.user.id}")
+        if hasattr(self.user, 'username'):
+            logger.info(f"[WebSocket] Username: {self.user.username}")
+
         if self.user.is_anonymous:
-            logger.warning("User is anonymous, closing connection")
+            logger.warning("[WebSocket] Anonymous user rejected - closing connection")
+            await self.close(code=4001)  # Custom close code for auth failure
             return
-        
-        # Accept the connection if user is authenticated
-        await self.accept()
-        
-        # Join room group
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
-        
-        logger.info(f"User {self.user.id} connected to session {self.session_id}")
+
+        logger.info(f"[WebSocket] Authenticated user {self.user.username} connecting to session {self.session_id}")
+
+        try:
+            await self.accept()
+            logger.info("[WebSocket] Connection accepted")
+            
+            await self.channel_layer.group_add(
+                self.room_group_name,
+                self.channel_name
+            )
+            logger.debug(f"[WebSocket] Added to group: {self.room_group_name}")
+
+            # Manage active participants
+            if self.session_id not in active_participants:
+                active_participants[self.session_id] = set()
+
+            other_users = list(active_participants[self.session_id])
+            active_participants[self.session_id].add(self.user.id)
+
+            logger.info(f"[WebSocket] Session {self.session_id} participants: {active_participants[self.session_id]}")
+
+            # Send authentication confirmation
+            await self.send(text_data=json.dumps({
+                'type': 'authenticated',
+                'user_id': self.user.id,
+                'username': self.user.username
+            }))
+
+            # Send existing users
+            await self.send(text_data=json.dumps({
+                'type': 'existing-users',
+                'users': other_users
+            }))
+
+            # Notify others of new user
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'user_joined',
+                    'user_id': self.user.id,
+                    'user_name': self.user.username
+                }
+            )
+            
+            logger.info(f"[WebSocket] User {self.user.username} successfully connected to session {self.session_id}")
+            
+        except Exception as e:
+            logger.error(f"[WebSocket] Error during connection setup: {e}")
+            await self.close(code=4000)
 
     async def disconnect(self, close_code):
-        logger.info(f"WebSocket disconnected with code: {close_code}")
+        logger.info(f"[WebSocket] Disconnecting user {getattr(self.user, 'username', 'Unknown')} with code {close_code}")
         
-        # Leave room group
-        if hasattr(self, 'room_group_name'):
+        try:
             await self.channel_layer.group_discard(
                 self.room_group_name,
                 self.channel_name
             )
+
+            if hasattr(self, 'session_id') and self.session_id in active_participants:
+                if hasattr(self.user, 'id'):
+                    active_participants[self.session_id].discard(self.user.id)
+                    if not active_participants[self.session_id]:
+                        del active_participants[self.session_id]
+
+                    # Notify others of user leaving
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            'type': 'user_left',
+                            'user_id': self.user.id
+                        }
+                    )
+
+            logger.info(f"[WebSocket] User {getattr(self.user, 'id', 'Unknown')} disconnected from session {getattr(self, 'session_id', 'Unknown')}")
             
-            # Notify that user left
-            if hasattr(self, 'scope') and self.scope["user"]:
-                await self.channel_layer.group_send(
-                    self.room_group_name,
-                    {
-                        'type': 'user_left',
-                        'user_id': self.scope["user"].id
-                    }
-                )
+        except Exception as e:
+            logger.error(f"[WebSocket] Error during disconnect: {e}")
 
     async def receive(self, text_data):
         try:
             data = json.loads(text_data)
-            message_type = data.get('type')
-            logger.info(f"Received message type: {message_type}")
-            
-            # Handle different WebRTC signaling messages
-            if message_type == 'offer':
-                await self.handle_offer(data)
-            elif message_type == 'answer':
-                await self.handle_answer(data)
-            elif message_type == 'ice-candidate':
-                await self.handle_ice_candidate(data)
-            elif message_type == 'media-state':
-                await self.handle_media_state(data)
-            
+            msg_type = data.get('type')
+            logger.debug(f"[WebSocket] Received type: {msg_type} | From user: {self.user.id}")
+
+            handler_map = {
+                'offer': self.handle_offer,
+                'answer': self.handle_answer,
+                'ice-candidate': self.handle_ice_candidate,
+                'media-state': self.handle_media_state,
+            }
+
+            if msg_type in handler_map:
+                await handler_map[msg_type](data)
+            else:
+                logger.warning(f"[WebSocket] Unknown message type: {msg_type}")
+                
         except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}")
-            await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': 'Invalid JSON'
-            }))
+            logger.error(f"[WebSocket] JSON decode error: {e}")
         except Exception as e:
-            logger.error(f"Error in receive: {e}")
+            logger.error(f"[WebSocket] Receive error: {e}")
 
     async def handle_offer(self, data):
-        """Handle WebRTC offer"""
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 'type': 'webrtc_offer',
                 'offer': data['offer'],
-                'sender_id': self.scope["user"].id
+                'sender_id': self.user.id,
+                'target_id': data['target_id']
             }
         )
 
     async def handle_answer(self, data):
-        """Handle WebRTC answer"""
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 'type': 'webrtc_answer',
                 'answer': data['answer'],
-                'sender_id': self.scope["user"].id
+                'sender_id': self.user.id,
+                'target_id': data['target_id']
             }
         )
 
     async def handle_ice_candidate(self, data):
-        """Handle ICE candidate"""
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 'type': 'webrtc_ice_candidate',
                 'candidate': data['candidate'],
-                'sender_id': self.scope["user"].id
+                'sender_id': self.user.id,
+                'target_id': data['target_id']
             }
         )
 
     async def handle_media_state(self, data):
-        """Handle media state changes (video/audio on/off)"""
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 'type': 'media_state_changed',
                 'video_enabled': data.get('video_enabled'),
                 'audio_enabled': data.get('audio_enabled'),
-                'sender_id': self.scope["user"].id
+                'sender_id': self.user.id
             }
         )
 
-    # Group message handlers
+    # Event handlers for group messages
     async def webrtc_offer(self, event):
-        """Send WebRTC offer to other peer"""
-        if event['sender_id'] != self.scope["user"].id:
+        if event['target_id'] == self.user.id:
             await self.send(text_data=json.dumps({
                 'type': 'offer',
                 'offer': event['offer'],
@@ -139,8 +183,7 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             }))
 
     async def webrtc_answer(self, event):
-        """Send WebRTC answer to other peer"""
-        if event['sender_id'] != self.scope["user"].id:
+        if event['target_id'] == self.user.id:
             await self.send(text_data=json.dumps({
                 'type': 'answer',
                 'answer': event['answer'],
@@ -148,8 +191,7 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             }))
 
     async def webrtc_ice_candidate(self, event):
-        """Send ICE candidate to other peer"""
-        if event['sender_id'] != self.scope["user"].id:
+        if event['target_id'] == self.user.id:
             await self.send(text_data=json.dumps({
                 'type': 'ice-candidate',
                 'candidate': event['candidate'],
@@ -157,8 +199,7 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             }))
 
     async def user_joined(self, event):
-        """Notify when user joins"""
-        if event['user_id'] != self.scope["user"].id:
+        if event['user_id'] != self.user.id:
             await self.send(text_data=json.dumps({
                 'type': 'user-joined',
                 'user_id': event['user_id'],
@@ -166,33 +207,16 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             }))
 
     async def user_left(self, event):
-        """Notify when user leaves"""
-        if event['user_id'] != self.scope["user"].id:
-            await self.send(text_data=json.dumps({
-                'type': 'user-left',
-                'user_id': event['user_id']
-            }))
+        await self.send(text_data=json.dumps({
+            'type': 'user-left',
+            'user_id': event['user_id']
+        }))
 
     async def media_state_changed(self, event):
-        """Notify media state changes"""
-        if event['sender_id'] != self.scope["user"].id:
+        if event['sender_id'] != self.user.id:
             await self.send(text_data=json.dumps({
                 'type': 'media-state-changed',
                 'video_enabled': event['video_enabled'],
                 'audio_enabled': event['audio_enabled'],
                 'sender_id': event['sender_id']
             }))
-
-    @database_sync_to_async
-    def get_session(self, session_id):
-        """Get session from database"""
-        try:
-            session = FocusBuddySession.objects.select_related('user1', 'user2').get(id=session_id)
-            logger.info(f"Found session: {session.id}, user1: {session.user1}, user2: {session.user2}")
-            return session
-        except FocusBuddySession.DoesNotExist:
-            logger.warning(f"Session {session_id} does not exist")
-            return None
-        except Exception as e:
-            logger.error(f"Error getting session: {e}")
-            return None

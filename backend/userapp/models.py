@@ -103,6 +103,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+    @property
+    def username(self):
+        return self.email
+
+
 class Mentor(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='mentor_profile')
     profile_image = CloudinaryField('image', blank=True, null=True)

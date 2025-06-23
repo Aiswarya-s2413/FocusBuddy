@@ -126,8 +126,11 @@ DATABASES = {
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],  
+        },
+    },
 }
 
 # Password validation
@@ -171,6 +174,8 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+ALLOWED_HOSTS = ['*']
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -183,8 +188,7 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True  # For development only
-CORS_ALLOWED_ORIGINS.append("ws://localhost:5173")
-CORS_ALLOWED_ORIGINS.append("wss://localhost:5173")
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -233,7 +237,6 @@ CLOUDINARY_STORAGE = {
     'API_SECRET': config('CLOUDINARY_API_SECRET').strip(),
 }
 
-print("CLOUDINARY_API_KEY:", config('CLOUDINARY_API_KEY'))
 
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
@@ -249,19 +252,17 @@ RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET')
 
 WEBRTC_CONFIG = {
-    'SESSION_DURATIONS': [
-        15,  # 15 minutes
-        25,  # 25 minutes
-        50   # 50 minutes
-    ],
-    'MAX_PARTICIPANTS': 8,  # Maximum participants per session
-    'ENABLE_CHAT': True,    # Enable chat alongside video
+    'SESSION_DURATIONS': [15, 25, 50],
+    'MAX_PARTICIPANTS': 8,
+    'ENABLE_CHAT': True,
     'ICE_SERVERS': [
         {
-            'urls': [
-                'stun:stun.l.google.com:19302',
-                'stun:stun1.l.google.com:19302',
-            ]
+            'urls': ['stun:stun.l.google.com:19302']
+        },
+        {
+            'urls': ['turn:192.168.1.111:3478'],
+            'username': 'webrtcuser',
+            'credential': 'webrtctestpass'
         }
     ]
 }

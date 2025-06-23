@@ -12,7 +12,8 @@ from userapp import consumers
 from userapp.jwt_middleware import JWTAuthMiddlewareStack
 
 websocket_urlpatterns = [
-    re_path(r'ws/webrtc/(?P<session_id>\w+)/$', consumers.WebRTCConsumer.as_asgi()),
+    re_path(r'ws/webrtc/(?P<session_id>[\w-]+)/$', consumers.WebRTCConsumer.as_asgi()),
+
 ]
 
 application = ProtocolTypeRouter({

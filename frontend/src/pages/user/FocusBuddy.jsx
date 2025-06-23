@@ -46,12 +46,12 @@ import { userAxios } from "../../utils/axios";
 import { useSimpleToast } from "../../components/ui/toast";
 import WebRTCService from "../../utils/webrtcService";
 
-// Add near the top with other constants
+
 const WEBRTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    // Add TURN servers here if needed for NAT traversal
+    
   ],
   iceCandidatePoolSize: 10,
   bundlePolicy: 'max-bundle',

@@ -1,19 +1,16 @@
-import { userAxios } from './axios'; // Update this import path
+import { userAxios } from './axios';
 
 class WebRTCService {
     constructor() {
-        this.peerConnections = new Map(); // Support multiple peer connections
+        this.peerConnections = new Map();
         this.localStream = null;
-        this.remoteStreams = new Map(); // Support multiple remote streams
+        this.remoteStreams = new Map();
         this.websocket = null;
         this.sessionId = null;
         this.userId = null;
         this.callbacks = {};
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        this.reconnectTimeout = null;
-        
-        // WebRTC configuration with fallback
+        this.authToken = null;
+
         this.config = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -24,7 +21,6 @@ class WebRTCService {
         };
     }
 
-    // Event callbacks
     on(event, callback) {
         if (!this.callbacks[event]) {
             this.callbacks[event] = [];
@@ -44,27 +40,36 @@ class WebRTCService {
         }
     }
 
-    // Initialize WebRTC connection
     async initialize(sessionId, authToken = null) {
         try {
             this.sessionId = sessionId;
-            
-            // Store auth token if provided (for manual token passing)
+
+            // Enhanced cookie debugging and token handling
+            console.log('=== Cookie Debug Info ===');
+            console.log('Current domain:', window.location.hostname);
+            console.log('Current path:', window.location.pathname);
+            console.log('Current protocol:', window.location.protocol);
+            console.log('All cookies before token set:', document.cookie);
+
+            // Set auth token from argument or cookie
             if (authToken) {
                 this.authToken = authToken;
+                this.setCookie('access', authToken);
+                console.log('Auth token set via argument:', authToken);
+            } else {
+                const tokenFromCookie = this.getCookie('access');
+                this.authToken = tokenFromCookie;
+                console.log('Auth token fetched from cookie:', tokenFromCookie);
             }
-            
-            // Load configuration (non-blocking)
-            this.loadConfig().catch(err => 
-                console.warn('Config load failed, using defaults:', err)
-            );
-            
-            // Get user media first
+
+            console.log('All cookies after token handling:', document.cookie);
+            console.log('Final auth token:', this.authToken);
+            console.log('=== End Cookie Debug ===');
+
+            await this.loadConfig();
             await this.getUserMedia();
-            
-            // Connect to signaling server
-            await this.connectWebSocket(sessionId, authToken);
-            
+            await this.connectWebSocket(sessionId);
+
             console.log('WebRTC initialized successfully');
             this.emit('connectionStateChange', 'initialized');
             return true;
@@ -75,63 +80,273 @@ class WebRTCService {
         }
     }
 
-    // Load WebRTC configuration using userAxios
+    // Enhanced cookie getter with better parsing
+    getCookie(name) {
+        console.log(`Getting cookie: ${name}`);
+        console.log('Raw document.cookie:', document.cookie);
+        
+        if (!document.cookie) {
+            console.log('No cookies found');
+            return null;
+        }
+
+        // Method 1: Original approach
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        console.log('Cookie parts:', parts);
+        
+        if (parts.length === 2) {
+            const cookieValue = parts.pop().split(';').shift();
+            console.log(`Cookie ${name} found (method 1):`, cookieValue);
+            return cookieValue;
+        }
+
+        // Method 2: Alternative approach using regex
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        if (match) {
+            const cookieValue = match[2];
+            console.log(`Cookie ${name} found (method 2):`, cookieValue);
+            return cookieValue;
+        }
+
+        // Method 3: Manual parsing
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [cookieName, cookieValue] = cookie.trim().split('=');
+            if (cookieName === name) {
+                console.log(`Cookie ${name} found (method 3):`, cookieValue);
+                return cookieValue;
+            }
+        }
+
+        console.log(`Cookie ${name} not found`);
+        return null;
+    }
+
+    // Enhanced cookie setter with better options
+    setCookie(name, value, options = {}) {
+        console.log(`Setting cookie: ${name} = ${value}`);
+        
+        const defaultOptions = {
+            path: '/',
+            secure: window.location.protocol === 'https:',
+            sameSite: 'Lax',
+            ...options
+        };
+
+        let cookieString = `${name}=${value}`;
+        
+        if (defaultOptions.path) {
+            cookieString += `; path=${defaultOptions.path}`;
+        }
+        
+        if (defaultOptions.domain) {
+            cookieString += `; domain=${defaultOptions.domain}`;
+        }
+        
+        if (defaultOptions.secure) {
+            cookieString += '; secure';
+        }
+        
+        if (defaultOptions.sameSite) {
+            cookieString += `; samesite=${defaultOptions.sameSite}`;
+        }
+        
+        if (defaultOptions.maxAge) {
+            cookieString += `; max-age=${defaultOptions.maxAge}`;
+        }
+
+        console.log('Setting cookie string:', cookieString);
+        document.cookie = cookieString;
+        
+        // Verify cookie was set
+        setTimeout(() => {
+            const verifyValue = this.getCookie(name);
+            console.log(`Cookie verification - ${name}:`, verifyValue);
+        }, 100);
+    }
+
+    // Alternative method to get token from various sources
+    getAuthToken() {
+        console.log('Getting auth token from multiple sources...');
+        
+        // Try cookie first
+        let token = this.getCookie('access');
+        if (token) {
+            console.log('Token found in cookie:', token);
+            return token;
+        }
+
+        // Try different cookie names
+        const cookieNames = ['access', 'accessToken', 'access_token', 'token', 'authToken'];
+        for (const cookieName of cookieNames) {
+            token = this.getCookie(cookieName);
+            if (token) {
+                console.log(`Token found in cookie ${cookieName}:`, token);
+                return token;
+            }
+        }
+
+        // Try localStorage
+        try {
+            token = localStorage.getItem('access') || localStorage.getItem('accessToken') || localStorage.getItem('token');
+            if (token) {
+                console.log('Token found in localStorage:', token);
+                return token;
+            }
+        } catch (e) {
+            console.log('localStorage not available');
+        }
+
+        // Try sessionStorage
+        try {
+            token = sessionStorage.getItem('access') || sessionStorage.getItem('accessToken') || sessionStorage.getItem('token');
+            if (token) {
+                console.log('Token found in sessionStorage:', token);
+                return token;
+            }
+        } catch (e) {
+            console.log('sessionStorage not available');
+        }
+
+        console.log('No token found in any storage');
+        return null;
+    }
+
     async loadConfig() {
         try {
-            const response = await userAxios.get('webrtc/config/', {
-                // userAxios will handle authentication automatically
-                // including CSRF tokens and token refresh if needed
-            });
-            
+            const response = await userAxios.get('webrtc/config/');
             const data = response.data;
-            
-            // Handle both formats: direct iceServers or nested under config
             const iceServers = data.iceServers || data.config?.iceServers;
-            
             if (iceServers && Array.isArray(iceServers)) {
                 this.config.iceServers = [...this.config.iceServers, ...iceServers];
             }
-            
             console.log('WebRTC config loaded successfully');
         } catch (error) {
-            // Enhanced error handling
-            if (error.response?.status === 401) {
-                console.warn('Authentication failed for WebRTC config, using defaults');
-                this.emit('authenticationError', 'Failed to authenticate for WebRTC config');
-            } else if (error.response?.status === 404) {
-                console.warn('WebRTC config endpoint not found, using defaults');
-            } else {
-                console.warn('Failed to load WebRTC config, using defaults:', error.message);
-            }
+            console.warn('Failed to load WebRTC config:', error);
         }
     }
 
-    // Connect to WebSocket signaling server
-    async connectWebSocket(sessionId, authToken) {
+    async connectWebSocket(sessionId) {
         return new Promise((resolve, reject) => {
             try {
-                const wsUrl = `ws://localhost:8000/ws/webrtc/${sessionId}/`;
+                // Use the enhanced token getter
+                if (!this.authToken) {
+                    this.authToken = this.getAuthToken();
+                }
+
+                console.log('=== WebSocket Connection Debug ===');
+                console.log('Session ID:', sessionId);
+                console.log('Auth token available:', !!this.authToken);
+                console.log('Auth token length:', this.authToken?.length || 0);
                 
-                // Include credentials and cookies in WebSocket connection
+                // Try different WebSocket URL formats
+                const wsUrls = [
+                    `ws://localhost:8000/ws/webrtc/${sessionId}/`,
+                    `ws://localhost:8000/ws/webrtc/${sessionId}/?token=${this.authToken}`,
+                    `wss://localhost:8000/ws/webrtc/${sessionId}/`,
+                ];
+
+                let wsUrl = wsUrls[0]; // Start with the basic URL
+                
+                // If running on HTTPS, try WSS first
+                if (window.location.protocol === 'https:') {
+                    wsUrl = `wss://localhost:8000/ws/webrtc/${sessionId}/`;
+                }
+
+                console.log('WebSocket URL:', wsUrl);
+                console.log('Current location:', window.location.href);
+                console.log('Protocol:', window.location.protocol);
+
+                // Make sure access token is set as cookie before WebSocket starts
+                if (this.authToken) {
+                    this.setCookie('access', this.authToken);
+                    console.log('Cookie set before WebSocket connection');
+                }
+
+                // Add connection timeout
+                const connectionTimeout = setTimeout(() => {
+                    console.error('WebSocket connection timeout');
+                    this.websocket?.close();
+                    reject(new Error('WebSocket connection timeout'));
+                }, 10000); // 10 second timeout
+
                 this.websocket = new WebSocket(wsUrl);
-                
-                // Add authorization header via cookie before connection
-                document.cookie = `access=${authToken}; path=/`;
-                
+
                 this.websocket.onopen = () => {
+                    clearTimeout(connectionTimeout);
                     console.log('WebSocket connected successfully');
+                    console.log('WebSocket readyState:', this.websocket.readyState);
+                    
+                    // Send initial authentication if needed
+                    if (this.authToken) {
+                        this.sendSignalingMessage({
+                            type: 'authenticate',
+                            token: this.authToken
+                        });
+                    }
+                    
                     resolve();
                 };
-                
+
+                this.websocket.onmessage = (event) => {
+                    console.log('WebSocket message received:', event.data);
+                    try {
+                        const data = JSON.parse(event.data);
+                        this.handleSignalingMessage(data);
+                    } catch (parseError) {
+                        console.error('Failed to parse WebSocket message:', parseError);
+                    }
+                };
+
                 this.websocket.onclose = (event) => {
-                    console.log('WebSocket closed:', event);
+                    clearTimeout(connectionTimeout);
+                    console.warn('WebSocket closed:', {
+                        code: event.code,
+                        reason: event.reason,
+                        wasClean: event.wasClean
+                    });
+                    
+                    // Common WebSocket close codes
+                    const closeCodes = {
+                        1000: 'Normal closure',
+                        1001: 'Going away',
+                        1002: 'Protocol error',
+                        1003: 'Unsupported data',
+                        1006: 'Abnormal closure',
+                        1007: 'Invalid frame payload data',
+                        1008: 'Policy violation',
+                        1009: 'Message too big',
+                        1011: 'Internal server error',
+                        1015: 'TLS handshake failure'
+                    };
+                    
+                    console.warn('Close code meaning:', closeCodes[event.code] || 'Unknown');
                     this.emit('connectionStateChange', 'disconnected');
                 };
-                
+
                 this.websocket.onerror = (error) => {
-                    console.error('WebSocket error:', error);
+                    clearTimeout(connectionTimeout);
+                    console.error('WebSocket error details:', {
+                        error,
+                        readyState: this.websocket?.readyState,
+                        url: wsUrl,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Try to provide more helpful error information
+                    console.error('Possible causes:');
+                    console.error('1. WebSocket server not running on localhost:8000');
+                    console.error('2. Authentication failure on server side');
+                    console.error('3. CORS policy blocking WebSocket connection');
+                    console.error('4. Server rejecting connection due to invalid token');
+                    console.error('5. Network connectivity issues');
+                    
                     reject(error);
                 };
+
+                console.log('WebSocket connection initiated...');
+                console.log('=== End WebSocket Debug ===');
                 
             } catch (error) {
                 console.error('Error connecting to WebSocket:', error);
@@ -140,59 +355,24 @@ class WebRTCService {
         });
     }
 
-    // Attempt reconnection
-    attemptReconnection(sessionId, authToken) {
-        if (this.reconnectTimeout) {
-            clearTimeout(this.reconnectTimeout);
-        }
-
-        this.reconnectAttempts++;
-        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-        
-        console.log(`Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`);
-        
-        this.reconnectTimeout = setTimeout(async () => {
-            try {
-                await this.connectWebSocket(sessionId, authToken);
-            } catch (error) {
-                console.error('Reconnection failed:', error);
-                if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-                    this.emit('error', new Error('Max reconnection attempts reached'));
-                }
-            }
-        }, delay);
-    }
-
-    // Get user media (camera and microphone)
     async getUserMedia(constraints = { video: true, audio: true }) {
         try {
-            // Check if media devices are available
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            if (!navigator.mediaDevices?.getUserMedia) {
                 throw new Error('Media devices not supported');
             }
 
             this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
-            console.log('Local stream obtained successfully');
             this.emit('localStream', this.localStream);
             return this.localStream;
         } catch (error) {
             console.error('Failed to get user media:', error);
-            
-            // Try with audio only if video fails
             if (constraints.video && error.name === 'NotFoundError') {
-                try {
-                    console.log('Retrying with audio only...');
-                    return await this.getUserMedia({ video: false, audio: true });
-                } catch (audioError) {
-                    console.error('Audio-only fallback also failed:', audioError);
-                }
+                return await this.getUserMedia({ video: false, audio: true });
             }
-            
             throw error;
         }
     }
 
-    // Create peer connection for a specific user
     createPeerConnection(userId) {
         if (this.peerConnections.has(userId)) {
             return this.peerConnections.get(userId);
@@ -200,88 +380,67 @@ class WebRTCService {
 
         const peerConnection = new RTCPeerConnection(this.config);
 
-        // Add local stream tracks
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, this.localStream);
             });
         }
 
-        // Handle remote stream
         peerConnection.ontrack = (event) => {
-            console.log('Received remote stream from user:', userId);
             const remoteStream = event.streams[0];
             this.remoteStreams.set(userId, remoteStream);
             this.emit('remoteStream', userId, remoteStream);
         };
 
-        // Handle ICE candidates
         peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
                 this.sendSignalingMessage({
                     type: 'ice-candidate',
                     candidate: event.candidate,
-                    targetUserId: userId
+                    target_id: userId
                 });
             }
         };
 
-        // Handle connection state changes
         peerConnection.onconnectionstatechange = () => {
-            console.log(`Connection state with ${userId}:`, peerConnection.connectionState);
             this.emit('peerConnectionStateChange', userId, peerConnection.connectionState);
-            
-            // Emit overall connection state
-            const states = Array.from(this.peerConnections.values())
-                .map(pc => pc.connectionState);
-            
-            if (states.includes('connected')) {
-                this.emit('connectionStateChange', 'connected');
-            } else if (states.includes('connecting')) {
-                this.emit('connectionStateChange', 'connecting');
-            } else {
-                this.emit('connectionStateChange', 'disconnected');
-            }
+            const states = Array.from(this.peerConnections.values()).map(pc => pc.connectionState);
+            this.emit('connectionStateChange', states.includes('connected') ? 'connected' : 'disconnected');
         };
 
         this.peerConnections.set(userId, peerConnection);
         return peerConnection;
     }
 
-    // Handle signaling messages
     async handleSignalingMessage(message) {
         try {
-            console.log('Received signaling message:', message.type);
-            
             switch (message.type) {
-                case 'user-joined':
-                    this.emit('userJoined', {
-                        id: message.user_id,
-                        name: message.user_name
-                    });
-                    
-                    // Create offer for the new user
-                    if (message.user_id !== this.userId) {
-                        await this.createOffer(message.user_id);
+                case 'authenticated':
+                    console.log('Authenticated as user:', message.user_id);
+                    this.userId = message.user_id;
+                    break;
+                case 'existing-users':
+                    console.log('Existing users in session:', message.users);
+                    for (const id of message.users) {
+                        if (id !== this.userId) {
+                            await this.createOffer(id);
+                        }
                     }
                     break;
-
-                case 'user-left':
-                    this.handleUserLeft(message.user_id);
+                case 'user-joined':
+                    console.log('User joined:', message);
+                    this.emit('userJoined', { id: message.user_id, name: message.user_name });
+                    if (message.user_id !== this.userId) await this.createOffer(message.user_id);
                     break;
-
                 case 'offer':
                     await this.handleOffer(message.offer, message.sender_id);
                     break;
-
                 case 'answer':
                     await this.handleAnswer(message.answer, message.sender_id);
                     break;
-
                 case 'ice-candidate':
                     await this.handleIceCandidate(message.candidate, message.sender_id);
                     break;
-
                 case 'media-state-changed':
                     this.emit('peerMediaStateChanged', {
                         videoEnabled: message.video_enabled,
@@ -289,139 +448,94 @@ class WebRTCService {
                         senderId: message.sender_id
                     });
                     break;
-
-                case 'authenticated':
-                    this.userId = message.user_id;
-                    console.log('Authenticated as user:', this.userId);
+                case 'user-left':
+                    this.handleUserLeft(message.user_id);
                     break;
-
-                case 'error':
-                    console.error('Signaling error:', message.error);
-                    this.emit('error', new Error(message.error));
-                    break;
+                default:
+                    console.warn('Unknown message type:', message.type);
             }
         } catch (error) {
             console.error('Error handling signaling message:', error);
         }
     }
 
-    // Create and send offer
-    async createOffer(targetUserId) {
-        try {
-            const peerConnection = this.createPeerConnection(targetUserId);
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            
-            this.sendSignalingMessage({
-                type: 'offer',
-                offer: offer,
-                targetUserId: targetUserId
-            });
-        } catch (error) {
-            console.error('Error creating offer:', error);
-        }
+    async createOffer(userId) {
+        const peerConnection = this.createPeerConnection(userId);
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        this.sendSignalingMessage({
+            type: 'offer',
+            offer,
+            target_id: userId
+        });
     }
 
-    // Handle received offer
     async handleOffer(offer, senderId) {
-        try {
-            const peerConnection = this.createPeerConnection(senderId);
-            await peerConnection.setRemoteDescription(offer);
-            
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            
-            this.sendSignalingMessage({
-                type: 'answer',
-                answer: answer,
-                targetUserId: senderId
-            });
-        } catch (error) {
-            console.error('Error handling offer:', error);
-        }
+        const peerConnection = this.createPeerConnection(senderId);
+        await peerConnection.setRemoteDescription(offer);
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        this.sendSignalingMessage({
+            type: 'answer',
+            answer,
+            target_id: senderId
+        });
     }
 
-    // Handle received answer
     async handleAnswer(answer, senderId) {
-        try {
-            const peerConnection = this.peerConnections.get(senderId);
-            if (peerConnection) {
-                await peerConnection.setRemoteDescription(answer);
-            }
-        } catch (error) {
-            console.error('Error handling answer:', error);
-        }
-    }
-
-    // Handle ICE candidate
-    async handleIceCandidate(candidate, senderId) {
-        try {
-            const peerConnection = this.peerConnections.get(senderId);
-            if (peerConnection) {
-                await peerConnection.addIceCandidate(candidate);
-            }
-        } catch (error) {
-            console.error('Error handling ICE candidate:', error);
-        }
-    }
-
-    // Handle user left
-    handleUserLeft(userId) {
-        console.log('User left:', userId);
-        
-        // Close peer connection
-        const peerConnection = this.peerConnections.get(userId);
+        const peerConnection = this.peerConnections.get(senderId);
         if (peerConnection) {
-            peerConnection.close();
-            this.peerConnections.delete(userId);
+            await peerConnection.setRemoteDescription(answer);
         }
-        
-        // Remove remote stream
+    }
+
+    async handleIceCandidate(candidate, senderId) {
+        const peerConnection = this.peerConnections.get(senderId);
+        if (peerConnection) {
+            await peerConnection.addIceCandidate(candidate);
+        }
+    }
+
+    handleUserLeft(userId) {
+        const pc = this.peerConnections.get(userId);
+        if (pc) pc.close();
+        this.peerConnections.delete(userId);
         this.remoteStreams.delete(userId);
-        
         this.emit('userLeft', userId);
     }
 
-    // Send signaling message
     sendSignalingMessage(message) {
-        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        if (this.websocket?.readyState === WebSocket.OPEN) {
+            console.log('Sending message:', message);
             this.websocket.send(JSON.stringify(message));
         } else {
-            console.warn('Cannot send message: WebSocket not connected');
+            console.warn('Cannot send message, WebSocket not connected');
         }
     }
 
-    // Toggle video
     toggleVideo() {
-        if (this.localStream) {
-            const videoTrack = this.localStream.getVideoTracks()[0];
-            if (videoTrack) {
-                videoTrack.enabled = !videoTrack.enabled;
-                this.sendMediaState();
-                return videoTrack.enabled;
-            }
+        const videoTrack = this.localStream?.getVideoTracks()[0];
+        if (videoTrack) {
+            videoTrack.enabled = !videoTrack.enabled;
+            this.sendMediaState();
+            return videoTrack.enabled;
         }
         return false;
     }
 
-    // Toggle audio
     toggleAudio() {
-        if (this.localStream) {
-            const audioTrack = this.localStream.getAudioTracks()[0];
-            if (audioTrack) {
-                audioTrack.enabled = !audioTrack.enabled;
-                this.sendMediaState();
-                return audioTrack.enabled;
-            }
+        const audioTrack = this.localStream?.getAudioTracks()[0];
+        if (audioTrack) {
+            audioTrack.enabled = !audioTrack.enabled;
+            this.sendMediaState();
+            return audioTrack.enabled;
         }
         return false;
     }
 
-    // Send media state to other peers
     sendMediaState() {
         const videoTrack = this.localStream?.getVideoTracks()[0];
         const audioTrack = this.localStream?.getAudioTracks()[0];
-        
         this.sendSignalingMessage({
             type: 'media-state',
             video_enabled: videoTrack?.enabled || false,
@@ -429,97 +543,68 @@ class WebRTCService {
         });
     }
 
-    // Get current media states
-    getMediaStates() {
-        const videoTrack = this.localStream?.getVideoTracks()[0];
-        const audioTrack = this.localStream?.getAudioTracks()[0];
-        
-        return {
-            video: videoTrack?.enabled || false,
-            audio: audioTrack?.enabled || false
-        };
-    }
+    // Test WebSocket server connectivity
+    async testWebSocketConnection(sessionId) {
+        return new Promise((resolve) => {
+            const testUrls = [
+                `ws://localhost:8000/ws/webrtc/${sessionId}/`,
+                `ws://127.0.0.1:8000/ws/webrtc/${sessionId}/`,
+                `wss://localhost:8000/ws/webrtc/${sessionId}/`,
+            ];
 
-    // Get connection statistics
-    async getConnectionStats() {
-        const stats = {};
-        
-        for (const [userId, peerConnection] of this.peerConnections) {
-            try {
-                const rtcStats = await peerConnection.getStats();
-                stats[userId] = {
-                    connectionState: peerConnection.connectionState,
-                    iceConnectionState: peerConnection.iceConnectionState,
-                    stats: rtcStats
+            console.log('=== Testing WebSocket URLs ===');
+            
+            const testResults = [];
+            let completedTests = 0;
+
+            testUrls.forEach((url, index) => {
+                const testWs = new WebSocket(url);
+                const timeout = setTimeout(() => {
+                    testWs.close();
+                    testResults[index] = { url, status: 'timeout', error: 'Connection timeout' };
+                    completedTests++;
+                    if (completedTests === testUrls.length) {
+                        console.log('WebSocket test results:', testResults);
+                        resolve(testResults);
+                    }
+                }, 3000);
+
+                testWs.onopen = () => {
+                    clearTimeout(timeout);
+                    testResults[index] = { url, status: 'success', error: null };
+                    testWs.close();
+                    completedTests++;
+                    if (completedTests === testUrls.length) {
+                        console.log('WebSocket test results:', testResults);
+                        resolve(testResults);
+                    }
                 };
-            } catch (error) {
-                console.error(`Error getting stats for user ${userId}:`, error);
-            }
-        }
-        
-        return stats;
-    }
 
-    // Additional method to manually set auth token if needed
-    setAuthToken(token) {
-        this.authToken = token;
-    }
-
-    // Method to refresh WebRTC config (useful after token refresh)
-    async refreshConfig() {
-        try {
-            await this.loadConfig();
-            console.log('WebRTC config refreshed successfully');
-        } catch (error) {
-            console.error('Failed to refresh WebRTC config:', error);
-        }
-    }
-
-    // Cleanup
-    cleanup() {
-        console.log('Cleaning up WebRTC service...');
-        
-        // Clear reconnection timeout
-        if (this.reconnectTimeout) {
-            clearTimeout(this.reconnectTimeout);
-            this.reconnectTimeout = null;
-        }
-
-        // Stop local stream
-        if (this.localStream) {
-            this.localStream.getTracks().forEach(track => {
-                track.stop();
-                console.log('Stopped track:', track.kind);
+                testWs.onerror = (error) => {
+                    clearTimeout(timeout);
+                    testResults[index] = { url, status: 'error', error: error.message || 'Connection failed' };
+                    completedTests++;
+                    if (completedTests === testUrls.length) {
+                        console.log('WebSocket test results:', testResults);
+                        resolve(testResults);
+                    }
+                };
             });
-            this.localStream = null;
-        }
-
-        // Close all peer connections
-        this.peerConnections.forEach((peerConnection, userId) => {
-            console.log('Closing peer connection for user:', userId);
-            peerConnection.close();
         });
+    }
+
+    cleanup() {
+        this.localStream?.getTracks().forEach(track => track.stop());
+        this.localStream = null;
+        this.peerConnections.forEach(pc => pc.close());
         this.peerConnections.clear();
-
-        // Clear remote streams
         this.remoteStreams.clear();
-
-        // Close WebSocket
-        if (this.websocket) {
-            this.websocket.close(1000, 'Client cleanup');
-            this.websocket = null;
-        }
-
-        // Clear callbacks
-        this.callbacks = {};
-        
-        // Reset properties
+        this.websocket?.close();
+        this.websocket = null;
         this.sessionId = null;
         this.userId = null;
         this.authToken = null;
-        this.reconnectAttempts = 0;
-        
-        console.log('WebRTC service cleanup completed');
+        this.callbacks = {};
     }
 }
 
