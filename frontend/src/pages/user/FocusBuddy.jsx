@@ -181,336 +181,312 @@ function FocusBuddy() {
     }
   };
   
-  // Separate function to initialize WebRTC for session creators
-  const initializeWebRTCForCreator = async (sessionId) => {
-    try {
-      const checkMediaDevices = async () => {
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const hasVideo = devices.some(device => device.kind === 'videoinput');
-          const hasAudio = devices.some(device => device.kind === 'audioinput');
-          
-          if (!hasVideo && isVideoOn) {
-            toast.warning('No camera detected');
-            setIsVideoOn(false);
-          }
-          if (!hasAudio && isAudioOn) {
-            toast.warning('No microphone detected');
-            setIsAudioOn(false);
-          }
-          
-          return true;
-        } catch (err) {
-          console.error('Media devices check failed:', err);
-          toast.error('Failed to access media devices');
-          return false;
+  // Create a unified WebRTC initialization function
+
+const initializeWebRTC = async (sessionId, isCreator = false) => {
+  try {
+    const checkMediaDevices = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const hasVideo = devices.some(device => device.kind === 'videoinput');
+        const hasAudio = devices.some(device => device.kind === 'audioinput');
+        
+        if (!hasVideo && isVideoOn) {
+          toast.warning('No camera detected');
+          setIsVideoOn(false);
         }
-      };
-      
-      if (!(await checkMediaDevices())) {
-        throw new Error('Media devices not available');
-      }
-  
-      // Initialize WebRTC service for creator
-      webrtcService.current = new WebRTCService({
-        config: WEBRTC_CONFIG,
-        mediaConstraints: {
-          audio: isAudioOn,
-          video: isVideoOn ? {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: 'user'
-          } : false
+        if (!hasAudio && isAudioOn) {
+          toast.warning('No microphone detected');
+          setIsAudioOn(false);
         }
-      });
-      
-      // Set up event listeners
-      webrtcService.current.on('localStream', (stream) => {
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-      });
-  
-      webrtcService.current.on('remoteStream', (userId, stream) => {
-        setParticipants(prev => {
-          const existing = prev.find(p => p.id === userId);
-          if (existing) {
-            return prev.map(p => p.id === userId ? { ...p, stream } : p);
-          }
-          return [...prev, { id: userId, stream, user_name: `User ${userId}` }];
-        });
-      });
-  
-      webrtcService.current.on('userJoined', (user) => {
-        setParticipants(prev => {
-          const existing = prev.find(p => p.id === user.id);
-          if (!existing) {
-            return [...prev, { 
-              id: user.id, 
-              user_name: user.name,
-              camera_enabled: true,
-              microphone_enabled: true,
-              is_active: true
-            }];
-          }
-          return prev;
-        });
-      });
-  
-      webrtcService.current.on('userLeft', (userId) => {
-        setParticipants(prev => prev.filter(p => p.id !== userId));
-      });
-  
-      webrtcService.current.on('error', (error) => {
-        console.error('WebRTC Error:', error);
-        toast.error('Connection error occurred');
-      });
-  
-      webrtcService.current.on('chatMessage', (message) => {
-        setMessages(prev => [...prev, {
-          sender_name: message.sender_name,
-          message: message.message
-        }]);
-      });
-  
-      // Initialize WebRTC for the creator
-      const initSuccess = await webrtcService.current.initialize(sessionId);
-      if (!initSuccess) {
-        throw new Error('Failed to initialize WebRTC for creator');
+        
+        return true;
+      } catch (err) {
+        console.error('Media devices check failed:', err);
+        toast.error('Failed to access media devices');
+        return false;
       }
-      
-      console.log('WebRTC initialized successfully for creator');
-      
-    } catch (err) {
-      console.error('Failed to initialize WebRTC for creator:', err);
-      toast.error('Failed to initialize video/audio. Session created but media features may not work.');
-      
-      // Don't fail the entire session creation just because WebRTC failed
-      if (webrtcService.current) {
-        webrtcService.current.cleanup();
-        webrtcService.current = null;
-      }
+    };
+    
+    if (!(await checkMediaDevices())) {
+      throw new Error('Media devices not available');
     }
-  };
-  const joinSession = async (sessionId) => {
-    try {
-      setLoading(true);
-      
-      const payload = {
-        camera_enabled: isVideoOn,
-        microphone_enabled: isAudioOn
-      };
-      
-      console.log('Attempting to join session:', sessionId, 'with payload:', payload);
-      
-      // First try to join the session
-      const joinResponse = await userAxios.post(`/focus-sessions/${sessionId}/join/`, payload);
-      
-      if (!joinResponse.data) {
-        throw new Error('No data received from join request');
+
+    // Initialize WebRTC service
+    webrtcService.current = new WebRTCService({
+      config: WEBRTC_CONFIG,
+      mediaConstraints: {
+        audio: isAudioOn,
+        video: isVideoOn ? {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'user'
+        } : false
       }
-  
-      console.log('Successfully joined session:', joinResponse.data);
-  
-      const checkMediaDevices = async () => {
-        try {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const hasVideo = devices.some(device => device.kind === 'videoinput');
-          const hasAudio = devices.some(device => device.kind === 'audioinput');
-          
-          if (!hasVideo && isVideoOn) {
-            toast.warning('No camera detected');
-            setIsVideoOn(false);
-          }
-          if (!hasAudio && isAudioOn) {
-            toast.warning('No microphone detected');
-            setIsAudioOn(false);
-          }
-          
-          return true;
-        } catch (err) {
-          console.error('Media devices check failed:', err);
-          toast.error('Failed to access media devices');
-          return false;
-        }
-      };
-      
-      if (!(await checkMediaDevices())) {
-        throw new Error('Media devices not available');
-      }
-  
-      // Initialize WebRTC only after successful join
-      webrtcService.current = new WebRTCService({
-        config: WEBRTC_CONFIG,
-        mediaConstraints: {
-          audio: isAudioOn,
-          video: isVideoOn ? {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: 'user'
-          } : false
-        }
-      });
-      
-      // Set up event listeners before initialization
-      webrtcService.current.on('localStream', (stream) => {
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-      });
-  
-      webrtcService.current.on('remoteStream', (userId, stream) => {
-        setParticipants(prev => {
-          const existing = prev.find(p => p.id === userId);
-          if (existing) {
-            return prev.map(p => p.id === userId ? { ...p, stream } : p);
-          }
-          return [...prev, { id: userId, stream, user_name: `User ${userId}` }];
-        });
-      });
-  
-      webrtcService.current.on('userJoined', (user) => {
-        setParticipants(prev => {
-          const existing = prev.find(p => p.id === user.id);
-          if (!existing) {
-            return [...prev, { 
-              id: user.id, 
-              user_name: user.name,
-              camera_enabled: true,
-              microphone_enabled: true,
-              is_active: true
-            }];
-          }
-          return prev;
-        });
-      });
-  
-      webrtcService.current.on('userLeft', (userId) => {
-        setParticipants(prev => prev.filter(p => p.id !== userId));
-      });
-  
-      webrtcService.current.on('peerMediaStateChanged', ({ videoEnabled, audioEnabled, senderId }) => {
-        setParticipants(prev => prev.map(p => 
-          p.id === senderId 
-            ? { ...p, camera_enabled: videoEnabled, microphone_enabled: audioEnabled }
-            : p
-        ));
-      });
-  
-      webrtcService.current.on('error', (error) => {
-        console.error('WebRTC Error:', error);
-        toast.error('Connection error occurred');
-      });
-  
-      webrtcService.current.on('connectionStateChange', (state) => {
-        console.log('Connection state:', state);
-        if (state === 'connected') {
-          toast.success('Connected to session');
-        } else if (state === 'disconnected') {
-          toast.warning('Disconnected from session');
-        }
-      });
-  
-      webrtcService.current.on('chatMessage', (message) => {
-        setMessages(prev => [...prev, {
-          sender_name: message.sender_name,
-          message: message.message
-        }]);
-      });
-  
-      webrtcService.current.on('iceConnectionStateChange', (state) => {
-        console.log('ICE connection state:', state);
-        if (state === 'failed') {
-          toast.error('Connection failed - attempting to reconnect...');
-          webrtcService.current.restartIce();
-        } else if (state === 'disconnected') {
-          toast.warning('Connection interrupted - attempting to recover...');
-        }
-      });
-  
-      if (webrtcService.current.websocket) {
-        webrtcService.current.websocket.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            webrtcService.current.handleSignalingMessage(message);
-            
-            // Handle chat messages specifically
-            if (message.type === 'chat' && message.sender_name !== 'You') {
-              setMessages(prev => [...prev, {
-                sender_name: message.sender_name,
-                message: message.message
-              }]);
-            }
-          } catch (error) {
-            console.error('Error handling WebSocket message:', error);
-          }
-        };
-      }
-  
-      // Initialize WebRTC
-      const initSuccess = await webrtcService.current.initialize(sessionId);
-      if (!initSuccess) {
-        // Clean up if WebRTC initialization fails
-        await userAxios.post(`/focus-sessions/${sessionId}/leave/`);
-        throw new Error('Failed to initialize WebRTC');
-      }
-      
-      setCurrentSession(joinResponse.data);
-      setTimeRemaining(joinResponse.data.duration_minutes * 60);
-      setSessionStarted(true);
-      toast.success('Joined session successfully');
-      
-    } catch (err) {
-      console.error('Join session error:', err);
-      
-      // More detailed error handling
-      if (err.response) {
-        const errorData = err.response.data;
-        console.error('Error response:', errorData);
-        console.error('Error status:', err.response.status);
-        
-        let errorMessage = 'Failed to join session';
-        
-        if (err.response.status === 400) {
-          // Handle different types of 400 errors
-          if (errorData.non_field_errors && Array.isArray(errorData.non_field_errors)) {
-            errorMessage = errorData.non_field_errors[0];
-          } else if (errorData.detail) {
-            errorMessage = errorData.detail;
-          } else if (errorData.message) {
-            errorMessage = errorData.message;
-          } else if (typeof errorData === 'string') {
-            errorMessage = errorData;
-          }
-        } else if (err.response.status === 403) {
-          errorMessage = 'You do not have permission to join this session';
-        } else if (err.response.status === 404) {
-          errorMessage = 'Session not found';
-        } else if (err.response.status === 409) {
-          errorMessage = 'Session is full or already ended';
-        }
-        
-        toast.error(errorMessage);
-      } else if (err.message) {
-        toast.error(err.message);
+    });
+    
+    // CRITICAL: Set up localStream event listener BEFORE initialization
+    webrtcService.current.on('localStream', (stream) => {
+      console.log('Local stream received:', stream);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        // Force video to play
+        localVideoRef.current.play().catch(e => console.log('Video play failed:', e));
+        console.log('Local video element set with stream');
       } else {
-        toast.error('An unexpected error occurred while joining the session');
+        console.error('Local video ref is null!');
       }
-      
-      // Clean up on failure
-      if (webrtcService.current) {
-        webrtcService.current.cleanup();
-        webrtcService.current = null;
+    });
+
+    // Set up all other event listeners
+    webrtcService.current.on('remoteStream', (userId, stream) => {
+      console.log('Remote stream received from user:', userId);
+      setParticipants(prev => {
+        const existing = prev.find(p => p.id === userId);
+        if (existing) {
+          return prev.map(p => p.id === userId ? { ...p, stream } : p);
+        }
+        return [...prev, { id: userId, stream, user_name: `User ${userId}` }];
+      });
+    });
+
+    webrtcService.current.on('userJoined', (user) => {
+      console.log('User joined:', user);
+      setParticipants(prev => {
+        const existing = prev.find(p => p.id === user.id);
+        if (!existing) {
+          return [...prev, { 
+            id: user.id, 
+            user_name: user.name,
+            camera_enabled: true,
+            microphone_enabled: true,
+            is_active: true
+          }];
+        }
+        return prev;
+      });
+    });
+
+    webrtcService.current.on('userLeft', (userId) => {
+      console.log('User left:', userId);
+      setParticipants(prev => prev.filter(p => p.id !== userId));
+    });
+
+    webrtcService.current.on('peerMediaStateChanged', ({ videoEnabled, audioEnabled, senderId }) => {
+      setParticipants(prev => prev.map(p => 
+        p.id === senderId 
+          ? { ...p, camera_enabled: videoEnabled, microphone_enabled: audioEnabled }
+          : p
+      ));
+    });
+
+    webrtcService.current.on('error', (error) => {
+      console.error('WebRTC Error:', error);
+      toast.error('Connection error occurred');
+    });
+
+    webrtcService.current.on('connectionStateChange', (state) => {
+      console.log('Connection state:', state);
+      if (state === 'connected') {
+        toast.success('Connected to session');
+      } else if (state === 'disconnected') {
+        toast.warning('Disconnected from session');
       }
-      
-      setCurrentSession(null);
-      setSessionStarted(false);
-      setParticipants([]);
-      setMessages([]);
-    } finally {
-      setLoading(false);
+    });
+
+    webrtcService.current.on('chatMessage', (message) => {
+      setMessages(prev => [...prev, {
+        sender_name: message.sender_name,
+        message: message.message
+      }]);
+    });
+
+    webrtcService.current.on('iceConnectionStateChange', (state) => {
+      console.log('ICE connection state:', state);
+      if (state === 'failed') {
+        toast.error('Connection failed - attempting to reconnect...');
+        webrtcService.current.restartIce();
+      } else if (state === 'disconnected') {
+        toast.warning('Connection interrupted - attempting to recover...');
+      }
+    });
+
+    // Initialize WebRTC - this should trigger the localStream event
+    console.log('Initializing WebRTC...');
+    const initSuccess = await webrtcService.current.initialize(sessionId);
+    if (!initSuccess) {
+      throw new Error('Failed to initialize WebRTC');
     }
-  };
+    
+    console.log('WebRTC initialized successfully');
+    
+    // ENHANCED: Multiple attempts to get local stream with different methods
+    const setupLocalVideo = async () => {
+      // Method 1: Try to get from WebRTC service
+      let localStream = webrtcService.current.getLocalStream?.();
+      
+      if (!localStream) {
+        console.log('No local stream from WebRTC service, trying direct media access...');
+        
+        // Method 2: Get stream directly from getUserMedia
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: isAudioOn,
+            video: isVideoOn ? {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: 'user'
+            } : false
+          });
+          console.log('Got stream directly from getUserMedia:', localStream);
+        } catch (err) {
+          console.error('Failed to get stream from getUserMedia:', err);
+          throw err;
+        }
+      }
+      
+      if (localStream && localVideoRef.current) {
+        console.log('Setting local stream to video element...');
+        localVideoRef.current.srcObject = localStream;
+        
+        // Force video to play and handle autoplay restrictions
+        try {
+          await localVideoRef.current.play();
+          console.log('Local video started playing successfully');
+        } catch (playError) {
+          console.log('Autoplay failed, but video is set:', playError);
+          // This is usually fine, the video will play when user interacts
+        }
+        
+        // If WebRTC service doesn't have the stream, set it
+        if (!webrtcService.current.getLocalStream?.()) {
+          webrtcService.current.setLocalStream?.(localStream);
+        }
+      }
+    };
+    
+    // Try immediately
+    await setupLocalVideo();
+    
+    // Also try after a short delay in case there's a timing issue
+    setTimeout(async () => {
+      if (localVideoRef.current && !localVideoRef.current.srcObject) {
+        console.warn('Local video still not set up after 1 second, trying again...');
+        try {
+          await setupLocalVideo();
+        } catch (err) {
+          console.error('Failed to setup local video on retry:', err);
+        }
+      }
+    }, 1000);
+    
+    return true;
+    
+  } catch (err) {
+    console.error('Failed to initialize WebRTC:', err);
+    toast.error('Failed to initialize video/audio');
+    
+    if (webrtcService.current) {
+      webrtcService.current.cleanup();
+      webrtcService.current = null;
+    }
+    
+    throw err;
+  }
+};
+
+// Updated initializeWebRTCForCreator function
+const initializeWebRTCForCreator = async (sessionId) => {
+  try {
+    await initializeWebRTC(sessionId, true);
+    console.log('WebRTC initialized successfully for creator');
+  } catch (err) {
+    console.error('Failed to initialize WebRTC for creator:', err);
+    toast.error('Failed to initialize video/audio. Session created but media features may not work.');
+    throw err;
+  }
+};
+
+// Updated joinSession function - replace the WebRTC initialization part
+const joinSession = async (sessionId) => {
+  try {
+    setLoading(true);
+    
+    const payload = {
+      camera_enabled: isVideoOn,
+      microphone_enabled: isAudioOn
+    };
+    
+    console.log('Attempting to join session:', sessionId, 'with payload:', payload);
+    
+    // First try to join the session
+    const joinResponse = await userAxios.post(`/focus-sessions/${sessionId}/join/`, payload);
+    
+    if (!joinResponse.data) {
+      throw new Error('No data received from join request');
+    }
+
+    console.log('Successfully joined session:', joinResponse.data);
+
+    // Initialize WebRTC using the unified function
+    await initializeWebRTC(sessionId, false);
+    
+    setCurrentSession(joinResponse.data);
+    setTimeRemaining(joinResponse.data.duration_minutes * 60);
+    setSessionStarted(true);
+    toast.success('Joined session successfully');
+    
+  } catch (err) {
+    console.error('Join session error:', err);
+    
+    // Error handling code remains the same...
+    if (err.response) {
+      const errorData = err.response.data;
+      console.error('Error response:', errorData);
+      console.error('Error status:', err.response.status);
+      
+      let errorMessage = 'Failed to join session';
+      
+      if (err.response.status === 400) {
+        if (errorData.non_field_errors && Array.isArray(errorData.non_field_errors)) {
+          errorMessage = errorData.non_field_errors[0];
+        } else if (errorData.detail) {
+          errorMessage = errorData.detail;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        } else if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        }
+      } else if (err.response.status === 403) {
+        errorMessage = 'You do not have permission to join this session';
+      } else if (err.response.status === 404) {
+        errorMessage = 'Session not found';
+      } else if (err.response.status === 409) {
+        errorMessage = 'Session is full or already ended';
+      }
+      
+      toast.error(errorMessage);
+    } else if (err.message) {
+      toast.error(err.message);
+    } else {
+      toast.error('An unexpected error occurred while joining the session');
+    }
+    
+    // Clean up on failure
+    if (webrtcService.current) {
+      webrtcService.current.cleanup();
+      webrtcService.current = null;
+    }
+    
+    setCurrentSession(null);
+    setSessionStarted(false);
+    setParticipants([]);
+    setMessages([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
   const leaveSession = async () => {
     try {
       if (currentSession) {
