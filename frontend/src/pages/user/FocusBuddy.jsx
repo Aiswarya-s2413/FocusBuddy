@@ -656,6 +656,37 @@ useEffect(() => {
   };
 }, []);
 
+const getVideoGridLayout = () => {
+  const totalParticipants = 1 + participants.filter(p => p.is_active !== false).length;
+  
+  if (totalParticipants === 1) {
+    return {
+      containerClass: "grid grid-cols-1 gap-4 mb-4",
+      videoClass: "relative bg-gray-900 h-96 rounded-xl overflow-hidden flex items-center justify-center shadow-lg"
+    };
+  } else if (totalParticipants === 2) {
+    return {
+      containerClass: "grid grid-cols-1 md:grid-cols-2 gap-4 mb-4",
+      videoClass: "relative bg-gray-900 h-72 rounded-xl overflow-hidden flex items-center justify-center shadow-lg"
+    };
+  } else if (totalParticipants <= 4) {
+    return {
+      containerClass: "grid grid-cols-2 gap-4 mb-4",
+      videoClass: "relative bg-gray-900 h-60 rounded-xl overflow-hidden flex items-center justify-center shadow-lg"
+    };
+  } else if (totalParticipants <= 6) {
+    return {
+      containerClass: "grid grid-cols-2 md:grid-cols-3 gap-4 mb-4",
+      videoClass: "relative bg-gray-900 h-48 rounded-xl overflow-hidden flex items-center justify-center shadow-lg"
+    };
+  } else {
+    return {
+      containerClass: "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4",
+      videoClass: "relative bg-gray-900 h-40 rounded-lg overflow-hidden flex items-center justify-center shadow-md"
+    };
+  }
+};
+
   return (
     <div className="min-h-screen bg-[#F8F6FB]">
       <div className="container mx-auto px-4 py-8">
@@ -786,97 +817,131 @@ useEffect(() => {
               </div>
             </div>
             
-            <div className="p-2 md:p-6">
-              {/* Video Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                {/* Your video */}
-                <div className="relative bg-gray-900 h-48 rounded-lg overflow-hidden flex items-center justify-center">
-                  {isVideoOn ? (
-                    <video 
-                      ref={localVideoRef}
-                      autoPlay 
-                      muted 
-                      playsInline
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-center">
-                      <VideoOff className="h-8 w-8 mx-auto mb-2 text-gray-600" />
-                      <p className="text-gray-400 text-sm">Camera Off</p>
+            {/* Video Grid */}
+              {(() => {
+                const layout = getVideoGridLayout();
+                return (
+                  <div className={layout.containerClass}>
+                    {/* Your video */}
+                    <div className={layout.videoClass}>
+                      {isVideoOn ? (
+                        <video 
+                          ref={localVideoRef}
+                          autoPlay 
+                          muted 
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <div className="bg-gradient-to-br from-purple-400 to-purple-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
+                            <VideoOff className="h-8 w-8 text-white" />
+                          </div>
+                          <p className="text-gray-400 text-sm font-medium">Camera Off</p>
+                        </div>
+                      )}
+                      <div className="absolute bottom-3 left-3">
+                        <Badge className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-lg">
+                          You
+                        </Badge>
+                      </div>
+                      <div className="absolute top-3 right-3 flex space-x-1">
+                        {!isVideoOn && (
+                          <div className="bg-red-500 bg-opacity-80 rounded-full p-1">
+                            <VideoOff className="h-3 w-3 text-white" />
+                          </div>
+                        )}
+                        {!isAudioOn && (
+                          <div className="bg-red-500 bg-opacity-80 rounded-full p-1">
+                            <MicOff className="h-3 w-3 text-white" />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  <div className="absolute bottom-2 left-2">
-                    <Badge variant="secondary" className="text-xs">You</Badge>
+                    
+                    {/* Other participants */}
+                    {Array.isArray(participants) && participants
+                      .filter(p => p.is_active !== false)
+                      .map((participant) => (
+                      <div key={participant.id} className={layout.videoClass}>
+                        {participant.stream ? (
+                          <video 
+                            autoPlay 
+                            playsInline
+                            className="w-full h-full object-cover"
+                            ref={(videoEl) => {
+                              if (videoEl && participant.stream) {
+                                videoEl.srcObject = participant.stream;
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="text-center">
+                            <div className="bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
+                              <span className="text-white font-bold text-xl">
+                                {participant.user_name?.charAt(0) || 'U'}
+                              </span>
+                            </div>
+                            <p className="text-gray-400 text-sm font-medium">{participant.user_name}</p>
+                          </div>
+                        )}
+                        <div className="absolute bottom-3 left-3">
+                          <Badge className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-0 shadow-lg">
+                            {participant.user_name}
+                          </Badge>
+                        </div>
+                        <div className="absolute top-3 right-3 flex space-x-1">
+                          {!participant.camera_enabled && (
+                            <div className="bg-red-500 bg-opacity-80 rounded-full p-1">
+                              <VideoOff className="h-3 w-3 text-white" />
+                            </div>
+                          )}
+                          {!participant.microphone_enabled && (
+                            <div className="bg-red-500 bg-opacity-80 rounded-full p-1">
+                              <MicOff className="h-3 w-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-                
-                {/* Other participants */}
-{Array.isArray(participants) && participants
-  .filter(p => p.is_active !== false)
-  .map((participant) => (
-  <div key={participant.id} className="relative bg-gray-900 h-48 rounded-lg overflow-hidden flex items-center justify-center">
-    {participant.stream ? (
-      <video 
-        autoPlay 
-        playsInline
-        className="w-full h-full object-cover"
-        ref={(videoEl) => {
-          if (videoEl && participant.stream) {
-            videoEl.srcObject = participant.stream;
-          }
-        }}
-      />
-    ) : (
-      <div className="text-center">
-        <Avatar className="h-12 w-12 mx-auto mb-2">
-          <AvatarFallback className="bg-[#9b87f5] text-white">
-            {participant.user_name?.charAt(0) || 'U'}
-          </AvatarFallback>
-        </Avatar>
-        <p className="text-gray-400 text-sm">{participant.user_name}</p>
-      </div>
-    )}
-    <div className="absolute bottom-2 left-2">
-      <Badge variant="secondary" className="text-xs">{participant.user_name}</Badge>
-    </div>
-    {!participant.camera_enabled && (
-      <div className="absolute top-2 right-2">
-        <VideoOff className="h-4 w-4 text-gray-400" />
-      </div>
-    )}
-    {!participant.microphone_enabled && (
-      <div className="absolute top-2 right-8">
-        <MicOff className="h-4 w-4 text-gray-400" />
-      </div>
-    )}
-  </div>
-))}
-              </div>
+                );
+              })()}
+
               
               {/* Controls */}
-              <div className="flex flex-wrap justify-between items-center">
-                <div className="flex space-x-2">
+              <div className="flex flex-wrap justify-between items-center bg-gray-50 rounded-xl p-4">
+                <div className="flex space-x-3">
                   <Button 
                     variant="outline" 
-                    className={`${isVideoOn ? 'border-[#9b87f5] text-[#9b87f5]' : 'bg-red-100 border-red-300 text-red-500'} hover:bg-[#F8F6FB]`}
+                    size="lg"
+                    className={`${isVideoOn 
+                      ? 'border-2 border-purple-300 text-purple-600 bg-white hover:bg-purple-50' 
+                      : 'bg-red-100 border-2 border-red-300 text-red-600 hover:bg-red-50'
+                    } transition-all duration-200 shadow-sm`}
                     onClick={toggleVideo}
                   >
-                    {isVideoOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                    {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
                   </Button>
                   <Button 
                     variant="outline" 
-                    className={`${isAudioOn ? 'border-[#9b87f5] text-[#9b87f5]' : 'bg-red-100 border-red-300 text-red-500'} hover:bg-[#F8F6FB]`}
+                    size="lg"
+                    className={`${isAudioOn 
+                      ? 'border-2 border-purple-300 text-purple-600 bg-white hover:bg-purple-50' 
+                      : 'bg-red-100 border-2 border-red-300 text-red-600 hover:bg-red-50'
+                    } transition-all duration-200 shadow-sm`}
                     onClick={toggleAudio}
                   >
-                    {isAudioOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                    {isAudioOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
                   </Button>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button 
                         variant="outline"
-                        className="border-[#9b87f5] text-[#9b87f5] hover:bg-[#F8F6FB]"
+                        size="lg"
+                        className="border-2 border-purple-300 text-purple-600 bg-white hover:bg-purple-50 transition-all duration-200 shadow-sm"
                       >
-                        <MessageCircle className="h-4 w-4" />
+                        <MessageCircle className="h-5 w-5" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80">
@@ -916,13 +981,15 @@ useEffect(() => {
                 </div>
                 <Button 
                   variant="destructive"
+                  size="lg"
+                  className="bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all duration-200"
                   onClick={leaveSession}
                   disabled={loading}
                 >
+                  <X className="h-4 w-4 mr-2" />
                   Leave Session
                 </Button>
               </div>
-            </div>
           </div>
         )}
         
