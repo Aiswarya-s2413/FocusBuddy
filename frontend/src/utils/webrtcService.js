@@ -10,6 +10,10 @@ class WebRTCService {
         this.userId = null;
         this.callbacks = {};
         this.authToken = null;
+        
+        // Add state tracking for peer connections
+        this.peerConnectionStates = new Map();
+        this.pendingCandidates = new Map();
 
         this.config = {
             iceServers: [
@@ -187,28 +191,6 @@ class WebRTCService {
             }
         }
 
-        // Try localStorage
-        try {
-            token = localStorage.getItem('access') || localStorage.getItem('accessToken') || localStorage.getItem('token');
-            if (token) {
-                console.log('Token found in localStorage:', token);
-                return token;
-            }
-        } catch (e) {
-            console.log('localStorage not available');
-        }
-
-        // Try sessionStorage
-        try {
-            token = sessionStorage.getItem('access') || sessionStorage.getItem('accessToken') || sessionStorage.getItem('token');
-            if (token) {
-                console.log('Token found in sessionStorage:', token);
-                return token;
-            }
-        } catch (e) {
-            console.log('sessionStorage not available');
-        }
-
         console.log('No token found in any storage');
         return null;
     }
@@ -277,15 +259,6 @@ class WebRTCService {
                     clearTimeout(connectionTimeout);
                     console.log('WebSocket connected successfully');
                     console.log('WebSocket readyState:', this.websocket.readyState);
-                    
-                    // Send initial authentication if needed
-                    if (this.authToken) {
-                        this.sendSignalingMessage({
-                            type: 'authenticate',
-                            token: this.authToken
-                        });
-                    }
-                    
                     resolve();
                 };
 
@@ -379,6 +352,17 @@ class WebRTCService {
         }
 
         const peerConnection = new RTCPeerConnection(this.config);
+        
+        // Initialize state tracking
+        this.peerConnectionStates.set(userId, {
+            signalingState: 'stable',
+            hasSetLocalDescription: false,
+            hasSetRemoteDescription: false,
+            isInitiator: false
+        });
+        
+        // Initialize pending candidates array
+        this.pendingCandidates.set(userId, []);
 
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
@@ -406,6 +390,15 @@ class WebRTCService {
             this.emit('peerConnectionStateChange', userId, peerConnection.connectionState);
             const states = Array.from(this.peerConnections.values()).map(pc => pc.connectionState);
             this.emit('connectionStateChange', states.includes('connected') ? 'connected' : 'disconnected');
+        };
+
+        // Track signaling state changes
+        peerConnection.onsignalingstatechange = () => {
+            console.log(`Peer ${userId} signaling state changed to:`, peerConnection.signalingState);
+            const state = this.peerConnectionStates.get(userId);
+            if (state) {
+                state.signalingState = peerConnection.signalingState;
+            }
         };
 
         this.peerConnections.set(userId, peerConnection);
@@ -460,46 +453,161 @@ class WebRTCService {
     }
 
     async createOffer(userId) {
-        const peerConnection = this.createPeerConnection(userId);
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        this.sendSignalingMessage({
-            type: 'offer',
-            offer,
-            target_id: userId
-        });
+        try {
+            const peerConnection = this.createPeerConnection(userId);
+            const state = this.peerConnectionStates.get(userId);
+            
+            // Mark as initiator
+            state.isInitiator = true;
+            
+            console.log(`Creating offer for user ${userId}, current state:`, peerConnection.signalingState);
+            
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            
+            state.hasSetLocalDescription = true;
+            console.log(`Set local description for user ${userId}, new state:`, peerConnection.signalingState);
+            
+            this.sendSignalingMessage({
+                type: 'offer',
+                offer,
+                target_id: userId
+            });
+        } catch (error) {
+            console.error(`Error creating offer for user ${userId}:`, error);
+            throw error;
+        }
     }
 
     async handleOffer(offer, senderId) {
-        const peerConnection = this.createPeerConnection(senderId);
-        await peerConnection.setRemoteDescription(offer);
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        this.sendSignalingMessage({
-            type: 'answer',
-            answer,
-            target_id: senderId
-        });
+        try {
+            const peerConnection = this.createPeerConnection(senderId);
+            const state = this.peerConnectionStates.get(senderId);
+            
+            console.log(`Handling offer from user ${senderId}, current state:`, peerConnection.signalingState);
+            
+            // Check if we can set remote description
+            if (peerConnection.signalingState !== 'stable' && peerConnection.signalingState !== 'have-local-offer') {
+                console.warn(`Cannot handle offer from ${senderId}, peer connection is in state: ${peerConnection.signalingState}`);
+                return;
+            }
+            
+            // If we already have a local offer and this is from a higher user ID, ignore it to avoid race condition
+            if (state.hasSetLocalDescription && senderId > this.userId) {
+                console.log(`Ignoring offer from ${senderId} due to race condition (we are initiator)`);
+                return;
+            }
+            
+            await peerConnection.setRemoteDescription(offer);
+            state.hasSetRemoteDescription = true;
+            console.log(`Set remote description for user ${senderId}, new state:`, peerConnection.signalingState);
+            
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            state.hasSetLocalDescription = true;
+            console.log(`Set local answer for user ${senderId}, final state:`, peerConnection.signalingState);
+            
+            this.sendSignalingMessage({
+                type: 'answer',
+                answer,
+                target_id: senderId
+            });
+            
+            // Process any pending ICE candidates
+            await this.processPendingCandidates(senderId);
+            
+        } catch (error) {
+            console.error(`Error handling offer from user ${senderId}:`, error);
+            throw error;
+        }
     }
 
     async handleAnswer(answer, senderId) {
-        const peerConnection = this.peerConnections.get(senderId);
-        if (peerConnection) {
+        try {
+            const peerConnection = this.peerConnections.get(senderId);
+            const state = this.peerConnectionStates.get(senderId);
+            
+            if (!peerConnection) {
+                console.warn(`No peer connection found for user ${senderId}`);
+                return;
+            }
+            
+            console.log(`Handling answer from user ${senderId}, current state:`, peerConnection.signalingState);
+            
+            // Check if we can set remote description
+            if (peerConnection.signalingState !== 'have-local-offer') {
+                console.warn(`Cannot handle answer from ${senderId}, peer connection is in state: ${peerConnection.signalingState}`);
+                return;
+            }
+            
             await peerConnection.setRemoteDescription(answer);
+            state.hasSetRemoteDescription = true;
+            console.log(`Set remote answer for user ${senderId}, new state:`, peerConnection.signalingState);
+            
+            // Process any pending ICE candidates
+            await this.processPendingCandidates(senderId);
+            
+        } catch (error) {
+            console.error(`Error handling answer from user ${senderId}:`, error);
+            throw error;
         }
     }
 
     async handleIceCandidate(candidate, senderId) {
-        const peerConnection = this.peerConnections.get(senderId);
-        if (peerConnection) {
+        try {
+            const peerConnection = this.peerConnections.get(senderId);
+            const state = this.peerConnectionStates.get(senderId);
+            
+            if (!peerConnection) {
+                console.warn(`No peer connection found for user ${senderId}`);
+                return;
+            }
+            
+            // If remote description is not set yet, queue the candidate
+            if (!state.hasSetRemoteDescription) {
+                console.log(`Queueing ICE candidate for user ${senderId} (remote description not set yet)`);
+                this.pendingCandidates.get(senderId).push(candidate);
+                return;
+            }
+            
+            console.log(`Adding ICE candidate for user ${senderId}`);
             await peerConnection.addIceCandidate(candidate);
+            
+        } catch (error) {
+            console.error(`Error handling ICE candidate from user ${senderId}:`, error);
+            // Don't throw error for ICE candidate failures as they're not critical
         }
+    }
+
+    async processPendingCandidates(userId) {
+        const peerConnection = this.peerConnections.get(userId);
+        const pendingCandidates = this.pendingCandidates.get(userId) || [];
+        
+        if (pendingCandidates.length === 0) {
+            return;
+        }
+        
+        console.log(`Processing ${pendingCandidates.length} pending ICE candidates for user ${userId}`);
+        
+        for (const candidate of pendingCandidates) {
+            try {
+                await peerConnection.addIceCandidate(candidate);
+            } catch (error) {
+                console.error(`Error adding pending ICE candidate for user ${userId}:`, error);
+            }
+        }
+        
+        // Clear pending candidates
+        this.pendingCandidates.set(userId, []);
     }
 
     handleUserLeft(userId) {
         const pc = this.peerConnections.get(userId);
         if (pc) pc.close();
         this.peerConnections.delete(userId);
+        this.peerConnectionStates.delete(userId);
+        this.pendingCandidates.delete(userId);
         this.remoteStreams.delete(userId);
         this.emit('userLeft', userId);
     }
@@ -598,6 +706,8 @@ class WebRTCService {
         this.localStream = null;
         this.peerConnections.forEach(pc => pc.close());
         this.peerConnections.clear();
+        this.peerConnectionStates.clear();
+        this.pendingCandidates.clear();
         this.remoteStreams.clear();
         this.websocket?.close();
         this.websocket = null;
