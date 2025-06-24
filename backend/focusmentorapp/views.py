@@ -563,3 +563,141 @@ class MentorAvailabilityView(APIView):
                 'success': False,
                 'message': 'Mentor profile not found'
             }, status=status.HTTP_404_NOT_FOUND)
+
+class MentorSessionListView(APIView):
+    """
+    API view to list mentor sessions for the authenticated user.
+    Returns sessions where the user is either a student or a mentor.
+    """
+    authentication_classes = [MentorCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get list of mentor sessions for the authenticated user"""
+        user = request.user
+        
+        # Check if user is a mentor
+        try:
+            mentor = user.mentor_profile
+            # If user is a mentor, return sessions where they are the mentor
+            sessions = MentorSession.objects.filter(
+                mentor=mentor
+            ).select_related(
+                'student', 
+                'mentor__user', 
+                'cancelled_by'
+            ).prefetch_related('subjects').order_by('-scheduled_date', '-scheduled_time')
+        except:
+            # If user is not a mentor, return sessions where they are the student
+            sessions = MentorSession.objects.filter(
+                student=user
+            ).select_related(
+                'student', 
+                'mentor__user', 
+                'cancelled_by'
+            ).prefetch_related('subjects').order_by('-scheduled_date', '-scheduled_time')
+        
+        # Serialize the data
+        serializer = MentorSessionSerializer(sessions, many=True)
+        
+        return Response({
+            'success': True,
+            'sessions': serializer.data
+        })
+
+
+class MentorSessionDetailView(APIView):
+    """
+    API view to retrieve and update a specific mentor session.
+    Only allows access to sessions where the user is involved.
+    """
+    authentication_classes = [MentorCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get_session(self, request, pk):
+        """Helper method to get session based on user permissions"""
+        user = request.user
+        
+        # Allow access to sessions where user is either student or mentor
+        queryset = MentorSession.objects.select_related(
+            'student', 
+            'mentor__user', 
+            'cancelled_by'
+        ).prefetch_related('subjects')
+        
+        # Filter based on user role
+        try:
+            mentor = user.mentor_profile
+            queryset = queryset.filter(
+                Q(mentor=mentor) | Q(student=user)
+            )
+        except:
+            queryset = queryset.filter(student=user)
+        
+        return get_object_or_404(queryset, pk=pk)
+    
+    def get(self, request, pk):
+        """Retrieve a specific mentor session"""
+        try:
+            session = self.get_session(request, pk)
+            serializer = MentorSessionSerializer(session)
+            
+            return Response({
+                'success': True,
+                'session': serializer.data
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Session not found or access denied'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def put(self, request, pk):
+        """Complete update of a mentor session"""
+        try:
+            session = self.get_session(request, pk)
+            serializer = MentorSessionSerializer(session, data=request.data)
+            
+            if serializer.is_valid():
+                updated_session = serializer.save()
+                return Response({
+                    'success': True,
+                    'message': 'Session updated successfully',
+                    'session': MentorSessionSerializer(updated_session).data
+                })
+            
+            return Response({
+                'success': False,
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Session not found or access denied'
+            }, status=status.HTTP_404_NOT_FOUND)
+    
+    def patch(self, request, pk):
+        """Partial update of a mentor session"""
+        try:
+            session = self.get_session(request, pk)
+            serializer = MentorSessionSerializer(session, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                updated_session = serializer.save()
+                return Response({
+                    'success': True,
+                    'message': 'Session updated successfully',
+                    'session': MentorSessionSerializer(updated_session).data
+                })
+            
+            return Response({
+                'success': False,
+                'errors': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Session not found or access denied'
+            }, status=status.HTTP_404_NOT_FOUND)

@@ -598,3 +598,70 @@ class MentorAvailabilitySerializer(serializers.ModelSerializer):
         instance.availability = validated_data.get('availability', instance.availability)
         instance.save()
         return instance
+
+class UserBasicSerializer(serializers.ModelSerializer):
+    """Basic user serializer for nested relationships"""
+    class Meta:
+        model = User
+        fields = ['id', 'name', 'email']
+
+class SubjectSerializer(serializers.ModelSerializer):
+    """Subject serializer"""
+    class Meta:
+        model = Subject
+        fields = ['id', 'name']
+
+class MentorSessionSerializer(serializers.ModelSerializer):
+    """Serializer for MentorSession with nested relationships"""
+    student = UserBasicSerializer(read_only=True)
+    mentor = serializers.SerializerMethodField()
+    subjects = SubjectSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = MentorSession
+        fields = [
+            'id',
+            'student',
+            'mentor',
+            'scheduled_date',
+            'scheduled_time',
+            'duration_minutes',
+            'session_mode',
+            'status',
+            'meeting_link',
+            'meeting_id',
+            'meeting_password',
+            'session_notes',
+            'student_feedback',
+            'mentor_feedback',
+            'student_rating',
+            'mentor_rating',
+            'created_at',
+            'updated_at',
+            'confirmed_at',
+            'started_at',
+            'ended_at',
+            'cancelled_at',
+            'cancelled_by',
+            'cancellation_reason',
+            'subjects',
+            'is_upcoming',
+            'session_datetime',
+        ]
+        read_only_fields = [
+            'id',
+            'created_at',
+            'updated_at',
+            'is_upcoming',
+            'session_datetime',
+        ]
+    
+    def get_mentor(self, obj):
+        """Get mentor user details"""
+        if obj.mentor and obj.mentor.user:
+            return {
+                'id': obj.mentor.user.id,
+                'name': obj.mentor.user.name,
+                'email': obj.mentor.user.email,
+            }
+        return None

@@ -17,6 +17,8 @@ urlpatterns = [
     path('profile/', MentorProfileDisplayView.as_view(), name='mentor-profile-display'),
     path('profile/<int:mentor_id>/', MentorProfileDisplayView.as_view(), name='mentor-profile-view'),
     path('availability/', MentorAvailabilityView.as_view(), name='update_mentor_availability'),
+    path('mentor-sessions/', MentorSessionListView.as_view(), name='mentor-sessions-list'),
+    path('mentor-sessions/<int:pk>/', MentorSessionDetailView.as_view(), name='mentor-sessions-detail'),
     
 ]
 

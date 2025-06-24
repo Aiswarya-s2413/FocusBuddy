@@ -82,27 +82,27 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             logger.error(f"[WebSocket] Error during disconnect: {e}")
 
     async def receive(self, text_data):
-    try:
-        data = json.loads(text_data)
-        msg_type = data.get('type')
+        try:
+            data = json.loads(text_data)
+            msg_type = data.get('type')
 
-        handler_map = {
-            'offer': self.handle_offer,
-            'answer': self.handle_answer,
-            'ice-candidate': self.handle_ice_candidate,
-            'media-state': self.handle_media_state,
-            'chat-message': self.handle_chat_message,  # This is correct
-        }
+            handler_map = {
+                'offer': self.handle_offer,
+                'answer': self.handle_answer,
+                'ice-candidate': self.handle_ice_candidate,
+                'media-state': self.handle_media_state,
+                'chat-message': self.handle_chat_message,  # This is correct
+            }
 
-        if msg_type in handler_map:
-            await handler_map[msg_type](data)
-        else:
-            logger.warning(f"[WebSocket] Unknown message type: {msg_type}")
+            if msg_type in handler_map:
+                await handler_map[msg_type](data)
+            else:
+                logger.warning(f"[WebSocket] Unknown message type: {msg_type}")
 
-    except json.JSONDecodeError as e:
-        logger.error(f"[WebSocket] JSON decode error: {e}")
-    except Exception as e:
-        logger.error(f"[WebSocket] Receive error: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"[WebSocket] JSON decode error: {e}")
+        except Exception as e:
+            logger.error(f"[WebSocket] Receive error: {e}")
 
     # ---------- WebRTC Handlers ----------
     async def handle_offer(self, data):
