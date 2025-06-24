@@ -533,18 +533,20 @@ const joinSession = async (sessionId) => {
     if (newMessage.trim() && currentSession) {
       if (webrtcService.current) {
         webrtcService.current.sendSignalingMessage({
-          type: 'chat',
-          message: newMessage,
-          sender_name: 'You' // get this from user context
+          type: 'chat-message',  
+          message: newMessage
         });
       }
+  
       setMessages(prev => [...prev, {
         sender_name: 'You',
         message: newMessage
       }]);
+  
       setNewMessage('');
     }
   };
+  
 
   // Helper functions
   const getSessionTypeColor = (type) => {

@@ -444,6 +444,13 @@ class WebRTCService {
                 case 'user-left':
                     this.handleUserLeft(message.user_id);
                     break;
+                case 'chat-message':
+                    this.emit('chatMessage', {
+                        sender_id: message.sender_id,
+                        sender_name: message.sender_name,
+                        message: message.message
+                    });
+                    break;
                 default:
                     console.warn('Unknown message type:', message.type);
             }
@@ -639,6 +646,17 @@ class WebRTCService {
             return audioTrack.enabled;
         }
         return false;
+    }
+
+    sendChatMessage(message) {
+        if (this.websocket?.readyState === WebSocket.OPEN) {
+            this.sendSignalingMessage({
+                type: 'chat-message',
+                message: message
+            });
+        } else {
+            console.warn('Cannot send chat message, WebSocket not connected');
+        }
     }
 
     sendMediaState() {

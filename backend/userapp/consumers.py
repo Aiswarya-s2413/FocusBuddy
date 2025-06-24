@@ -24,44 +24,30 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
 
         if self.user.is_anonymous:
             logger.warning("[WebSocket] Anonymous user rejected - closing connection")
-            await self.close(code=4001)  # Custom close code for auth failure
+            await self.close(code=4001)
             return
-
-        logger.info(f"[WebSocket] Authenticated user {self.user.username} connecting to session {self.session_id}")
 
         try:
             await self.accept()
-            logger.info("[WebSocket] Connection accepted")
-            
-            await self.channel_layer.group_add(
-                self.room_group_name,
-                self.channel_name
-            )
-            logger.debug(f"[WebSocket] Added to group: {self.room_group_name}")
+            await self.channel_layer.group_add(self.room_group_name, self.channel_name)
 
-            # Manage active participants
             if self.session_id not in active_participants:
                 active_participants[self.session_id] = set()
 
             other_users = list(active_participants[self.session_id])
             active_participants[self.session_id].add(self.user.id)
 
-            logger.info(f"[WebSocket] Session {self.session_id} participants: {active_participants[self.session_id]}")
-
-            # Send authentication confirmation
             await self.send(text_data=json.dumps({
                 'type': 'authenticated',
                 'user_id': self.user.id,
                 'username': self.user.username
             }))
 
-            # Send existing users
             await self.send(text_data=json.dumps({
                 'type': 'existing-users',
                 'users': other_users
             }))
 
-            # Notify others of new user
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -70,65 +56,55 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
                     'user_name': self.user.username
                 }
             )
-            
-            logger.info(f"[WebSocket] User {self.user.username} successfully connected to session {self.session_id}")
-            
+
         except Exception as e:
             logger.error(f"[WebSocket] Error during connection setup: {e}")
             await self.close(code=4000)
 
     async def disconnect(self, close_code):
-        logger.info(f"[WebSocket] Disconnecting user {getattr(self.user, 'username', 'Unknown')} with code {close_code}")
-        
         try:
-            await self.channel_layer.group_discard(
-                self.room_group_name,
-                self.channel_name
-            )
+            await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
-            if hasattr(self, 'session_id') and self.session_id in active_participants:
-                if hasattr(self.user, 'id'):
-                    active_participants[self.session_id].discard(self.user.id)
-                    if not active_participants[self.session_id]:
-                        del active_participants[self.session_id]
+            if self.session_id in active_participants:
+                active_participants[self.session_id].discard(self.user.id)
+                if not active_participants[self.session_id]:
+                    del active_participants[self.session_id]
 
-                    # Notify others of user leaving
-                    await self.channel_layer.group_send(
-                        self.room_group_name,
-                        {
-                            'type': 'user_left',
-                            'user_id': self.user.id
-                        }
-                    )
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'user_left',
+                        'user_id': self.user.id
+                    }
+                )
 
-            logger.info(f"[WebSocket] User {getattr(self.user, 'id', 'Unknown')} disconnected from session {getattr(self, 'session_id', 'Unknown')}")
-            
         except Exception as e:
             logger.error(f"[WebSocket] Error during disconnect: {e}")
 
     async def receive(self, text_data):
-        try:
-            data = json.loads(text_data)
-            msg_type = data.get('type')
-            logger.debug(f"[WebSocket] Received type: {msg_type} | From user: {self.user.id}")
+    try:
+        data = json.loads(text_data)
+        msg_type = data.get('type')
 
-            handler_map = {
-                'offer': self.handle_offer,
-                'answer': self.handle_answer,
-                'ice-candidate': self.handle_ice_candidate,
-                'media-state': self.handle_media_state,
-            }
+        handler_map = {
+            'offer': self.handle_offer,
+            'answer': self.handle_answer,
+            'ice-candidate': self.handle_ice_candidate,
+            'media-state': self.handle_media_state,
+            'chat-message': self.handle_chat_message,  # This is correct
+        }
 
-            if msg_type in handler_map:
-                await handler_map[msg_type](data)
-            else:
-                logger.warning(f"[WebSocket] Unknown message type: {msg_type}")
-                
-        except json.JSONDecodeError as e:
-            logger.error(f"[WebSocket] JSON decode error: {e}")
-        except Exception as e:
-            logger.error(f"[WebSocket] Receive error: {e}")
+        if msg_type in handler_map:
+            await handler_map[msg_type](data)
+        else:
+            logger.warning(f"[WebSocket] Unknown message type: {msg_type}")
 
+    except json.JSONDecodeError as e:
+        logger.error(f"[WebSocket] JSON decode error: {e}")
+    except Exception as e:
+        logger.error(f"[WebSocket] Receive error: {e}")
+
+    # ---------- WebRTC Handlers ----------
     async def handle_offer(self, data):
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -173,7 +149,21 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             }
         )
 
-    # Event handlers for group messages
+    # ---------- Chat Handler ----------
+    async def handle_chat_message(self, data):
+        message = data.get('message')
+        if message:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_message',
+                    'sender_id': self.user.id,
+                    'sender_name': self.user.username,
+                    'message': message
+                }
+            )
+
+    # ---------- Group Message Events ----------
     async def webrtc_offer(self, event):
         if event['target_id'] == self.user.id:
             await self.send(text_data=json.dumps({
@@ -220,3 +210,12 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
                 'audio_enabled': event['audio_enabled'],
                 'sender_id': event['sender_id']
             }))
+
+    async def chat_message(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'chat-message',
+            'sender_id': event['sender_id'],
+            'sender_name': event['sender_name'],
+            'message': event['message']
+        }))
+  
