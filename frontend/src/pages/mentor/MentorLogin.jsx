@@ -48,7 +48,7 @@ const MentorLogin = () => {
       }, { withCredentials: true });
 
       if (response.status === 200) {
-        // Store user data in localStorage if needed
+        localStorage.setItem('role', 'mentor');
         localStorage.setItem("user", JSON.stringify(response.data.user));
         navigate("/mentor/upload-profile");
       }

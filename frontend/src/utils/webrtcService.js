@@ -44,9 +44,10 @@ class WebRTCService {
         }
     }
 
-    async initialize(sessionId, authToken = null) {
+    async initialize(sessionId, authToken = null, callType = 'group') {
         try {
             this.sessionId = sessionId;
+            this.callType = callType;
 
             // Enhanced cookie debugging and token handling
             console.log('=== Cookie Debug Info ===');
@@ -412,19 +413,40 @@ class WebRTCService {
                     console.log('Authenticated as user:', message.user_id);
                     this.userId = message.user_id;
                     break;
-                case 'existing-users':
-                    console.log('Existing users in session:', message.users);
-                    for (const id of message.users) {
-                        if (id !== this.userId) {
-                            await this.createOffer(id);
+                    case 'existing-users':
+                        console.log('Existing users in session:', message.users);
+                        if (this.callType === '1on1') {
+                            if (message.users.length > 0) {
+                                const peerId = message.users[0]; 
+                                if (peerId !== this.userId) {
+                                    await this.createOffer(peerId);
+                                }
+                            }
+                        } else {
+                            for (const id of message.users) {
+                                if (id !== this.userId) {
+                                    await this.createOffer(id);
+                                }
+                            }
                         }
-                    }
-                    break;
-                case 'user-joined':
-                    console.log('User joined:', message);
-                    this.emit('userJoined', { id: message.user_id, name: message.user_name });
-                    if (message.user_id !== this.userId) await this.createOffer(message.user_id);
-                    break;
+                        break;
+                    
+                        case 'user-joined':
+                            console.log('User joined:', message);
+                            this.emit('userJoined', { id: message.user_id, name: message.user_name });
+                        
+                            if (this.callType === '1on1') {
+                                // Prevent duplicate offer creation in one-on-one
+                                if (!this.peerConnections.has(message.user_id) && message.user_id !== this.userId) {
+                                    await this.createOffer(message.user_id);
+                                }
+                            } else {
+                                if (message.user_id !== this.userId) {
+                                    await this.createOffer(message.user_id);
+                                }
+                            }
+                            break;
+                        
                 case 'offer':
                     await this.handleOffer(message.offer, message.sender_id);
                     break;

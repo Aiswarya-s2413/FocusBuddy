@@ -86,6 +86,7 @@ const Login = () => {
 
   useEffect(() => {
     if (message && !error) {
+      localStorage.setItem('role', 'user');
       navigate("/settings");
       dispatch(clearMessage()); 
     }

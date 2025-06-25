@@ -106,7 +106,8 @@ class LoginSerializer(serializers.Serializer):
             "user": {
                 "id": user.id,
                 "name": user.name,
-                "email": user.email
+                "email": user.email,
+                "is_mentor": user.is_mentor,
             }
         }
 

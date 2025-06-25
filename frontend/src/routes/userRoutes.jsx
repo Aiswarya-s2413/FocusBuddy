@@ -12,6 +12,8 @@ import { useSelector } from "react-redux";
 import AuthLayout from "../components/AuthLayout";
 import Mentors from "../pages/user/Mentors";
 import FocusBuddy from "../pages/user/FocusBuddy";
+import VideoCallPage from "../components/VideoCallPage";
+import MySessions from "../pages/user/MySessions";
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useSelector((state) => state.user);
@@ -75,6 +77,15 @@ const UserRoutes = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/sessions"
+        element={
+          <ProtectedRoute>
+            <AuthLayout><MySessions /></AuthLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/video-call/:sessionId" element={<ProtectedRoute><VideoCallPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );

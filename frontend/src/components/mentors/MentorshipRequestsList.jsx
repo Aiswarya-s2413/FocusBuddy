@@ -4,6 +4,8 @@ import { Badge } from "../../components/ui/badge";
 import {useSimpleToast as useToast} from "../../components/ui/toast";
 import { Calendar, Clock, MessageSquare, Video, Phone, MessageCircle, Play, ChevronDown, ChevronUp } from "lucide-react";
 import axios from "axios";
+import { useNavigate } from 'react-router-dom';
+
 
 // Create axios instance outside component to avoid re-initialization
 const apiClient = axios.create({
@@ -19,6 +21,8 @@ const MentorshipRequestsList = () => {
   const [error, setError] = useState(null);
   const [startingSession, setStartingSession] = useState(null);
   const [showAll, setShowAll] = useState(false);
+  const navigate = useNavigate();
+
   
   // Use ref to track if component is mounted
   const isMountedRef = useRef(true);
@@ -70,17 +74,21 @@ const MentorshipRequestsList = () => {
       const response = await apiClient.patch(`/mentor-sessions/${sessionId}/start/`);
       
       if (response.data) {
-        // Update the session status in the local state
-        setRequests(prevRequests => 
-          prevRequests.map(request => 
-            request.id === sessionId 
+        // Update session status in local state
+        setRequests(prevRequests =>
+          prevRequests.map(request =>
+            request.id === sessionId
               ? { ...request, status: 'ongoing' }
               : request
           )
         );
-        
+      
         toast.success('Session started successfully!');
+      
+        // Redirect to video call component (pass sessionId as state or param)
+        navigate(`/video-call/${sessionId}`, { state: { session: response.data } });
       }
+      
     } catch (err) {
       console.error('Error starting session:', err);
       

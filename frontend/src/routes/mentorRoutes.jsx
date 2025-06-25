@@ -8,6 +8,7 @@ import MentorForgotPassword from "../pages/mentor/MentorForgotPassword";
 import MentorProfileUpload from "../pages/mentor/MentorProfileUpload";
 import MentorLayout from "../components/mentors/MentorLayout";
 import MentorProfileDisplay from "../pages/mentor/MentorProfileDisplay";
+import VideoCallPage from "../components/VideoCallPage";
 
 // Protected route wrapper
 const PrivateRoute = ({ children }) => {
@@ -43,6 +44,7 @@ const MentorRoutes = () => {
                     </PrivateRoute>
                 }
             />
+            <Route path="/video-call/:sessionId" element={<PrivateRoute><VideoCallPage /></PrivateRoute>} />
         </Routes>
     );
 };
