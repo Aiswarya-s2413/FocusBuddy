@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Calendar, Clock, Video, X, MessageSquare, Star, Loader2, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { useSimpleToast } from "../ui/toast";
+import { useNavigate } from 'react-router-dom';
 
 // Custom Avatar Components (same as in MentorGrid)
 const Avatar = ({ children, className = "" }) => (
@@ -80,6 +81,7 @@ const AvatarFallback = ({ children, className = "" }) => (
 
 const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh }) => {
   const { toast } = useSimpleToast();
+  const navigate = useNavigate();
   const [cancelDialog, setCancelDialog] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [feedbackDialog, setFeedbackDialog] = useState(false);
@@ -163,11 +165,11 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
   };
 
   const canCancelSession = (session) => {
-    if (session.status === 'cancelled' || session.status === 'completed') {
+    if (session.status === 'cancelled' || session.status === 'completed' || session.status === 'ongoing') {
       return false;
     }
     
-    // Check if session is more than 24 hours away
+    // Check if session is more than 1 hour away
     const sessionTime = new Date(session.dateTime);
     const now = new Date();
     const hoursUntilSession = (sessionTime - now) / (1000 * 60 * 60);
@@ -176,11 +178,16 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
   };
 
   const canJoinSession = (session) => {
-    if (session.status !== 'confirmed' && session.status !== 'ongoing') {
+    // Allow joining if session is ongoing or confirmed and within the joinable time window
+    if (session.status === 'ongoing') {
+      return true; // Always allow joining ongoing sessions
+    }
+    
+    if (session.status !== 'confirmed') {
       return false;
     }
     
-    // Check if session is within 15 minutes of start time
+    // Check if session is within 15 minutes of start time for confirmed sessions
     const sessionTime = new Date(session.dateTime);
     const now = new Date();
     const minutesUntilSession = (sessionTime - now) / (1000 * 60);
@@ -189,10 +196,43 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
   };
 
   const handleJoinSession = (session) => {
-    if (session.meetingLink) {
-      window.open(session.meetingLink, '_blank');
-    } else {
-      toast.error('Meeting link not available yet.');
+    // Navigate to video call page with session information
+    navigate(`/video-call/${session.id}`, { 
+      state: { 
+        session: session,
+        userRole: 'student' // or get from localStorage/context
+      } 
+    });
+  };
+
+  const getJoinButtonText = (session) => {
+    if (session.status === 'ongoing') {
+      return 'Join Session';
+    }
+    
+    if (session.status === 'confirmed') {
+      const sessionTime = new Date(session.dateTime);
+      const now = new Date();
+      const minutesUntilSession = (sessionTime - now) / (1000 * 60);
+      
+      if (minutesUntilSession <= 0) {
+        return 'Join Session';
+      } else if (minutesUntilSession <= 15) {
+        return `Join in ${Math.ceil(minutesUntilSession)}min`;
+      }
+    }
+    
+    return 'Join Session';
+  };
+
+  const getStatusBadgeColor = (status) => {
+    switch (status) {
+      case 'confirmed': return 'bg-blue-100 text-blue-800';
+      case 'ongoing': return 'bg-green-100 text-green-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
+      case 'completed': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -223,20 +263,15 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
                             src={session.mentor.profilePicture || session.mentor.profile_image_url} 
                             alt={session.mentor.name}
                           />
-                          <AvatarFallback>{session.mentor.name?.charAt(0) || 'M'}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <h3 className="font-medium">{session.mentor.name}</h3>
                           <p className="text-sm text-gray-600">{session.mentor.specialization}</p>
                           
                           {session.status && (
-                            <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${
-                              session.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                              session.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                              session.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+                            <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${getStatusBadgeColor(session.status)}`}>
+                              {session.status === 'ongoing' ? 'Live Now' : 
+                               session.status.charAt(0).toUpperCase() + session.status.slice(1)}
                             </span>
                           )}
 
@@ -262,39 +297,40 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
                       </div>
                     </CardContent>
                     <CardFooter className="flex justify-between bg-gray-50 border-t px-6 py-3">
-                      <Button 
-                        variant="default" 
-                        className="bg-purple-600 hover:bg-purple-700"
-                        onClick={() => handleJoinSession(session)}
-                        disabled={!canJoinSession(session)}
-                      >
-                        {session.meetingLink && canJoinSession(session) ? (
-                          <>
-                            <ExternalLink className="h-4 w-4 mr-1" />
-                            Join Session
-                          </>
-                        ) : (
-                          'Join Session'
-                        )}
-                      </Button>
-                      {/* {canCancelSession(session) && (
-                        <Button
-                          variant="outline"
-                          className="text-red-500 border-red-200 hover:bg-red-50"
+                      {canCancelSession(session) && (
+                        <Button 
+                          variant="outline" 
                           onClick={() => {
                             setSelectedSession(session);
                             setCancelDialog(true);
                           }}
-                          disabled={isCancelling}
                         >
-                          {isCancelling ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : (
-                            <X className="h-4 w-4 mr-1" />
-                          )}
                           Cancel
                         </Button>
-                      )} */}
+                      )}
+                      
+                      <div className="flex-1"></div>
+                      
+                      <Button 
+                        variant="default" 
+                        className={`${canJoinSession(session) 
+                          ? (session.status === 'ongoing' 
+                            ? 'bg-green-600 hover:bg-green-700 animate-pulse' 
+                            : 'bg-purple-600 hover:bg-purple-700')
+                          : 'bg-gray-400 cursor-not-allowed'
+                        }`}
+                        onClick={() => handleJoinSession(session)}
+                        disabled={!canJoinSession(session)}
+                      >
+                        {canJoinSession(session) ? (
+                          <>
+                            <ExternalLink className="h-4 w-4 mr-1" />
+                            {getJoinButtonText(session)}
+                          </>
+                        ) : (
+                          'Session Not Ready'
+                        )}
+                      </Button>
                     </CardFooter>
                   </Card>
                 );
@@ -322,7 +358,6 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
                             src={session.mentor.profilePicture || session.mentor.profile_image_url} 
                             alt={session.mentor.name}
                           />
-                          {/* <AvatarFallback>{session.mentor.name?.charAt(0) || 'M'}</AvatarFallback> */}
                         </Avatar>
                         <div className="flex-1">
                           <h3 className="font-medium">{session.mentor.name}</h3>

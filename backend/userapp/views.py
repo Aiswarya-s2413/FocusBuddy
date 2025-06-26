@@ -22,6 +22,7 @@ from django.conf import settings
 from django.db.models import Count
 from django.db import IntegrityError
 from rest_framework.exceptions import ValidationError
+from .combine import *
 
 
 logger = logging.getLogger(__name__)
@@ -1713,6 +1714,7 @@ class WebRTCConfigView(APIView):
     API view to provide WebRTC configuration including ICE servers
     """
     permission_classes = [IsAuthenticated]
+    authentication_classes = [CombinedCookieJWTAuthentication]
     
     def get_ice_servers(self):
         """Get ICE servers configuration with free services"""
@@ -1788,3 +1790,47 @@ class WebRTCConfigView(APIView):
             })
         
         return Response(config, status=status.HTTP_200_OK)
+
+class JoinMentorSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, session_id):
+        user = request.user
+
+        try:
+            session = MentorSession.objects.get(id=session_id, student=user)
+        except MentorSession.DoesNotExist:
+            return Response({"error": "Session not found or you're not authorized"}, status=404)
+
+        if session.status not in ['confirmed', 'ongoing']:
+            return Response({"error": f"Cannot join session in '{session.status}' state"}, status=400)
+
+        # Automatically switch to ongoing if confirmed and time has arrived
+        if session.status == 'confirmed' and session.session_datetime <= timezone.now():
+            session.status = 'ongoing'
+            session.started_at = timezone.now()
+            session.save()
+
+        serializer = MentorSessionSerializer(session)
+        return Response(serializer.data)
+
+class LeaveMentorSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, session_id):
+        user = request.user
+
+        try:
+            session = MentorSession.objects.get(id=session_id, student=user)
+        except MentorSession.DoesNotExist:
+            return Response({"error": "Session not found or unauthorized"}, status=404)
+
+        if session.status != 'ongoing':
+            return Response({"error": "You cannot leave a session that is not ongoing"}, status=400)
+
+        # Mark end time and complete
+        session.ended_at = timezone.now()
+        session.status = 'completed'
+        session.save()
+
+        return Response({"message": "You have left the session. Marked as completed."})

@@ -48,8 +48,11 @@ const MentorLogin = () => {
       }, { withCredentials: true });
 
       if (response.status === 200) {
+        console.log("Mentor login successful:", response.data);
         localStorage.setItem('role', 'mentor');
-        localStorage.setItem("user", JSON.stringify(response.data.user));
+        localStorage.setItem("mentor", JSON.stringify(response.data.user));
+      
+        console.log("Navigating to /mentor/upload-profile");
         navigate("/mentor/upload-profile");
       }
     } catch (err) {

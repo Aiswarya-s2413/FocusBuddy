@@ -65,6 +65,7 @@ const MentorshipRequestsList = () => {
 
   // Function to handle starting a session
   const handleStartSession = async (sessionId) => {
+    console.log("Starting session:", sessionId); 
     if (startingSession === sessionId) return; // Prevent double-clicking
     
     try {
@@ -132,6 +133,7 @@ const MentorshipRequestsList = () => {
         
         // Ensure we have an array
         if (Array.isArray(sessionsData)) {
+          console.log("Fetched sessions:", sessionsData);
           setRequests(sessionsData);
         } else {
           console.warn('Expected array but got:', typeof sessionsData, sessionsData);

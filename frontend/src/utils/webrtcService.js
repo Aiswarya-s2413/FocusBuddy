@@ -62,7 +62,11 @@ class WebRTCService {
                 this.setCookie('access', authToken);
                 console.log('Auth token set via argument:', authToken);
             } else {
-                const tokenFromCookie = this.getCookie('access');
+                const tokenFromCookie =
+                    this.getCookie('access') ||
+                    this.getCookie('mentor_access') || 
+                    this.getCookie('access_token') || 
+                    this.getCookie('authToken');
                 this.authToken = tokenFromCookie;
                 console.log('Auth token fetched from cookie:', tokenFromCookie);
             }
@@ -183,7 +187,7 @@ class WebRTCService {
         }
 
         // Try different cookie names
-        const cookieNames = ['access', 'accessToken', 'access_token', 'token', 'authToken'];
+        const cookieNames = ['access', 'mentir_access', 'accessToken', 'access_token', 'token', 'authToken'];
         for (const cookieName of cookieNames) {
             token = this.getCookie(cookieName);
             if (token) {

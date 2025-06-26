@@ -85,7 +85,26 @@ const UserRoutes = () => {
           </ProtectedRoute>
         }
       />
-      <Route path="/video-call/:sessionId" element={<ProtectedRoute><VideoCallPage /></ProtectedRoute>} />
+      <Route
+          path="/video-call/:sessionId"
+          element={
+            (() => {
+              const user = JSON.parse(localStorage.getItem("user"));
+              const mentor = JSON.parse(localStorage.getItem("mentor"));
+              const isAuthenticated = user || mentor;
+
+              return isAuthenticated ? (
+                <VideoCallPage />
+              ) : (
+                <Navigate
+                  to={window.location.pathname.startsWith("/mentor") ? "/mentor/login" : "/login"}
+                  replace
+                />
+              );
+            })()
+          }
+        />
+
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );

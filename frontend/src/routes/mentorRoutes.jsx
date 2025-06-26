@@ -12,7 +12,7 @@ import VideoCallPage from "../components/VideoCallPage";
 
 // Protected route wrapper
 const PrivateRoute = ({ children }) => {
-    const user = JSON.parse(localStorage.getItem("user"));
+    const user = JSON.parse(localStorage.getItem("mentor"));
     const isAuthenticated = !!user;
   
     return isAuthenticated ? children : <Navigate to="/mentor/login" replace />;

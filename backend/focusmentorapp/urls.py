@@ -19,6 +19,8 @@ urlpatterns = [
     path('availability/', MentorAvailabilityView.as_view(), name='update_mentor_availability'),
     path('mentor-sessions/', MentorSessionListView.as_view(), name='mentor-sessions-list'),
     path('mentor-sessions/<int:pk>/', MentorSessionDetailView.as_view(), name='mentor-sessions-detail'),
+    path('mentor-sessions/<int:session_id>/start/', StartMentorSessionView.as_view(), name='mentor-session-start'),
+    path('mentor-sessions/<int:session_id>/cancel/', CancelMentorSessionView.as_view(), name='mentor-session-cancel'),
     
 ]
 

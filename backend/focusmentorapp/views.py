@@ -74,11 +74,11 @@ class MentorLoginView(APIView):
             
             # Set tokens in cookies
             response.set_cookie(
-                "mentor_access", data["access"], httponly=True, 
+                "mentor_access", data["access"], httponly=False, 
                 secure=False, samesite="Lax", path="/",domain='localhost'
             )
             response.set_cookie(
-                "mentor_refresh", data["refresh"], httponly=True, 
+                "mentor_refresh", data["refresh"], httponly=False, 
                 secure=False, samesite="Lax", path="/", domain='localhost'
             )
             return response
@@ -701,3 +701,54 @@ class MentorSessionDetailView(APIView):
                 'success': False,
                 'message': 'Session not found or access denied'
             }, status=status.HTTP_404_NOT_FOUND)
+
+
+class StartMentorSessionView(APIView):
+    authentication_classes = [MentorCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, session_id):
+        try:
+            session = MentorSession.objects.get(id=session_id, mentor__user=request.user)
+        except MentorSession.DoesNotExist:
+            return Response({"error": "Session not found or unauthorized"}, status=404)
+
+        if session.status != 'confirmed':
+            return Response({"error": "Only confirmed sessions can be started"}, status=400)
+
+        # Update session status and timing
+        session.started_at = timezone.now()
+        session.status = 'ongoing'
+
+        # Optional: Save WebRTC session info from frontend
+        session.meeting_link = request.data.get("meeting_link", "")
+        session.meeting_id = request.data.get("meeting_id", "")
+        session.meeting_password = request.data.get("meeting_password", "")
+
+        session.save()
+
+        return Response({
+            "success": True,
+            "message": "Session started successfully",
+            "session_id": session.id,
+            "status": session.status,
+            "student_id": session.student.id,
+            "scheduled_time": session.scheduled_time,
+            "scheduled_date": session.scheduled_date,
+        })
+class CancelMentorSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [MentorCookieJWTAuthentication]
+
+    def post(self, request, session_id):
+        try:
+            session = MentorSession.objects.get(id=session_id, mentor__user=request.user)
+        except MentorSession.DoesNotExist:
+            return Response({"error": "Session not found or unauthorized"}, status=404)
+
+        if session.status in ['completed', 'cancelled']:
+            return Response({"error": f"Cannot cancel a {session.status} session"}, status=400)
+
+        session.cancel_session(cancelled_by_user=request.user, reason=request.data.get("reason"))
+        serializer = MentorSessionSerializer(session)
+        return Response(serializer.data)

@@ -48,6 +48,8 @@ urlpatterns = [
     # Mentor URLs
     path('mentors/', MentorListAPIView.as_view(), name='mentor-list'),
     path('mentors/<int:mentor_id>/', MentorDetailAPIView.as_view(), name='mentor-detail'),
+    path('mentor-sessions/<int:session_id>/join/', JoinMentorSessionView.as_view(),name='join-mentor-session'),
+    path('mentor-sessions/<int:session_id>/leave/', LeaveMentorSessionView.as_view(), name='leave-mentor-session'),
     
     # User Session URLs - SPECIFIC PATTERNS FIRST
     path('list/', UserSessionsListAPIView.as_view(), name='user-sessions-list'),

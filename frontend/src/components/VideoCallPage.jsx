@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, VideoOff, Mic, MicOff, Phone, MessageSquare, Clock, Send, Users, X } from 'lucide-react';
 import WebRTCService from '../utils/webrtcService';
+import { useParams } from 'react-router-dom';
 
-const VideoCallPage = ({ sessionId, onEndCall }) => {
+const VideoCallPage = ({ onEndCall }) => {
   const [webrtcService, setWebrtcService] = useState(null);
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -22,6 +23,7 @@ const VideoCallPage = ({ sessionId, onEndCall }) => {
   const remoteVideoRef = useRef(null);
   const chatContainerRef = useRef(null);
   const timerRef = useRef(null);
+  const { sessionId } = useParams();
 
   const getUserRole = () => localStorage.getItem('role');
 
