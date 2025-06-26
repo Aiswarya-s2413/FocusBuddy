@@ -185,7 +185,7 @@ const VideoCallPage = ({ onEndCall }) => {
               {chatMessages.map((msg, idx) => (
                 <div key={idx} className="bg-gray-100 p-2 rounded">
                   <div className="text-sm font-semibold">{msg.senderName}</div>
-                  <div>{msg.message}</div>
+                  <div>{typeof msg.message === 'string' ? msg.message : msg.message?.message}</div>
                 </div>
               ))}
             </div>
