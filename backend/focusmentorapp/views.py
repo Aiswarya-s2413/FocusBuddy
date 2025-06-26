@@ -75,11 +75,11 @@ class MentorLoginView(APIView):
             # Set tokens in cookies
             response.set_cookie(
                 "mentor_access", data["access"], httponly=False, 
-                secure=False, samesite="Lax", path="/",domain='localhost'
+                secure=False, samesite="Lax", path="/"
             )
             response.set_cookie(
                 "mentor_refresh", data["refresh"], httponly=False, 
-                secure=False, samesite="Lax", path="/", domain='localhost'
+                secure=False, samesite="Lax", path="/"
             )
             return response
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

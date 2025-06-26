@@ -187,7 +187,7 @@ class WebRTCService {
         }
 
         // Try different cookie names
-        const cookieNames = ['access', 'mentir_access', 'accessToken', 'access_token', 'token', 'authToken'];
+        const cookieNames = ['access', 'mentor_access', 'accessToken', 'access_token', 'token', 'authToken'];
         for (const cookieName of cookieNames) {
             token = this.getCookie(cookieName);
             if (token) {
@@ -744,8 +744,10 @@ class WebRTCService {
             });
         });
     }
+ 
 
     cleanup() {
+        console.log("Cleanup called")
         this.localStream?.getTracks().forEach(track => track.stop());
         this.localStream = null;
         this.peerConnections.forEach(pc => pc.close());

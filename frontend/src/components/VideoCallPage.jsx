@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, VideoOff, Mic, MicOff, Phone, MessageSquare, Clock, Send, Users, X } from 'lucide-react';
 import WebRTCService from '../utils/webrtcService';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 
 const VideoCallPage = ({ onEndCall }) => {
   const [webrtcService, setWebrtcService] = useState(null);
@@ -18,7 +18,7 @@ const VideoCallPage = ({ onEndCall }) => {
   const [newMessage, setNewMessage] = useState('');
   const [participantInfo, setParticipantInfo] = useState({ mentor: null, student: null });
   const [sessionInfo, setSessionInfo] = useState({ startTime: null, duration: 0, status: 'waiting' });
-
+  const navigate = useNavigate();
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -93,7 +93,7 @@ const VideoCallPage = ({ onEndCall }) => {
           setWebrtcService(service);
           setConnectionStatus('connected');
           if (userRole === 'mentor') {
-            service.notifySessionStarted('Session started');
+            
             setSessionInfo({ status: 'active', startTime: new Date(), duration: 0 });
             startTimer();
           }
@@ -130,6 +130,7 @@ const VideoCallPage = ({ onEndCall }) => {
 
   const endCall = () => {
     webrtcService?.cleanup();
+    navigate(-1);
     onEndCall?.();
   };
 
