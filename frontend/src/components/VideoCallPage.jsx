@@ -221,7 +221,7 @@ const VideoCallPage = ({ onEndCall }) => {
             {/* Chat Input */}
             <div className="p-4 border-t flex gap-2 flex-shrink-0">
               <input
-                className="flex-1 border border-gray-300 p-2 rounded focus:outline-none focus:border-blue-500"
+                className="flex-1 border border-gray-300 p-2 rounded focus:outline-none focus:border-purple-600"
                 placeholder="Type a message..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
@@ -229,7 +229,7 @@ const VideoCallPage = ({ onEndCall }) => {
               />
               <button 
                 onClick={sendChatMessage} 
-                className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors"
+                className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded transition-colors"
               >
                 <Send className="w-5 h-5" />
               </button>
