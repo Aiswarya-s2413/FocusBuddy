@@ -151,8 +151,9 @@ const VideoCallPage = ({ onEndCall }) => {
   const formatDuration = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
-      <div className="flex justify-between p-4 bg-gray-900">
+    <div className="h-screen bg-black text-white flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex justify-between p-4 bg-gray-900 flex-shrink-0">
         <div className="flex gap-4 items-center">
           <h2 className="text-xl font-semibold">Video Call</h2>
           <div>{connectionStatus}</div>
@@ -169,53 +170,105 @@ const VideoCallPage = ({ onEndCall }) => {
         </div>
       </div>
 
-      <div className="flex-1 flex">
+      {/* Main Content */}
+      <div className="flex-1 flex min-h-0">
+        {/* Video Area */}
         <div className="flex-1 relative">
-          <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover bg-black" />
-          <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-4 right-4 w-40 h-32 bg-gray-800" />
+          <video 
+            ref={remoteVideoRef} 
+            autoPlay 
+            playsInline 
+            className="w-full h-full object-cover bg-black" 
+          />
+          <video 
+            ref={localVideoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className="absolute bottom-4 right-4 w-40 h-32 bg-gray-800 rounded-lg" 
+          />
         </div>
 
+        {/* Chat Panel */}
         {showChat && (
-          <div className="w-80 bg-white text-black flex flex-col">
-            <div className="p-4 border-b flex justify-between">
-              <h4>Chat</h4>
-              <button onClick={() => setShowChat(false)}><X /></button>
+          <div className="w-80 bg-white text-black flex flex-col flex-shrink-0">
+            {/* Chat Header */}
+            <div className="p-4 border-b flex justify-between items-center flex-shrink-0">
+              <h4 className="font-semibold">Chat</h4>
+              <button 
+                onClick={() => setShowChat(false)}
+                className="hover:bg-gray-100 p-1 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-2">
+            
+            {/* Chat Messages - Scrollable */}
+            <div 
+              ref={chatContainerRef} 
+              className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0"
+            >
               {chatMessages.map((msg, idx) => (
                 <div key={idx} className="bg-gray-100 p-2 rounded">
-                  <div className="text-sm font-semibold">{msg.senderName}</div>
-                  <div>{typeof msg.message === 'string' ? msg.message : msg.message?.message}</div>
+                  <div className="text-sm font-semibold text-gray-600">{msg.senderName}</div>
+                  <div className="text-gray-800">
+                    {typeof msg.message === 'string' ? msg.message : msg.message?.message}
+                  </div>
                 </div>
               ))}
             </div>
-            <div className="p-4 border-t flex gap-2">
+            
+            {/* Chat Input */}
+            <div className="p-4 border-t flex gap-2 flex-shrink-0">
               <input
-                className="flex-1 border p-2 rounded"
+                className="flex-1 border border-gray-300 p-2 rounded focus:outline-none focus:border-blue-500"
+                placeholder="Type a message..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
               />
-              <button onClick={sendChatMessage} className="bg-blue-600 text-white p-2 rounded">
-                <Send />
+              <button 
+                onClick={sendChatMessage} 
+                className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition-colors"
+              >
+                <Send className="w-5 h-5" />
               </button>
             </div>
           </div>
         )}
       </div>
 
-      <div className="bg-gray-900 p-4 flex justify-center gap-4">
-        <button onClick={toggleAudio} className="p-2 rounded-full bg-gray-700">
-          {isAudioEnabled ? <Mic /> : <MicOff />}
+      {/* Controls */}
+      <div className="bg-gray-900 p-4 flex justify-center gap-4 flex-shrink-0">
+        <button 
+          onClick={toggleAudio} 
+          className={`p-3 rounded-full transition-colors ${
+            isAudioEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+          }`}
+        >
+          {isAudioEnabled ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
         </button>
-        <button onClick={toggleVideo} className="p-2 rounded-full bg-gray-700">
-          {isVideoEnabled ? <Video /> : <VideoOff />}
+        <button 
+          onClick={toggleVideo} 
+          className={`p-3 rounded-full transition-colors ${
+            isVideoEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'
+          }`}
+        >
+          {isVideoEnabled ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
         </button>
-        <button onClick={() => setShowChat(!showChat)} className="p-2 rounded-full bg-gray-700">
-          <MessageSquare />
+        <button 
+          onClick={() => setShowChat(!showChat)} 
+          className={`p-3 rounded-full transition-colors ${
+            showChat ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+          }`}
+        >
+          <MessageSquare className="w-5 h-5" />
         </button>
-        <button onClick={endCall} className="p-2 rounded-full bg-red-600">
-          <Phone className="rotate-135" />
+        <button 
+          onClick={endCall} 
+          className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-colors"
+        >
+          <Phone className="w-5 h-5 rotate-135" />
         </button>
       </div>
     </div>
