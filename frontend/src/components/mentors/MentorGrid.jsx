@@ -81,8 +81,8 @@ const MentorGrid = ({ mentors, onViewProfile }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {mentors.map((mentor) => (
-        <Card key={mentor.id} className="overflow-hidden">
-          <CardContent className="p-6">
+        <Card key={mentor.id} className="overflow-hidden flex flex-col h-full">
+          <CardContent className="p-6 flex-grow">
             <div className="flex items-start space-x-4">
               <Avatar className="h-16 w-16 border-2 border-purple-100">
                 <AvatarImage 
@@ -142,10 +142,10 @@ const MentorGrid = ({ mentors, onViewProfile }) => {
             </div>
           </CardContent>
 
-          <CardFooter className="bg-gray-50 px-6 py-4">
+          <CardFooter className="bg-gray-50 px-6 py-4 mt-auto" style={{ marginBottom: '5px' }}>
             <Button 
               onClick={() => onViewProfile(mentor)} 
-              className="w-full bg-purple-600 hover:bg-purple-700"
+              className="w-full bg-purple-600 hover:bg-purple-700 h-8 py-1"
             >
               View Profile
             </Button>
