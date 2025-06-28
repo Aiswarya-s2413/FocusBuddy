@@ -83,6 +83,7 @@ function FocusBuddy() {
   const [participants, setParticipants] = useState([]);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+
   
   // WebRTC service ref
   const webrtcService = useRef(null);
@@ -295,6 +296,7 @@ const initializeWebRTC = async (sessionId, isCreator = false) => {
     });
 
     webrtcService.current.on('chatMessage', (message) => {
+      console.log('Received chat message event:', message);
       setMessages(prev => [...prev, {
         sender_name: message.sender_name,
         message: message.message
@@ -531,18 +533,16 @@ const joinSession = async (sessionId) => {
 
   const sendMessage = () => {
     if (newMessage.trim() && currentSession) {
+      console.log('Sending message:', newMessage);
+      
       if (webrtcService.current) {
         webrtcService.current.sendSignalingMessage({
           type: 'chat-message',  
-          message: newMessage
+          message: newMessage,
+          sender_name: 'You'
         });
       }
-  
-      setMessages(prev => [...prev, {
-        sender_name: 'You',
-        message: newMessage
-      }]);
-  
+      
       setNewMessage('');
     }
   };
@@ -664,27 +664,27 @@ const getVideoGridLayout = () => {
   if (totalParticipants === 1) {
     return {
       containerClass: "grid grid-cols-1 gap-4 mb-4",
-      videoClass: "relative bg-gray-900 h-96 rounded-xl overflow-hidden flex items-center justify-center shadow-lg"
+      videoClass: "relative bg-gray-900 h-[500px] rounded-xl overflow-hidden flex items-center justify-center shadow-lg" // Increased from h-96 (384px) to h-[500px]
     };
   } else if (totalParticipants === 2) {
     return {
       containerClass: "grid grid-cols-1 md:grid-cols-2 gap-4 mb-4",
-      videoClass: "relative bg-gray-900 h-72 rounded-xl overflow-hidden flex items-center justify-center shadow-lg"
+      videoClass: "relative bg-gray-900 h-80 rounded-xl overflow-hidden flex items-center justify-center shadow-lg" 
     };
   } else if (totalParticipants <= 4) {
     return {
       containerClass: "grid grid-cols-2 gap-4 mb-4",
-      videoClass: "relative bg-gray-900 h-60 rounded-xl overflow-hidden flex items-center justify-center shadow-lg"
+      videoClass: "relative bg-gray-900 h-72 rounded-xl overflow-hidden flex items-center justify-center shadow-lg" 
     };
   } else if (totalParticipants <= 6) {
     return {
       containerClass: "grid grid-cols-2 md:grid-cols-3 gap-4 mb-4",
-      videoClass: "relative bg-gray-900 h-48 rounded-xl overflow-hidden flex items-center justify-center shadow-lg"
+      videoClass: "relative bg-gray-900 h-60 rounded-xl overflow-hidden flex items-center justify-center shadow-lg" 
     };
   } else {
     return {
       containerClass: "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4",
-      videoClass: "relative bg-gray-900 h-40 rounded-lg overflow-hidden flex items-center justify-center shadow-md"
+      videoClass: "relative bg-gray-900 h-52 rounded-lg overflow-hidden flex items-center justify-center shadow-md"
     };
   }
 };
