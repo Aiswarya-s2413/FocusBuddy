@@ -202,9 +202,9 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
             'name', 'bio', 'subjects', 'experience', 'expertise_level',
             'hourly_rate', 'profile_image', 'is_available', 
             'submitted_for_approval', 'approval_status', 'submitted_at', 
-            'approved_at', 'approved_by'
+            'approved_at', 'approved_by','rejection_reason'
         ]
-        read_only_fields = ['submitted_at', 'approved_at', 'approved_by']
+        read_only_fields = ['submitted_at', 'approved_at', 'approved_by','rejection_reason']
     
     def validate_subjects(self, value):
         """Validate and process the comma-separated subjects string"""
@@ -337,6 +337,7 @@ class MentorProfileUploadSerializer(serializers.ModelSerializer):
         representation['approval_status'] = instance.approval_status
         representation['submitted_at'] = instance.submitted_at.isoformat() if instance.submitted_at else None
         representation['approved_at'] = instance.approved_at.isoformat() if instance.approved_at else None
+        representation['rejection_reason'] = instance.rejection_reason
         if instance.approved_by:
             representation['approved_by'] = instance.approved_by.name
         else:
@@ -359,13 +360,14 @@ class MentorProfileDisplaySerializer(serializers.ModelSerializer):
     hourly_rate = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     rating = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
     expertise_level = serializers.CharField(read_only=True)
+    rejection_reason = serializers.CharField(read_only=True, allow_blank=True)
 
     class Meta:
         model = Mentor
         fields = [
             'id', 'name', 'email', 'subjects', 'bio', 'experience', 
             'expertise_level', 'hourly_rate', 'availability', 'rating', 
-            'total_sessions', 'total_students', 'is_available', 'profile_image_url'
+            'total_sessions', 'total_students', 'is_available', 'profile_image_url','rejection_reason'
         ]
 
     def get_profile_image_url(self, obj):

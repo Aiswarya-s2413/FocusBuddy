@@ -182,7 +182,8 @@ class Mentor(models.Model):
             'total_sessions': self.total_sessions,
             'total_students': self.total_students,
             'is_available': self.is_available,
-            'profile_image_url': self.profile_image.url if self.profile_image else None
+            'profile_image_url': self.profile_image.url if self.profile_image else None,
+            'rejection_reason': self.rejection_reason,
         }
 
 class MentorApprovalRequest(models.Model):

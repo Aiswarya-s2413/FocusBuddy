@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "../../components/ui/form";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
-import { Camera, CheckCircle, Clock, XCircle, AlertCircle, User } from "lucide-react";
+import { Camera, CheckCircle, Clock, XCircle, AlertCircle, User, AlertTriangle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -75,6 +75,7 @@ const MentorProfileUpload = () => {
               approved_at: response.data.approved_at,
               approved_by: response.data.approved_by,
               is_approved: response.data.is_approved || false,
+              rejection_reason: response.data.rejection_reason || null,
             });
             return; // Exit early if profile is submitted
           } else {
@@ -183,6 +184,7 @@ const MentorProfileUpload = () => {
             approved_at: response.data.profile.approved_at,
             approved_by: response.data.profile.approved_by,
             is_approved: response.data.profile.is_approved || false,
+            rejection_reason: response.data.profile.rejection_reason || null,
           });
         }
       } else {
@@ -193,6 +195,7 @@ const MentorProfileUpload = () => {
           approved_at: null,
           approved_by: null,
           is_approved: false,
+          rejection_reason: null,
         });
       }
 
@@ -247,7 +250,7 @@ const MentorProfileUpload = () => {
       case "approved":
         return "Congratulations! Your mentor profile has been approved. You can now start accepting mentoring sessions.";
       case "rejected":
-        return "Your mentor profile was not approved. Please contact support for more information or to resubmit.";
+        return "Your mentor profile was not approved. Please review the feedback below and make the necessary changes before resubmitting.";
       default:
         return "Status unknown. Please contact support for assistance.";
     }
@@ -369,6 +372,21 @@ const MentorProfileUpload = () => {
               </div>
               <p className="text-sm">{getStatusMessage(approvalStatus.status)}</p>
             </div>
+
+            {/* Rejection Reason Section */}
+            {approvalStatus.status === "rejected" && approvalStatus.rejection_reason && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-left">
+                <div className="flex items-center mb-2">
+                  <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-red-800">Rejection Reason</h3>
+                </div>
+                <div className="bg-white border border-red-200 rounded p-3">
+                  <p className="text-sm text-red-700 whitespace-pre-wrap">
+                    {approvalStatus.rejection_reason}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 text-sm text-gray-600 mb-6">
               {approvalStatus.submitted_at && (
