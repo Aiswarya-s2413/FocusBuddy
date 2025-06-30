@@ -634,7 +634,6 @@ class ApproveMentorView(APIView):
                 {'error': f'Failed to approve mentor: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 class RejectMentorView(APIView):
     authentication_classes = [AdminCookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -642,66 +641,118 @@ class RejectMentorView(APIView):
     def post(self, request, mentor_id):
         """Reject a mentor application"""
         try:
+            # Validate mentor_id
+            if not mentor_id or not str(mentor_id).isdigit():
+                return Response(
+                    {'error': 'Invalid mentor ID'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get mentor
             try:
                 mentor = Mentor.objects.select_related('user').get(id=mentor_id)
             except Mentor.DoesNotExist:
+                logger.warning(f"Mentor with ID {mentor_id} not found")
                 return Response(
                     {'error': 'Mentor not found'}, 
                     status=status.HTTP_404_NOT_FOUND
                 )
             
+            # Check current status
             if mentor.approval_status == 'rejected':
                 return Response(
-                    {'error': 'Mentor is already rejected'}, 
+                    {'error': 'Mentor application is already rejected'}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Get admin notes from request body if provided
-            admin_notes = request.data.get('admin_notes', '')
+            if mentor.approval_status == 'approved':
+                return Response(
+                    {'error': 'Cannot reject an already approved mentor'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get rejection reason from request
+            rejection_reason = ""
+            if hasattr(request, 'data') and request.data:
+                rejection_reason = request.data.get('rejection_reason', '')
+            
+            # Validate rejection reason
+            if not rejection_reason or len(rejection_reason.strip()) < 10:
+                return Response(
+                    {'error': 'Rejection reason must be at least 10 characters long'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Clean the rejection reason
+            rejection_reason = rejection_reason.strip()[:500]  # Limit to 500 chars
             
             # Update mentor status
             mentor.approval_status = 'rejected'
+            mentor.rejection_reason = rejection_reason
             mentor.is_approved = False
-            mentor.approved_at = timezone.now()  # Set timestamp when processed
+            mentor.approved_at = timezone.now()
             mentor.approved_by = request.user
-            mentor.save()
             
-            # Ensure user is not marked as mentor if rejected
-            if mentor.user.is_mentor:
-                mentor.user.is_mentor = False
-                mentor.user.save()
+            # Save mentor
+            try:
+                mentor.save()
+            except Exception as save_error:
+                logger.error(f"Error saving mentor rejection: {str(save_error)}")
+                return Response(
+                    {'error': 'Failed to save rejection status'}, 
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
             
-            # Create or update approval request record
-            approval_request, created = MentorApprovalRequest.objects.get_or_create(
-                mentor=mentor,
-                defaults={
-                    'status': 'rejected',
-                    'processed_by': request.user,
-                    'processed_at': timezone.now(),
-                    'admin_notes': admin_notes,
-                }
-            )
+            # Update user status
+            try:
+                if mentor.user.is_mentor:
+                    mentor.user.is_mentor = False
+                    mentor.user.save()
+            except Exception as user_error:
+                logger.warning(f"Error updating user mentor status: {str(user_error)}")
+                # Don't fail the whole operation for this
             
-            if not created:
-                approval_request.status = 'rejected'
-                approval_request.processed_by = request.user
-                approval_request.processed_at = timezone.now()
-                approval_request.admin_notes = admin_notes
-                approval_request.save()
+            # Handle approval request record
+            try:
+                approval_request, created = MentorApprovalRequest.objects.get_or_create(
+                    mentor=mentor,
+                    defaults={
+                        'status': 'rejected',
+                        'processed_by': request.user,
+                        'processed_at': timezone.now(),
+                        'rejection_reason': rejection_reason,
+                    }
+                )
+                
+                if not created:
+                    approval_request.status = 'rejected'
+                    approval_request.processed_by = request.user
+                    approval_request.processed_at = timezone.now()
+                    approval_request.rejection_reason = rejection_reason
+                    approval_request.save()
+            except Exception as approval_error:
+                logger.warning(f"Error handling approval request: {str(approval_error)}")
+                # Don't fail the main operation
             
-            logger.info(f"Mentor rejected: {mentor.user.name} by {request.user.email}")
+            # Log successful rejection
+            logger.info(f"Mentor rejected: {mentor.user.name} (ID: {mentor.id}) by {request.user.email}")
+            
+            # Return success response
             return Response({
-                'message': f'Mentor application for {mentor.user.name} has been rejected',
+                'message': f'Mentor application for {mentor.user.name} has been rejected successfully',
                 'mentor_id': mentor.id,
-                'status': 'rejected'
+                'status': 'rejected',
+                'rejection_reason': rejection_reason,
+                'processed_at': mentor.approved_at.isoformat() if mentor.approved_at else None
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error rejecting mentor: {str(e)}")
+            logger.error(f"Unexpected error rejecting mentor {mentor_id}: {str(e)}", exc_info=True)
             return Response(
-                {'error': f'Failed to reject mentor: {str(e)}'}, 
+                {'error': 'An unexpected error occurred while rejecting the mentor application'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class MentorApprovalStatsView(APIView):
     authentication_classes = [AdminCookieJWTAuthentication]

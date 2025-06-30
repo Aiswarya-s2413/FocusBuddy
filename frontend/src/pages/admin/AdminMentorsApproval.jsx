@@ -183,6 +183,10 @@ const AdminMentorsApproval = () => {
     has_previous: false
   });
 
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [mentorToReject, setMentorToReject] = useState(null);
+
   // Toast functions
   const addToast = (message, type = 'success') => {
     const id = Date.now() + Math.random();
@@ -286,9 +290,17 @@ const AdminMentorsApproval = () => {
     }
   };
 
-  const handleRejectMentor = async (mentorId) => {
+  const handleRejectMentor = async (mentorId, reason = "") => {
     try {
-      const response = await adminAxios.post(`mentors/${mentorId}/reject/`);
+      console.log('Sending rejection request:', { mentorId, reason });
+      
+      const requestData = reason ? { rejection_reason: reason } : {};
+      
+      const response = await adminAxios.post(`mentors/${mentorId}/reject/`, requestData, {
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       
       setMentors(mentors.map(mentor => 
         mentor.id === mentorId 
@@ -303,8 +315,12 @@ const AdminMentorsApproval = () => {
         fetchMentors(searchQuery, pagination.current_page, filterStatus);
       }
     } catch (err) {
-      toast.error(`Failed to reject mentor application: ${err.response?.data?.error || err.message}`);
-      console.error("Reject mentor error:", err);
+      console.error("Reject mentor error details:", {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.message
+      });
+      toast.error(`Failed to reject mentor application: ${err.response?.data?.error || err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -375,6 +391,27 @@ const AdminMentorsApproval = () => {
       minute: '2-digit'
     });
   };
+
+
+// open the rejection modal
+const openRejectModal = (mentor) => {
+  setMentorToReject(mentor);
+  setRejectionReason("");
+  setIsRejectModalOpen(true);
+};
+
+// handle rejection with reason
+const handleRejectWithReason = async () => {
+  if (!rejectionReason.trim()) {
+    toast.error("Please provide a reason for rejection");
+    return;
+  }
+  
+  await handleRejectMentor(mentorToReject.id, rejectionReason);
+  setIsRejectModalOpen(false);
+  setMentorToReject(null);
+  setRejectionReason("");
+};
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -527,7 +564,7 @@ const AdminMentorsApproval = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleRejectMentor(mentor.id)}
+                          onClick={() => openRejectModal(mentor)}
                           className="text-red-600 hover:text-red-900 hover:bg-red-50"
                         >
                           <XCircle className="h-4 w-4" />
@@ -692,7 +729,7 @@ const AdminMentorsApproval = () => {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        handleRejectMentor(selectedMentor.id);
+                        openRejectModal(selectedMentor);
                         setIsDetailModalOpen(false);
                       }}
                       className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -707,6 +744,53 @@ const AdminMentorsApproval = () => {
           </div>
         </div>
       )}
+      {/* Rejection Modal */}
+{isRejectModalOpen && mentorToReject && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg max-w-md w-full">
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Reject Application</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsRejectModalOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <p className="text-gray-600 mb-4">
+          Please provide a reason for rejecting {mentorToReject.name}'s application:
+        </p>
+        
+        <textarea
+          value={rejectionReason}
+          onChange={(e) => setRejectionReason(e.target.value)}
+          placeholder="Enter rejection reason..."
+          className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          rows={4}
+        />
+        
+        <div className="flex gap-3 mt-4">
+          <Button
+            variant="outline"
+            onClick={() => setIsRejectModalOpen(false)}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleRejectWithReason}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+          >
+            Reject Application
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

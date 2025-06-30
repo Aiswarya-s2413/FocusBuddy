@@ -80,7 +80,7 @@ class MentorApprovalSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'email', 'bio', 'subjects', 'experience',
             'expertise_level', 'hourly_rate', 'approval_status',
-            'submitted_at', 'approved_at', 'profile_image_url'
+            'submitted_at', 'approved_at', 'profile_image_url','rejection_reason'
         ]
     
     def get_profile_image_url(self, obj):
@@ -103,7 +103,7 @@ class MentorDetailSerializer(serializers.ModelSerializer):
             'id', 'name', 'email', 'bio', 'subjects', 'experience',
             'expertise_level', 'hourly_rate', 'approval_status',
             'submitted_at', 'approved_at', 'profile_image_url',
-            'approved_by_name', 'rating', 'total_sessions', 'total_students'
+            'approved_by_name', 'rating', 'total_sessions', 'total_students','rejection_reason'
         ]
     
     def get_profile_image_url(self, obj):

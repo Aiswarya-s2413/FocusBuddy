@@ -133,6 +133,7 @@ class Mentor(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_approved = models.BooleanField(default=False)
+    rejection_reason = models.TextField(blank=True, null=True)
     approval_status = models.CharField(
         max_length=20, 
         choices=[
