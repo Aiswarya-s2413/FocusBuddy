@@ -6,7 +6,29 @@ export const useSessions = () => {
     upcoming: [],
     past: []
   });
+  const [pagination, setPagination] = useState({
+    upcoming: {
+      count: 0,
+      next: null,
+      previous: null,
+      currentPage: 1,
+      totalPages: 1,
+      hasMore: false
+    },
+    past: {
+      count: 0,
+      next: null,
+      previous: null,
+      currentPage: 1,
+      totalPages: 1,
+      hasMore: false
+    }
+  });
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState({
+    upcoming: false,
+    past: false
+  });
   const [error, setError] = useState(null);
 
   // Transform backend data to match component expectations
@@ -40,10 +62,28 @@ export const useSessions = () => {
     };
   }, []);
 
-  // Fetch sessions from API
-  const fetchSessions = useCallback(async () => {
+  // Helper function to extract pagination info from response
+  const extractPaginationInfo = useCallback((response, currentPage = 1) => {
+    const { count, next, previous, results } = response.data;
+    const pageSize = results?.length || 0;
+    const totalPages = Math.ceil(count / (pageSize || 1));
+    
+    return {
+      count: count || 0,
+      next,
+      previous,
+      currentPage,
+      totalPages,
+      hasMore: !!next
+    };
+  }, []);
+
+  // Fetch sessions from API with pagination
+  const fetchSessions = useCallback(async (page = 1, append = false) => {
     try {
-      setLoading(true);
+      if (!append) {
+        setLoading(true);
+      }
       setError(null);
 
       console.log('Fetching sessions...');
@@ -52,7 +92,8 @@ export const useSessions = () => {
       const upcomingResponse = await userAxios.get('/list/', {
         params: {
           time_filter: 'upcoming',
-          type: 'student'
+          type: 'student',
+          page: page
         }
       });
 
@@ -60,32 +101,70 @@ export const useSessions = () => {
       const pastResponse = await userAxios.get('/list/', {
         params: {
           time_filter: 'past',
-          type: 'student'
+          type: 'student',
+          page: page
         }
       });
 
       console.log('Upcoming response:', upcomingResponse.data);
       console.log('Past response:', pastResponse.data);
 
-      // Handle paginated or non-paginated responses
+      // Handle paginated response structure
       let upcomingData = [];
       let pastData = [];
+      let upcomingPagination = {};
+      let pastPagination = {};
 
-      // Check for paginated response structure
+      // Extract upcoming data and pagination info
       if (upcomingResponse.data.results) {
         upcomingData = upcomingResponse.data.results;
+        upcomingPagination = extractPaginationInfo(upcomingResponse, page);
       } else if (upcomingResponse.data.success && upcomingResponse.data.data) {
         upcomingData = upcomingResponse.data.data;
+        upcomingPagination = {
+          count: upcomingData.length,
+          next: null,
+          previous: null,
+          currentPage: 1,
+          totalPages: 1,
+          hasMore: false
+        };
       } else if (Array.isArray(upcomingResponse.data)) {
         upcomingData = upcomingResponse.data;
+        upcomingPagination = {
+          count: upcomingData.length,
+          next: null,
+          previous: null,
+          currentPage: 1,
+          totalPages: 1,
+          hasMore: false
+        };
       }
 
+      // Extract past data and pagination info
       if (pastResponse.data.results) {
         pastData = pastResponse.data.results;
+        pastPagination = extractPaginationInfo(pastResponse, page);
       } else if (pastResponse.data.success && pastResponse.data.data) {
         pastData = pastResponse.data.data;
+        pastPagination = {
+          count: pastData.length,
+          next: null,
+          previous: null,
+          currentPage: 1,
+          totalPages: 1,
+          hasMore: false
+        };
       } else if (Array.isArray(pastResponse.data)) {
         pastData = pastResponse.data;
+        pastPagination = {
+          count: pastData.length,
+          next: null,
+          previous: null,
+          currentPage: 1,
+          totalPages: 1,
+          hasMore: false
+        };
       }
 
       console.log('Raw upcoming data:', upcomingData);
@@ -98,9 +177,16 @@ export const useSessions = () => {
       console.log('Transformed upcoming:', transformedUpcoming);
       console.log('Transformed past:', transformedPast);
 
-      setSessions({
-        upcoming: transformedUpcoming,
-        past: transformedPast
+      // Update sessions (append if loading more, replace if fresh load)
+      setSessions(prevSessions => ({
+        upcoming: append ? [...prevSessions.upcoming, ...transformedUpcoming] : transformedUpcoming,
+        past: append ? [...prevSessions.past, ...transformedPast] : transformedPast
+      }));
+
+      // Update pagination info
+      setPagination({
+        upcoming: upcomingPagination,
+        past: pastPagination
       });
 
     } catch (err) {
@@ -111,8 +197,79 @@ export const useSessions = () => {
       setError(err.response?.data?.message || 'Failed to load sessions. Please try again later.');
     } finally {
       setLoading(false);
+      setLoadingMore({ upcoming: false, past: false });
     }
-  }, [transformSessionData]);
+  }, [transformSessionData, extractPaginationInfo]);
+
+  // Load more sessions for a specific type
+  const loadMoreSessions = useCallback(async (type) => {
+    const currentPagination = pagination[type];
+    if (!currentPagination.hasMore || loadingMore[type]) return;
+
+    try {
+      setLoadingMore(prev => ({ ...prev, [type]: true }));
+      
+      const nextPage = currentPagination.currentPage + 1;
+      
+      const response = await userAxios.get('/list/', {
+        params: {
+          time_filter: type,
+          type: 'student',
+          page: nextPage
+        }
+      });
+
+      console.log(`Loading more ${type} sessions:`, response.data);
+
+      let newData = [];
+      let newPagination = {};
+
+      if (response.data.results) {
+        newData = response.data.results;
+        newPagination = extractPaginationInfo(response, nextPage);
+      } else if (response.data.success && response.data.data) {
+        newData = response.data.data;
+        newPagination = {
+          count: currentPagination.count,
+          next: null,
+          previous: null,
+          currentPage: nextPage,
+          totalPages: currentPagination.totalPages,
+          hasMore: false
+        };
+      } else if (Array.isArray(response.data)) {
+        newData = response.data;
+        newPagination = {
+          count: currentPagination.count,
+          next: null,
+          previous: null,
+          currentPage: nextPage,
+          totalPages: currentPagination.totalPages,
+          hasMore: false
+        };
+      }
+
+      const transformedData = newData.map(transformSessionData);
+
+      // Append new data to existing sessions
+      setSessions(prevSessions => ({
+        ...prevSessions,
+        [type]: [...prevSessions[type], ...transformedData]
+      }));
+
+      // Update pagination info for this type
+      setPagination(prevPagination => ({
+        ...prevPagination,
+        [type]: newPagination
+      }));
+
+    } catch (err) {
+      console.error(`Error loading more ${type} sessions:`, err);
+      setError(err.response?.data?.message || `Failed to load more ${type} sessions.`);
+    } finally {
+      setLoadingMore(prev => ({ ...prev, [type]: false }));
+    }
+  }, [pagination, loadingMore, transformSessionData, extractPaginationInfo]);
 
   // Cancel a session
   const cancelSession = useCallback(async (sessionId) => {
@@ -179,12 +336,15 @@ export const useSessions = () => {
 
   return {
     sessions,
+    pagination,
     loading,
+    loadingMore,
     error,
     fetchSessions,
+    loadMoreSessions,
     cancelSession,
     submitFeedback,
     getSessionDetails,
-    refetch: fetchSessions
+    refetch: () => fetchSessions(1, false) // Reset to first page
   };
 };

@@ -2,10 +2,9 @@ import React, { useState } from "react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardFooter } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
-import { Calendar, Clock, Video, X, MessageSquare, Star, Loader2, ExternalLink } from "lucide-react";
+import { Calendar, Clock, Video, X, MessageSquare, Star, Loader2, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { useSimpleToast } from "../ui/toast";
-import { useNavigate } from 'react-router-dom';
 
 // Custom Avatar Components (same as in MentorGrid)
 const Avatar = ({ children, className = "" }) => (
@@ -79,9 +78,50 @@ const AvatarFallback = ({ children, className = "" }) => (
   <div className={`text-gray-600 font-medium ${className}`}>{children}</div>
 );
 
-const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh }) => {
+// Pagination Component
+const PaginationControls = ({ pagination, onLoadMore, loadingMore, type }) => {
+  if (!pagination.hasMore) return null;
+
+  return (
+    <div className="flex justify-center mt-6">
+      <Button
+        variant="outline"
+        onClick={() => onLoadMore(type)}
+        disabled={loadingMore}
+        className="px-6 py-2"
+      >
+        {loadingMore ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Loading more...
+          </>
+        ) : (
+          <>
+            Load More Sessions
+            <ChevronRight className="h-4 w-4 ml-2" />
+          </>
+        )}
+      </Button>
+    </div>
+  );
+};
+
+// Pagination Info Component
+const PaginationInfo = ({ pagination, type }) => {
+  if (!pagination.count) return null;
+
+  const displayedCount = pagination.currentPage * (pagination.count / pagination.totalPages);
+  const actualDisplayedCount = Math.min(displayedCount, pagination.count);
+
+  return (
+    <div className="text-sm text-gray-500 text-center mb-4">
+      Showing {actualDisplayedCount} of {pagination.count} {type} sessions
+    </div>
+  );
+};
+
+const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback, onRefresh, onLoadMore, loadingMore }) => {
   const { toast } = useSimpleToast();
-  const navigate = useNavigate();
   const [cancelDialog, setCancelDialog] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [feedbackDialog, setFeedbackDialog] = useState(false);
@@ -196,13 +236,10 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
   };
 
   const handleJoinSession = (session) => {
-    // Navigate to video call page with session information
-    navigate(`/video-call/${session.id}`, { 
-      state: { 
-        session: session,
-        userRole: 'student' // or get from localStorage/context
-      } 
-    });
+    // For demo purposes, just show a message
+    // In real implementation, navigate to video call page
+    toast.success(`Joining session with ${session.mentor.name}...`);
+    console.log('Joining session:', session);
   };
 
   const getJoinButtonText = (session) => {
@@ -236,6 +273,12 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
     }
   };
 
+  const handleLoadMore = (type) => {
+    if (onLoadMore && !loadingMore[type]) {
+      onLoadMore(type);
+    }
+  };
+
   return (
     <>
       <Tabs defaultValue="upcoming" className="w-full">
@@ -245,175 +288,205 @@ const MySessionsTab = ({ sessions, onCancelSession, onSubmitFeedback, onRefresh 
         </TabsList>
 
         <TabsContent value="upcoming">
+          {pagination?.upcoming && (
+            <PaginationInfo pagination={pagination.upcoming} type="upcoming" />
+          )}
+          
           {sessions.upcoming.length === 0 ? (
             <div className="text-center py-10">
               <h3 className="text-gray-500 mb-2">No upcoming sessions</h3>
               <p className="text-sm text-gray-400">Book a session with one of our mentors</p>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {sessions.upcoming.map((session) => {
-                const { date, time } = formatDateTime(session.dateTime);
-                return (
-                  <Card key={session.id}>
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <Avatar className="h-12 w-12 border-2 border-purple-100">
-                          <AvatarImage 
-                            src={session.mentor.profilePicture || session.mentor.profile_image_url} 
-                            alt={session.mentor.name}
-                          />
-                        </Avatar>
-                        <div className="flex-1">
-                          <h3 className="font-medium">{session.mentor.name}</h3>
-                          <p className="text-sm text-gray-600">{session.mentor.specialization}</p>
-                          
-                          {session.status && (
-                            <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${getStatusBadgeColor(session.status)}`}>
-                              {session.status === 'ongoing' ? 'Live Now' : 
-                               session.status.charAt(0).toUpperCase() + session.status.slice(1)}
-                            </span>
-                          )}
+            <>
+              <div className="grid gap-4">
+                {sessions.upcoming.map((session) => {
+                  const { date, time } = formatDateTime(session.dateTime);
+                  return (
+                    <Card key={session.id}>
+                      <CardContent className="p-6">
+                        <div className="flex items-start gap-4">
+                          <Avatar className="h-12 w-12 border-2 border-purple-100">
+                            <AvatarImage 
+                              src={session.mentor.profilePicture || session.mentor.profile_image_url} 
+                              alt={session.mentor.name}
+                            />
+                          </Avatar>
+                          <div className="flex-1">
+                            <h3 className="font-medium">{session.mentor.name}</h3>
+                            <p className="text-sm text-gray-600">{session.mentor.specialization}</p>
+                            
+                            {session.status && (
+                              <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${getStatusBadgeColor(session.status)}`}>
+                                {session.status === 'ongoing' ? 'Live Now' : 
+                                 session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+                              </span>
+                            )}
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                            <div className="flex items-center text-sm">
-                              <Calendar className="h-4 w-4 mr-2 text-gray-500" />
-                              <span>{date}</span>
-                            </div>
-                            <div className="flex items-center text-sm">
-                              <Clock className="h-4 w-4 mr-2 text-gray-500" />
-                              <span>{time}</span>
-                            </div>
-                            <div className="flex items-center text-sm">
-                              {getSessionModeIcon(session.mode)}
-                              <span className="capitalize">{session.mode}</span>
-                            </div>
-                            <div className="flex items-center text-sm">
-                              <Clock className="h-4 w-4 mr-2 text-gray-500" />
-                              <span>{session.duration}</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                              <div className="flex items-center text-sm">
+                                <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                                <span>{date}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                                <span>{time}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                {getSessionModeIcon(session.mode)}
+                                <span className="capitalize">{session.mode}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                                <span>{session.duration}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                    <CardFooter className="flex justify-between bg-gray-50 border-t px-6 py-3">
-                      {canCancelSession(session) && (
-                        <Button 
-                          variant="outline" 
-                          onClick={() => {
-                            setSelectedSession(session);
-                            setCancelDialog(true);
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                      
-                      <div className="flex-1"></div>
-                      
-                      <Button 
-                        variant="default" 
-                        className={`${canJoinSession(session) 
-                          ? (session.status === 'ongoing' 
-                            ? 'bg-green-600 hover:bg-green-700 animate-pulse' 
-                            : 'bg-purple-600 hover:bg-purple-700')
-                          : 'bg-gray-400 cursor-not-allowed'
-                        }`}
-                        onClick={() => handleJoinSession(session)}
-                        disabled={!canJoinSession(session)}
-                      >
-                        {canJoinSession(session) ? (
-                          <>
-                            <ExternalLink className="h-4 w-4 mr-1" />
-                            {getJoinButtonText(session)}
-                          </>
-                        ) : (
-                          'Session Not Ready'
+                      </CardContent>
+                      <CardFooter className="flex justify-between bg-gray-50 border-t px-6 py-3">
+                        {canCancelSession(session) && (
+                          <Button 
+                            variant="outline" 
+                            onClick={() => {
+                              setSelectedSession(session);
+                              setCancelDialog(true);
+                            }}
+                          >
+                            Cancel
+                          </Button>
                         )}
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                );
-              })}
-            </div>
+                        
+                        <div className="flex-1"></div>
+                        
+                        <Button 
+                          variant="default" 
+                          className={`${canJoinSession(session) 
+                            ? (session.status === 'ongoing' 
+                              ? 'bg-green-600 hover:bg-green-700 animate-pulse' 
+                              : 'bg-purple-600 hover:bg-purple-700')
+                            : 'bg-gray-400 cursor-not-allowed'
+                          }`}
+                          onClick={() => handleJoinSession(session)}
+                          disabled={!canJoinSession(session)}
+                        >
+                          {canJoinSession(session) ? (
+                            <>
+                              <ExternalLink className="h-4 w-4 mr-1" />
+                              {getJoinButtonText(session)}
+                            </>
+                          ) : (
+                            'Session Not Ready'
+                          )}
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {pagination?.upcoming && (
+                <PaginationControls 
+                  pagination={pagination.upcoming}
+                  onLoadMore={handleLoadMore}
+                  loadingMore={loadingMore?.upcoming || false}
+                  type="upcoming"
+                />
+              )}
+            </>
           )}
         </TabsContent>
 
         <TabsContent value="past">
+          {pagination?.past && (
+            <PaginationInfo pagination={pagination.past} type="past" />
+          )}
+          
           {sessions.past.length === 0 ? (
             <div className="text-center py-10">
               <h3 className="text-gray-500 mb-2">No past sessions</h3>
               <p className="text-sm text-gray-400">Your completed sessions will appear here</p>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {sessions.past.map((session) => {
-                const { date, time } = formatDateTime(session.dateTime);
-                return (
-                  <Card key={session.id}>
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <Avatar className="h-12 w-12 border-2 border-purple-100">
-                          <AvatarImage 
-                            src={session.mentor.profilePicture || session.mentor.profile_image_url} 
-                            alt={session.mentor.name}
-                          />
-                        </Avatar>
-                        <div className="flex-1">
-                          <h3 className="font-medium">{session.mentor.name}</h3>
-                          <p className="text-sm text-gray-600">{session.mentor.specialization}</p>
+            <>
+              <div className="grid gap-4">
+                {sessions.past.map((session) => {
+                  const { date, time } = formatDateTime(session.dateTime);
+                  return (
+                    <Card key={session.id}>
+                      <CardContent className="p-6">
+                        <div className="flex items-start gap-4">
+                          <Avatar className="h-12 w-12 border-2 border-purple-100">
+                            <AvatarImage 
+                              src={session.mentor.profilePicture || session.mentor.profile_image_url} 
+                              alt={session.mentor.name}
+                            />
+                          </Avatar>
+                          <div className="flex-1">
+                            <h3 className="font-medium">{session.mentor.name}</h3>
+                            <p className="text-sm text-gray-600">{session.mentor.specialization}</p>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                            <div className="flex items-center text-sm">
-                              <Calendar className="h-4 w-4 mr-2 text-gray-500" />
-                              <span>{date}</span>
-                            </div>
-                            <div className="flex items-center text-sm">
-                              <Clock className="h-4 w-4 mr-2 text-gray-500" />
-                              <span>{time}</span>
-                            </div>
-                            <div className="flex items-center text-sm">
-                              {getSessionModeIcon(session.mode)}
-                              <span className="capitalize">{session.mode}</span>
-                            </div>
-                            <div className="flex items-center text-sm">
-                              <Clock className="h-4 w-4 mr-2 text-gray-500" />
-                              <span>{session.duration}</span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                              <div className="flex items-center text-sm">
+                                <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                                <span>{date}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                                <span>{time}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                {getSessionModeIcon(session.mode)}
+                                <span className="capitalize">{session.mode}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                                <span>{session.duration}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                    <CardFooter className="flex justify-end bg-gray-50 border-t px-6 py-3">
-                      {!session.feedbackProvided ? (
-                        <Button
-                          variant="outline"
-                          onClick={() => openFeedbackDialog(session)}
-                        >
-                          <MessageSquare className="h-4 w-4 mr-1" /> Leave Feedback
-                        </Button>
-                      ) : (
-                        <div className="flex items-center text-sm text-gray-500">
-                          <span className="mr-1">Your rating:</span>
-                          <div className="flex">
-                            {[...Array(5)].map((_, i) => (
-                              <Star 
-                                key={i} 
-                                className={`h-4 w-4 ${
-                                  i < session.rating 
-                                    ? "text-yellow-500 fill-yellow-500" 
-                                    : "text-gray-300"
-                                }`} 
-                              />
-                            ))}
+                      </CardContent>
+                      <CardFooter className="flex justify-end bg-gray-50 border-t px-6 py-3">
+                        {!session.feedbackProvided ? (
+                          <Button
+                            variant="outline"
+                            onClick={() => openFeedbackDialog(session)}
+                          >
+                            <MessageSquare className="h-4 w-4 mr-1" /> Leave Feedback
+                          </Button>
+                        ) : (
+                          <div className="flex items-center text-sm text-gray-500">
+                            <span className="mr-1">Your rating:</span>
+                            <div className="flex">
+                              {[...Array(5)].map((_, i) => (
+                                <Star 
+                                  key={i} 
+                                  className={`h-4 w-4 ${
+                                    i < session.rating 
+                                      ? "text-yellow-500 fill-yellow-500" 
+                                      : "text-gray-300"
+                                  }`} 
+                                />
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </CardFooter>
-                  </Card>
-                );
-              })}
-            </div>
+                        )}
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {pagination?.past && (
+                <PaginationControls 
+                  pagination={pagination.past}
+                  onLoadMore={handleLoadMore}
+                  loadingMore={loadingMore?.past || false}
+                  type="past"
+                />
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>

@@ -851,7 +851,7 @@ class ConfirmBookingAPIView(APIView):
 
 
 class UserSessionsListAPIView(APIView):
-    """API view to list user's sessions (both as student and mentor)"""
+    """API view to list user's sessions """
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
     

@@ -6,10 +6,13 @@ import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 const MySessions = () => {
   const { 
     sessions, 
+    pagination,
     loading, 
+    loadingMore,
     error, 
     cancelSession, 
     submitFeedback, 
+    loadMoreSessions,
     refetch 
   } = useSessions();
 
@@ -62,9 +65,12 @@ const MySessions = () => {
       
       <MySessionsTab 
         sessions={sessions} 
+        pagination={pagination}
         onCancelSession={cancelSession}
         onSubmitFeedback={submitFeedback}
         onRefresh={refetch}
+        onLoadMore={loadMoreSessions}
+        loadingMore={loadingMore}
       />
     </div>
   );
