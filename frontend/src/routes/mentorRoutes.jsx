@@ -9,6 +9,7 @@ import MentorProfileUpload from "../pages/mentor/MentorProfileUpload";
 import MentorLayout from "../components/mentors/MentorLayout";
 import MentorProfileDisplay from "../pages/mentor/MentorProfileDisplay";
 import VideoCallPage from "../components/VideoCallPage";
+import MentorWallet from "../pages/mentor/MentorWallet";
 
 // Protected route wrapper
 const PrivateRoute = ({ children }) => {
@@ -41,6 +42,14 @@ const MentorRoutes = () => {
                 element={
                     <PrivateRoute>
                    <MentorLayout> <MentorProfileDisplay /></MentorLayout>
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/wallet"
+                element={
+                    <PrivateRoute>
+                   <MentorLayout> <MentorWallet /></MentorLayout>
                     </PrivateRoute>
                 }
             />

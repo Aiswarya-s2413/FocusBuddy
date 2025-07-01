@@ -16,6 +16,9 @@ from django.utils import timezone
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from userapp.authentication import MentorCookieJWTAuthentication
 from django.shortcuts import get_object_or_404
+from django.db.models import Sum
+
+
 
 
 logger = logging.getLogger(__name__)
@@ -752,3 +755,362 @@ class CancelMentorSessionView(APIView):
         session.cancel_session(cancelled_by_user=request.user, reason=request.data.get("reason"))
         serializer = MentorSessionSerializer(session)
         return Response(serializer.data)
+
+class MentorWalletView(APIView):
+    """
+    API view to retrieve mentor's wallet information including:
+    - Wallet summary (total earnings, available balance, pending earnings, etc.)
+    - All earnings transactions
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [MentorCookieJWTAuthentication]
+    
+    def get(self, request):
+        """Get complete wallet data for authenticated mentor"""
+        try:
+            mentor = request.user.mentor_profile
+        except Mentor.DoesNotExist:
+            return Response(
+                {'error': 'Mentor profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            # Get all earnings for this mentor
+            earnings = MentorEarnings.objects.filter(mentor=mentor).select_related(
+                'session', 'session__student'
+            ).prefetch_related('session__subjects').order_by('-created_at')
+            
+            # Calculate wallet summary
+            wallet_summary = self.calculate_wallet_summary(mentor, earnings)
+            
+            # Prepare response data
+            wallet_data = {
+                'wallet_summary': wallet_summary,
+                'earnings': earnings,
+                'earnings_count': earnings.count()
+            }
+            
+            # Serialize the data
+            serializer = MentorWalletSerializer(wallet_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch wallet data: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def calculate_wallet_summary(self, mentor, earnings):
+        """Calculate wallet summary statistics"""
+        # Get current month start and end
+        now = timezone.now()
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # Calculate total earnings (completed payouts only)
+        total_earnings = earnings.filter(
+            payout_status='completed'
+        ).aggregate(
+            total=Sum('mentor_earning')
+        )['total'] or Decimal('0.00')
+        
+        # Calculate available balance (completed payouts)
+        available_balance = total_earnings
+        
+        # Calculate pending earnings (pending + processing)
+        pending_earnings = earnings.filter(
+            payout_status__in=['pending', 'processing']
+        ).aggregate(
+            total=Sum('mentor_earning')
+        )['total'] or Decimal('0.00')
+        
+        # Calculate this month earnings
+        this_month_earnings = earnings.filter(
+            created_at__gte=current_month_start,
+            payout_status='completed'
+        ).aggregate(
+            total=Sum('mentor_earning')
+        )['total'] or Decimal('0.00')
+        
+        # Get total completed sessions count
+        total_sessions = MentorSession.objects.filter(
+            mentor=mentor,
+            status='completed'
+        ).count()
+        
+        return {
+            'total_earnings': total_earnings,
+            'available_balance': available_balance,
+            'pending_earnings': pending_earnings,
+            'total_sessions': total_sessions,
+            'this_month_earnings': this_month_earnings
+        }
+
+
+class MentorEarningsListView(APIView):
+    """
+    API view to list all earnings for a mentor with filtering options
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [MentorCookieJWTAuthentication]
+    
+    def get(self, request):
+        """Get earnings list for authenticated mentor with optional filtering"""
+        try:
+            mentor = request.user.mentor_profile
+        except Mentor.DoesNotExist:
+            return Response(
+                {'error': 'Mentor profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            # Base queryset
+            queryset = MentorEarnings.objects.filter(mentor=mentor).select_related(
+                'session', 'session__student'
+            ).prefetch_related('session__subjects')
+            
+            # Filter by payout status if provided
+            payout_status = request.query_params.get('status', None)
+            if payout_status:
+                queryset = queryset.filter(payout_status=payout_status)
+            
+            # Filter by date range if provided
+            start_date = request.query_params.get('start_date', None)
+            end_date = request.query_params.get('end_date', None)
+            
+            if start_date:
+                try:
+                    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                    queryset = queryset.filter(created_at__date__gte=start_date)
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid start_date format. Use YYYY-MM-DD'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            if end_date:
+                try:
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                    queryset = queryset.filter(created_at__date__lte=end_date)
+                except ValueError:
+                    return Response(
+                        {'error': 'Invalid end_date format. Use YYYY-MM-DD'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            # Order by creation date (newest first)
+            queryset = queryset.order_by('-created_at')
+            
+            # Paginate if needed (optional)
+            page_size = request.query_params.get('page_size', None)
+            if page_size:
+                try:
+                    page_size = int(page_size)
+                    queryset = queryset[:page_size]
+                except ValueError:
+                    pass
+            
+            # Serialize the data
+            serializer = MentorEarningsSerializer(queryset, many=True)
+            
+            return Response({
+                'count': queryset.count(),
+                'earnings': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch earnings: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class WalletSummaryView(APIView):
+    """
+    API view to get only wallet summary information
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [MentorCookieJWTAuthentication]
+    
+    def get(self, request):
+        """Get wallet summary for authenticated mentor"""
+        try:
+            mentor = request.user.mentor_profile
+        except Mentor.DoesNotExist:
+            return Response(
+                {'error': 'Mentor profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            # Get all earnings for this mentor
+            earnings = MentorEarnings.objects.filter(mentor=mentor)
+            
+            # Calculate wallet summary
+            wallet_summary = self.calculate_wallet_summary(mentor, earnings)
+            
+            # Serialize the data
+            serializer = WalletSummarySerializer(wallet_summary)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch wallet summary: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def calculate_wallet_summary(self, mentor, earnings):
+        """Calculate wallet summary statistics"""
+        # Get current month start and end
+        now = timezone.now()
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # Calculate total earnings (completed payouts only)
+        total_earnings = earnings.filter(
+            payout_status='completed'
+        ).aggregate(
+            total=Sum('mentor_earning')
+        )['total'] or Decimal('0.00')
+        
+        # Calculate available balance (completed payouts)
+        available_balance = total_earnings
+        
+        # Calculate pending earnings (pending + processing)
+        pending_earnings = earnings.filter(
+            payout_status__in=['pending', 'processing']
+        ).aggregate(
+            total=Sum('mentor_earning')
+        )['total'] or Decimal('0.00')
+        
+        # Calculate this month earnings
+        this_month_earnings = earnings.filter(
+            created_at__gte=current_month_start,
+            payout_status='completed'
+        ).aggregate(
+            total=Sum('mentor_earning')
+        )['total'] or Decimal('0.00')
+        
+        # Get total completed sessions count
+        total_sessions = MentorSession.objects.filter(
+            mentor=mentor,
+            status='completed'
+        ).count()
+        
+        return {
+            'total_earnings': total_earnings,
+            'available_balance': available_balance,
+            'pending_earnings': pending_earnings,
+            'total_sessions': total_sessions,
+            'this_month_earnings': this_month_earnings
+        }
+
+
+class EarningsStatsView(APIView):
+    """
+    API view to get earnings statistics and analytics
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [MentorCookieJWTAuthentication]
+    
+    def get(self, request):
+        """Get detailed earnings statistics for authenticated mentor"""
+        try:
+            mentor = request.user.mentor_profile
+        except Mentor.DoesNotExist:
+            return Response(
+                {'error': 'Mentor profile not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            earnings = MentorEarnings.objects.filter(mentor=mentor)
+            
+            # Calculate various stats
+            stats = {
+                'total_earnings_by_status': self.get_earnings_by_status(earnings),
+                'monthly_earnings': self.get_monthly_earnings(earnings),
+                'average_session_earning': self.get_average_session_earning(earnings),
+                'highest_earning_session': self.get_highest_earning_session(earnings),
+                'recent_earnings_trend': self.get_recent_earnings_trend(earnings)
+            }
+            
+            return Response(stats, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch earnings stats: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def get_earnings_by_status(self, earnings):
+        """Get earnings breakdown by payout status"""
+        return {
+            'completed': earnings.filter(payout_status='completed').aggregate(
+                total=Sum('mentor_earning'), count=Count('id')
+            ),
+            'pending': earnings.filter(payout_status='pending').aggregate(
+                total=Sum('mentor_earning'), count=Count('id')
+            ),
+            'processing': earnings.filter(payout_status='processing').aggregate(
+                total=Sum('mentor_earning'), count=Count('id')
+            ),
+            'failed': earnings.filter(payout_status='failed').aggregate(
+                total=Sum('mentor_earning'), count=Count('id')
+            )
+        }
+    
+    def get_monthly_earnings(self, earnings):
+        """Get last 6 months earnings"""
+        now = timezone.now()
+        monthly_data = []
+        
+        for i in range(6):
+            month_start = (now.replace(day=1) - timedelta(days=i*30)).replace(day=1)
+            month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            
+            month_earnings = earnings.filter(
+                created_at__date__gte=month_start.date(),
+                created_at__date__lte=month_end.date(),
+                payout_status='completed'
+            ).aggregate(total=Sum('mentor_earning'))['total'] or Decimal('0.00')
+            
+            monthly_data.append({
+                'month': month_start.strftime('%Y-%m'),
+                'earnings': month_earnings
+            })
+        
+        return monthly_data
+    
+    def get_average_session_earning(self, earnings):
+        """Get average earning per session"""
+        completed_earnings = earnings.filter(payout_status='completed')
+        if completed_earnings.exists():
+            return completed_earnings.aggregate(avg=Sum('mentor_earning'))['avg'] / completed_earnings.count()
+        return Decimal('0.00')
+    
+    def get_highest_earning_session(self, earnings):
+        """Get highest earning session details"""
+        highest = earnings.filter(payout_status='completed').order_by('-mentor_earning').first()
+        if highest:
+            return {
+                'amount': highest.mentor_earning,
+                'session_date': highest.session.scheduled_date,
+                'student_name': highest.session.student.name
+            }
+        return None
+    
+    def get_recent_earnings_trend(self, earnings):
+        """Get last 30 days earnings trend"""
+        now = timezone.now()
+        thirty_days_ago = now - timedelta(days=30)
+        
+        recent_earnings = earnings.filter(
+            created_at__gte=thirty_days_ago,
+            payout_status='completed'
+        ).aggregate(total=Sum('mentor_earning'))['total'] or Decimal('0.00')
+        
+        return {
+            'last_30_days': recent_earnings,
+            'daily_average': recent_earnings / 30 if recent_earnings > 0 else Decimal('0.00')
+        }

@@ -407,11 +407,11 @@ const MentorProfileUpload = () => {
             </div>
 
             <div className="flex justify-center gap-4">
-              {approvalStatus.status === "rejected" && (
+              {/* {approvalStatus.status === "rejected" && (
                 <Button onClick={handleResubmit} disabled={isLoading}>
                   {isLoading ? "Preparing..." : "Resubmit Profile"}
                 </Button>
-              )}
+              )} */}
               {(approvalStatus.status === "approved" || approvalStatus.is_approved) && (
                 <Button onClick={handleGoToProfile} className="bg-green-600 hover:bg-green-700">
                   <User className="h-4 w-4 mr-2" />

@@ -667,3 +667,40 @@ class MentorSessionSerializer(serializers.ModelSerializer):
                 'email': obj.mentor.user.email,
             }
         return None
+
+class SessionDetailSerializer(serializers.ModelSerializer):
+    student = UserBasicSerializer(read_only=True)
+    subjects = SubjectSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = MentorSession
+        fields = [
+            'id', 'student', 'scheduled_date', 'scheduled_time', 
+            'duration_minutes', 'subjects'
+        ]
+
+
+class MentorEarningsSerializer(serializers.ModelSerializer):
+    session = SessionDetailSerializer(read_only=True)
+    
+    class Meta:
+        model = MentorEarnings
+        fields = [
+            'id', 'session', 'session_amount', 'platform_commission',
+            'mentor_earning', 'payout_status', 'payout_date', 
+            'payout_reference', 'created_at', 'updated_at'
+        ]
+
+
+class WalletSummarySerializer(serializers.Serializer):
+    total_earnings = serializers.DecimalField(max_digits=10, decimal_places=2)
+    available_balance = serializers.DecimalField(max_digits=10, decimal_places=2)
+    pending_earnings = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_sessions = serializers.IntegerField()
+    this_month_earnings = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class MentorWalletSerializer(serializers.Serializer):
+    wallet_summary = WalletSummarySerializer()
+    earnings = MentorEarningsSerializer(many=True)
+    earnings_count = serializers.IntegerField()

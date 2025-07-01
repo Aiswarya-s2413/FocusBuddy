@@ -21,6 +21,11 @@ urlpatterns = [
     path('mentor-sessions/<int:pk>/', MentorSessionDetailView.as_view(), name='mentor-sessions-detail'),
     path('mentor-sessions/<int:session_id>/start/', StartMentorSessionView.as_view(), name='mentor-session-start'),
     path('mentor-sessions/<int:session_id>/cancel/', CancelMentorSessionView.as_view(), name='mentor-session-cancel'),
+    path('wallet/', MentorWalletView.as_view(), name='mentor-wallet'),
+    path('earnings/', MentorEarningsListView.as_view(), name='mentor-earnings-list'),
+    path('wallet/summary/', WalletSummaryView.as_view(), name='mentor-wallet-summary'),
+    path('earnings/stats/', EarningsStatsView.as_view(), name='mentor-earnings-stats'),
+    
     
 ]
 
