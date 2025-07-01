@@ -759,16 +759,10 @@ class CancelMentorSessionView(APIView):
         return Response(serializer.data)
 
 class MentorWalletView(APIView):
-    """
-    API view to retrieve mentor's wallet information including:
-    - Wallet summary (total earnings, available balance, pending earnings, etc.)
-    - All earnings transactions with pagination
-    """
     permission_classes = [IsAuthenticated]
     authentication_classes = [MentorCookieJWTAuthentication]
-    
+
     def get(self, request):
-        """Get complete wallet data for authenticated mentor"""
         try:
             mentor = request.user.mentor_profile
         except Mentor.DoesNotExist:
@@ -776,41 +770,38 @@ class MentorWalletView(APIView):
                 {'error': 'Mentor profile not found'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         try:
-            # Get pagination parameters
+            # Pagination parameters
             page = request.GET.get('page', 1)
-            page_size = request.GET.get('page_size', 10)  # Default 10 items per page
-            
-            # Validate page_size (limit between 5 and 50)
+            page_size = request.GET.get('page_size', 10)
+
             try:
-                page_size = int(page_size)
-                page_size = max(5, min(50, page_size))
+                page_size = max(5, min(50, int(page_size)))
             except (ValueError, TypeError):
                 page_size = 10
-            
-            # Get all earnings for this mentor (for summary calculations)
+
             all_earnings = MentorEarnings.objects.filter(mentor=mentor).select_related(
                 'session', 'session__student'
             ).prefetch_related('session__subjects')
-            
-            # Calculate wallet summary using all earnings
+
+            # Wallet summary
             wallet_summary = self.calculate_wallet_summary(mentor, all_earnings)
-            
-            # Get earnings for pagination (ordered by created_at descending)
+
+            # Pagination
             earnings_queryset = all_earnings.order_by('-created_at')
-            
-            # Apply pagination
             paginator = Paginator(earnings_queryset, page_size)
-            
+
             try:
                 earnings_page = paginator.page(page)
             except PageNotAnInteger:
                 earnings_page = paginator.page(1)
             except EmptyPage:
                 earnings_page = paginator.page(paginator.num_pages)
-            
-            # Prepare pagination info
+
+            # Serialize paginated earnings
+            earnings_serializer = MentorEarningsSerializer(earnings_page, many=True)
+
             pagination_info = {
                 'current_page': earnings_page.number,
                 'total_pages': paginator.num_pages,
@@ -821,60 +812,46 @@ class MentorWalletView(APIView):
                 'next_page': earnings_page.next_page_number() if earnings_page.has_next() else None,
                 'previous_page': earnings_page.previous_page_number() if earnings_page.has_previous() else None,
             }
-            
-            # Prepare response data
-            wallet_data = {
+
+            data = {
                 'wallet_summary': wallet_summary,
-                'earnings': list(earnings_page.object_list),
-                'earnings_count': paginator.count,  # Add this missing field
+                'earnings': earnings_serializer.data,
+                'earnings_count': paginator.count,
                 'pagination': pagination_info
             }
-            
-            # Serialize the data
-            serializer = MentorWalletSerializer(wallet_data)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
+
+            return Response(data, status=status.HTTP_200_OK)
+
         except Exception as e:
             return Response(
                 {'error': f'Failed to fetch wallet data: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
     def calculate_wallet_summary(self, mentor, earnings):
-        """Calculate wallet summary statistics"""
-        # Get current month start and end
         now = timezone.now()
         current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
-        # Calculate total earnings
-        total_earnings = earnings.filter(
-            payout_status='pending'
-        ).aggregate(
+
+        total_earnings = earnings.aggregate(
             total=Sum('mentor_earning')
         )['total'] or Decimal('0.00')
-        
-        # Calculate available balance (completed payouts)
+
         available_balance = total_earnings
-        
-        # Calculate pending earnings (pending + processing)
+
         pending_earnings = earnings.filter(
             payout_status__in=['pending', 'processing']
         ).aggregate(
             total=Sum('mentor_earning')
         )['total'] or Decimal('0.00')
-         
-        # Calculate this month earnings
+
         this_month_earnings = earnings.filter(
             created_at__gte=current_month_start
         ).aggregate(
             total=Sum('mentor_earning')
         )['total'] or Decimal('0.00')
-        
-        # Get total sessions count
-        total_sessions = MentorSession.objects.filter(
-            mentor=mentor
-        ).count()
-        
+
+        total_sessions = MentorSession.objects.filter(mentor=mentor).count()
+
         return {
             'total_earnings': total_earnings,
             'available_balance': available_balance,
@@ -882,4 +859,3 @@ class MentorWalletView(APIView):
             'total_sessions': total_sessions,
             'this_month_earnings': this_month_earnings
         }
-
