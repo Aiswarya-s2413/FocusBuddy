@@ -42,7 +42,7 @@ const adminMenuItems = [
   { title: "Users", icon: Users, path: "/admin/users" },
   { title: "Sessions", icon: Calendar, path: "/admin/sessions" },
   { title: "Mentor Requests", icon: CreditCard, path: "/admin/mentors" },
-  { title: "Journals", icon: BookOpen, path: "/admin/journals" },
+  { title: "Wallet", icon: BookOpen, path: "/admin/wallet" },
   { title: "Focus Buddy", icon: Users2, path: "/admin/focus-buddy" },
   { title: "Support", icon: HelpCircle, path: "/admin/support" },
   { title: "FAQ", icon: MessageSquare, path: "/admin/faq" },

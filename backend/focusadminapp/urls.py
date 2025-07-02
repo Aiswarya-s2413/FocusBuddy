@@ -17,5 +17,6 @@ urlpatterns = [
     path('mentors/<int:mentor_id>/approve/', ApproveMentorView.as_view(), name='approve-mentor'),
     path('mentors/<int:mentor_id>/reject/', RejectMentorView.as_view(), name='reject-mentor'),
     path('mentors/stats/', MentorApprovalStatsView.as_view(), name='mentor-approval-stats'),
+    path('wallet/', AdminWalletView.as_view(), name='admin-wallet'),
     
 ]

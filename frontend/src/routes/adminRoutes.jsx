@@ -4,6 +4,7 @@ import AdminUsers from "../pages/admin/AdminUsers";
 import { useSelector } from "react-redux";
 import AdminMentorsApproval from "../pages/admin/AdminMentorsApproval";
 import AdminLayout from "../components/admin/AdminLayout";
+import AdminWallet from "../pages/admin/AdminWallet";
 
 const ProtectedAdminRoute = ({ children }) => {
   const { admin } = useSelector((state) => state.admin);
@@ -35,6 +36,15 @@ const AdminRoutes = () => {
         element={
           <ProtectedAdminRoute>
             <AdminLayout><AdminMentorsApproval /></AdminLayout>
+          </ProtectedAdminRoute>
+        }
+        />
+
+      <Route
+        path="/wallet"
+        element={
+          <ProtectedAdminRoute>
+            <AdminLayout><AdminWallet /></AdminLayout>
           </ProtectedAdminRoute>
         }
         />

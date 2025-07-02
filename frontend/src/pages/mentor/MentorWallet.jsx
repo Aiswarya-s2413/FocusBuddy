@@ -163,20 +163,7 @@ const MentorWallet = () => {
             Showing {((current_page - 1) * pageSize) + 1} to {Math.min(current_page * pageSize, total_items)} of {total_items} transactions
           </div>
           
-          {/* <div className="flex items-center space-x-2">
-            <label className="text-sm text-gray-700">Show:</label>
-            <select
-              value={pageSize}
-              onChange={(e) => handlePageSizeChange(parseInt(e.target.value))}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#6E59A5] focus:border-transparent"
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-            </select>
-            <span className="text-sm text-gray-700">per page</span>
-          </div> */}
+          
         </div>
 
         <div className="flex items-center space-x-2">

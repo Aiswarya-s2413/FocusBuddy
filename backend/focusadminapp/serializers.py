@@ -110,3 +110,57 @@ class MentorDetailSerializer(serializers.ModelSerializer):
         if obj.profile_image:
             return obj.profile_image.url
         return None
+
+class UserBasicSerializer(serializers.ModelSerializer):
+    """Basic user serializer for nested relationships"""
+    class Meta:
+        model = User
+        fields = ['id', 'name', 'email']
+
+class SubjectSerializer(serializers.ModelSerializer):
+    """Subject serializer"""
+    class Meta:
+        model = Subject
+        fields = ['id', 'name']
+
+class SessionDetailSerializer(serializers.ModelSerializer):
+    student = UserBasicSerializer(read_only=True)
+    subjects = SubjectSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = MentorSession
+        fields = [
+            'id', 'student', 'scheduled_date', 'scheduled_time', 
+            'duration_minutes', 'subjects'
+        ]
+
+
+class AdminEarningsSerializer(serializers.ModelSerializer):
+    session = SessionDetailSerializer(read_only=True)
+    mentor_name = serializers.CharField(source='mentor.user.get_full_name', read_only=True)
+    student_name = serializers.CharField(source='session.student.name', read_only=True)
+    
+    class Meta:
+        model = MentorEarnings
+        fields = [
+            'id', 'session', 'mentor_name', 'student_name', 'session_amount', 
+            'platform_commission', 'mentor_earning', 'payout_status', 
+            'payout_date', 'payout_reference', 'created_at', 'updated_at'
+        ]
+
+
+class AdminWalletSummarySerializer(serializers.Serializer):
+    total_platform_commission = serializers.DecimalField(max_digits=10, decimal_places=2)
+    available_balance = serializers.DecimalField(max_digits=10, decimal_places=2)
+    pending_commissions = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_sessions = serializers.IntegerField()
+    this_month_commission = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_mentors = serializers.IntegerField()
+    total_students = serializers.IntegerField()
+
+
+class AdminWalletSerializer(serializers.Serializer):
+    wallet_summary = AdminWalletSummarySerializer()
+    earnings = AdminEarningsSerializer(many=True)
+    earnings_count = serializers.IntegerField()
+    pagination = serializers.DictField()

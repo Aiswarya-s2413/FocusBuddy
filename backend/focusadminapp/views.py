@@ -14,12 +14,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.decorators import permission_classes
 from django.utils import timezone
 from userapp.authentication import AdminCookieJWTAuthentication
-
-from rest_framework import status
+from django.db.models import Sum
 from django.http import JsonResponse
 import traceback
 import sys
-
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 
 logger = logging.getLogger(__name__)
@@ -776,3 +775,107 @@ class MentorApprovalStatsView(APIView):
                 {'error': f'Failed to get stats: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class AdminWalletView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        try:
+            # Pagination parameters
+            page = request.GET.get('page', 1)
+            page_size = request.GET.get('page_size', 10)
+
+            try:
+                page_size = max(5, min(50, int(page_size)))
+            except (ValueError, TypeError):
+                page_size = 10
+
+            # Get all earnings (platform's revenue source)
+            all_earnings = MentorEarnings.objects.all().select_related(
+                'mentor', 'mentor__user', 'session', 'session__student'
+            ).prefetch_related('session__subjects')
+
+            # Wallet summary for admin (platform commissions)
+            wallet_summary = self.calculate_admin_wallet_summary(all_earnings)
+
+            # Pagination
+            earnings_queryset = all_earnings.order_by('-created_at')
+            paginator = Paginator(earnings_queryset, page_size)
+
+            try:
+                earnings_page = paginator.page(page)
+            except PageNotAnInteger:
+                earnings_page = paginator.page(1)
+            except EmptyPage:
+                earnings_page = paginator.page(paginator.num_pages)
+
+            # Serialize paginated earnings
+            earnings_serializer = AdminEarningsSerializer(earnings_page, many=True)
+
+            pagination_info = {
+                'current_page': earnings_page.number,
+                'total_pages': paginator.num_pages,
+                'total_items': paginator.count,
+                'page_size': page_size,
+                'has_next': earnings_page.has_next(),
+                'has_previous': earnings_page.has_previous(),
+                'next_page': earnings_page.next_page_number() if earnings_page.has_next() else None,
+                'previous_page': earnings_page.previous_page_number() if earnings_page.has_previous() else None,
+            }
+
+            data = {
+                'wallet_summary': wallet_summary,
+                'earnings': earnings_serializer.data,
+                'earnings_count': paginator.count,
+                'pagination': pagination_info
+            }
+
+            return Response(data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch admin wallet data: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def calculate_admin_wallet_summary(self, earnings):
+        now = timezone.now()
+        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # Platform's total commission earnings
+        total_platform_commission = earnings.aggregate(
+            total=Sum('platform_commission')
+        )['total'] or Decimal('0.00')
+
+        # Available balance (could be same as total or minus any admin payouts if applicable)
+        available_balance = total_platform_commission
+
+        # Pending commissions (if you track admin payout status) for future use
+        pending_commissions = earnings.filter(
+            payout_status__in=['pending', 'processing']
+        ).aggregate(
+            total=Sum('platform_commission')
+        )['total'] or Decimal('0.00')
+
+        # This month's commission
+        this_month_commission = earnings.filter(
+            created_at__gte=current_month_start
+        ).aggregate(
+            total=Sum('platform_commission')
+        )['total'] or Decimal('0.00')
+
+        # Additional stats for admin
+        total_sessions = MentorSession.objects.count()
+        total_mentors = Mentor.objects.count()
+        total_students = earnings.values('session__student').distinct().count()
+
+        return {
+            'total_platform_commission': total_platform_commission,
+            'available_balance': available_balance,
+            'pending_commissions': pending_commissions,
+            'total_sessions': total_sessions,
+            'this_month_commission': this_month_commission,
+            'total_mentors': total_mentors,
+            'total_students': total_students
+        }
