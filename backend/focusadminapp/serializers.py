@@ -164,3 +164,90 @@ class AdminWalletSerializer(serializers.Serializer):
     earnings = AdminEarningsSerializer(many=True)
     earnings_count = serializers.IntegerField()
     pagination = serializers.DictField()
+
+class FocusBuddySessionSerializer(serializers.ModelSerializer):
+    creator = UserBasicSerializer(read_only=True)
+    remaining_time_display = serializers.SerializerMethodField()
+    participant_count = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
+    can_join = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FocusBuddySession
+        fields = [
+            'id', 'creator', 'title', 'session_type', 'status', 
+            'duration_minutes', 'max_participants', 'participant_count',
+            'started_at', 'ends_at', 'ended_at', 'created_at', 'updated_at',
+            'remaining_time_display', 'is_expired', 'can_join'
+        ]
+    
+    def get_remaining_time_display(self, obj):
+        """Get human-readable remaining time"""
+        if obj.status != 'active':
+            return None
+        
+        remaining_seconds = obj.remaining_time_seconds
+        if remaining_seconds <= 0:
+            return "Expired"
+        
+        minutes = remaining_seconds // 60
+        seconds = remaining_seconds % 60
+        
+        if minutes > 0:
+            return f"{minutes}m {seconds}s"
+        else:
+            return f"{seconds}s"
+    
+    def get_participant_count(self, obj):
+        """Get current participant count"""
+        return obj.participant_count
+    
+    def get_is_expired(self, obj):
+        """Check if session is expired"""
+        return obj.is_expired
+    
+    def get_can_join(self, obj):
+        """Check if session can be joined"""
+        return obj.can_join
+
+class FocusBuddySessionDetailSerializer(serializers.ModelSerializer):
+    creator = UserBasicSerializer(read_only=True)
+    participants = serializers.SerializerMethodField()
+    session_stats = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FocusBuddySession
+        fields = [
+            'id', 'creator', 'title', 'session_type', 'status', 
+            'duration_minutes', 'max_participants', 'started_at', 
+            'ends_at', 'ended_at', 'created_at', 'updated_at',
+            'participants', 'session_stats'
+        ]
+    
+    def get_participants(self, obj):
+        """Get list of participants"""
+        # Assuming you have a FocusBuddyParticipant model
+        # participants = obj.participants.select_related('user').all()
+        # return [{'id': p.user.id, 'name': p.user.name, 'joined_at': p.joined_at, 'left_at': p.left_at} for p in participants]
+        return []  # Placeholder - implement based on your participant model
+    
+    def get_session_stats(self, obj):
+        """Get session statistics"""
+        return {
+            'total_duration_minutes': obj.duration_minutes,
+            'actual_duration_minutes': self._calculate_actual_duration(obj),
+            'participant_count': obj.participant_count,
+            'max_participants': obj.max_participants,
+            'utilization_rate': (obj.participant_count / obj.max_participants * 100) if obj.max_participants > 0 else 0
+        }
+    
+    def _calculate_actual_duration(self, obj):
+        """Calculate actual session duration in minutes"""
+        if obj.ended_at and obj.started_at:
+            delta = obj.ended_at - obj.started_at
+            return int(delta.total_seconds() / 60)
+        elif obj.status == 'active':
+            from django.utils import timezone
+            delta = timezone.now() - obj.started_at
+            return int(delta.total_seconds() / 60)
+        return obj.duration_minutes

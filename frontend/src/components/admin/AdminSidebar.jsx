@@ -43,7 +43,7 @@ const adminMenuItems = [
   { title: "Sessions", icon: Calendar, path: "/admin/sessions" },
   { title: "Mentor Requests", icon: CreditCard, path: "/admin/mentors" },
   { title: "Wallet", icon: BookOpen, path: "/admin/wallet" },
-  { title: "Focus Buddy", icon: Users2, path: "/admin/focus-buddy" },
+  { title: "Focus Buddy", icon: Users2, path: "/admin/focussessions" },
   { title: "Support", icon: HelpCircle, path: "/admin/support" },
   { title: "FAQ", icon: MessageSquare, path: "/admin/faq" },
   { title: "Notifications", icon: Bell, path: "/admin/notifications" },

@@ -879,3 +879,218 @@ class AdminWalletView(APIView):
             'total_mentors': total_mentors,
             'total_students': total_students
         }
+
+class AdminFocusBuddySessionListView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        """List all focus buddy sessions with search, filter, and pagination"""
+        try:
+            # Get query parameters
+            search_query = request.query_params.get('search', '')
+            status_filter = request.query_params.get('status', 'all')
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 10))
+            
+            # Validate page_size
+            page_size = max(5, min(50, page_size))
+            
+            # Base queryset
+            queryset = FocusBuddySession.objects.select_related('creator_id').all()
+            
+            # Apply status filter
+            if status_filter and status_filter != 'all':
+                queryset = queryset.filter(status=status_filter)
+            
+            # Apply search filter
+            if search_query:
+                from django.db.models import Q
+                queryset = queryset.filter(
+                    Q(title__icontains=search_query) |
+                    Q(creator__name__icontains=search_query) |
+                    Q(creator__email__icontains=search_query) |
+                    Q(session_type__icontains=search_query)
+                )
+            
+            # Order by creation date (newest first)
+            queryset = queryset.order_by('-created_at')
+            
+            # Manual pagination
+            total_sessions = queryset.count()
+            total_pages = (total_sessions + page_size - 1) // page_size
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_sessions = queryset[start_index:end_index]
+            
+            # Serialize the sessions
+            serializer = FocusBuddySessionSerializer(paginated_sessions, many=True)
+            
+            return Response({
+                'sessions': serializer.data,
+                'pagination': {
+                    'total_sessions': total_sessions,
+                    'total_pages': total_pages,
+                    'current_page': page,
+                    'page_size': page_size,
+                    'has_next': page < total_pages,
+                    'has_previous': page > 1
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError as e:
+            logger.error(f"Invalid parameter in focus sessions list: {str(e)}")
+            return Response(
+                {'error': 'Invalid pagination parameters'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error listing focus buddy sessions: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while listing focus buddy sessions'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class AdminFocusBuddySessionDetailView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, session_id):
+        """Get detailed information about a specific focus buddy session"""
+        try:
+            try:
+                session = FocusBuddySession.objects.select_related('creator').get(id=session_id)
+            except FocusBuddySession.DoesNotExist:
+                return Response(
+                    {'error': 'Focus buddy session not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            serializer = FocusBuddySessionDetailSerializer(session)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting focus buddy session detail: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while fetching session details'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class AdminFocusBuddySessionStatsView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        """Get statistics for focus buddy sessions"""
+        try:
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            now = timezone.now()
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            week_start = today_start - timedelta(days=7)
+            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            
+            # Basic counts
+            total_sessions = FocusBuddySession.objects.count()
+            active_sessions = FocusBuddySession.objects.filter(status='active').count()
+            completed_sessions = FocusBuddySession.objects.filter(status='completed').count()
+            cancelled_sessions = FocusBuddySession.objects.filter(status='cancelled').count()
+            expired_sessions = FocusBuddySession.objects.filter(status='expired').count()
+            
+            # Time-based stats
+            today_sessions = FocusBuddySession.objects.filter(created_at__gte=today_start).count()
+            week_sessions = FocusBuddySession.objects.filter(created_at__gte=week_start).count()
+            month_sessions = FocusBuddySession.objects.filter(created_at__gte=month_start).count()
+            
+            # Session type breakdown
+            session_types = FocusBuddySession.objects.values('session_type').annotate(
+                count=models.Count('id')
+            ).order_by('-count')
+            
+            # Duration breakdown
+            duration_stats = FocusBuddySession.objects.values('duration_minutes').annotate(
+                count=models.Count('id')
+            ).order_by('duration_minutes')
+            
+            # Most active creators (top 5)
+            top_creators = FocusBuddySession.objects.values(
+                'creator__name',
+                'creator__email'
+            ).annotate(
+                session_count=models.Count('id')
+            ).order_by('-session_count')[:5]
+            
+            stats = {
+                'overview': {
+                    'total_sessions': total_sessions,
+                    'active_sessions': active_sessions,
+                    'completed_sessions': completed_sessions,
+                    'cancelled_sessions': cancelled_sessions,
+                    'expired_sessions': expired_sessions
+                },
+                'time_based': {
+                    'today_sessions': today_sessions,
+                    'week_sessions': week_sessions,
+                    'month_sessions': month_sessions
+                },
+                'breakdown': {
+                    'by_type': list(session_types),
+                    'by_duration': list(duration_stats)
+                },
+                'top_creators': list(top_creators)
+            }
+            
+            return Response(stats, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting focus buddy session stats: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while fetching session statistics'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class AdminEndFocusBuddySessionView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, session_id):
+        """Admin action to end a focus buddy session"""
+        try:
+            try:
+                session = FocusBuddySession.objects.get(id=session_id)
+            except FocusBuddySession.DoesNotExist:
+                return Response(
+                    {'error': 'Focus buddy session not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            if session.status != 'active':
+                return Response(
+                    {'error': f'Session is already {session.status}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get reason for ending session
+            reason = request.data.get('reason', 'admin_ended')
+            if reason not in ['completed', 'cancelled', 'expired', 'admin_ended']:
+                reason = 'admin_ended'
+            
+            # End the session
+            session.end_session(reason=reason)
+            
+            logger.info(f"Focus buddy session {session_id} ended by admin {request.user.email}, reason: {reason}")
+            
+            return Response({
+                'message': f'Focus buddy session ended successfully',
+                'session_id': session.id,
+                'status': session.status,
+                'ended_at': session.ended_at
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error ending focus buddy session: {str(e)}")
+            return Response(
+                {'error': 'An error occurred while ending the session'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

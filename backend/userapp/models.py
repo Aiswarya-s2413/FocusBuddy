@@ -273,6 +273,10 @@ class MentorSession(models.Model):
     session_mode = models.CharField(max_length=10, choices=SESSION_MODE_CHOICES, default='video')
     status = models.CharField(max_length=15, choices=SESSION_STATUS_CHOICES, default='pending')
     
+    # track notifications being sent
+    reminder_sent = models.BooleanField(default=False)
+    reminder_sent_at = models.DateTimeField(blank=True, null=True)
+    
     # Meeting details (populated when session is confirmed)
     meeting_link = models.URLField(blank=True, null=True)
     meeting_id = models.CharField(max_length=100, blank=True, null=True)

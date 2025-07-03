@@ -5,6 +5,8 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.utils import timezone
 from .models import Mentor, MentorApprovalRequest
+from .models import MentorSession
+from .tasks import schedule_session_reminder
 
 @receiver(post_save, sender=Mentor)
 def mentor_profile_updated(sender, instance, created, **kwargs):
@@ -38,3 +40,14 @@ def mentor_profile_updated(sender, instance, created, **kwargs):
         send_admin_approval_notification(instance, approval_request)
         
         print(f"✅ Approval request created for mentor: {instance.user.name}")
+
+
+
+@receiver(post_save, sender=MentorSession)
+def schedule_reminder_on_confirmation(sender, instance, created, **kwargs):
+    """
+    Schedule reminder when session status changes to confirmed
+    """
+    if instance.status == 'confirmed' and not instance.reminder_sent:
+        # Schedule reminder for 15 minutes before session
+        schedule_session_reminder.delay(instance.id)

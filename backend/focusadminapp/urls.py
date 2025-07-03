@@ -18,5 +18,9 @@ urlpatterns = [
     path('mentors/<int:mentor_id>/reject/', RejectMentorView.as_view(), name='reject-mentor'),
     path('mentors/stats/', MentorApprovalStatsView.as_view(), name='mentor-approval-stats'),
     path('wallet/', AdminWalletView.as_view(), name='admin-wallet'),
+    path('sessions/', AdminFocusBuddySessionListView.as_view(), name='admin-sessions-list'),
+    path('sessions/stats/', AdminFocusBuddySessionStatsView.as_view(), name='admin-sessions-stats'),
+    path('sessions/<int:session_id>/', AdminFocusBuddySessionDetailView.as_view(), name='admin-session-detail'),
+    path('sessions/<int:session_id>/end/', AdminEndFocusBuddySessionView.as_view(), name='admin-session-end'),
     
 ]
