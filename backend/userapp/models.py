@@ -127,7 +127,6 @@ class Mentor(models.Model):
         help_text="JSON field to store availability schedule"
     )
     rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00)
-    total_sessions = models.IntegerField(default=0)
     total_students = models.IntegerField(default=0)
     is_available = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -155,7 +154,7 @@ class Mentor(models.Model):
     )
 
     class Meta:
-        ordering = ['-rating', '-total_sessions']
+        ordering = ['-rating']
 
     def __str__(self):
         return f"{self.user.name}'s Mentor Profile"
@@ -165,6 +164,11 @@ class Mentor(models.Model):
             self.user.is_mentor = True
             self.user.save()
         super().save(*args, **kwargs)
+
+    @property
+    def total_sessions(self):
+        """Calculate total sessions regardless of status"""
+        return self.mentor_sessions.count()
 
     @property
     def full_profile(self):
@@ -435,7 +439,7 @@ class SessionReview(models.Model):
     
     # Review details
     rating = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    review_text = models.TextField()
+    review_text = models.TextField(blank=True, null=True)
    
     # Meta information
     is_public = models.BooleanField(default=True)

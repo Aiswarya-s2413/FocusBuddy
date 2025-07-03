@@ -166,7 +166,7 @@ class AdminWalletSerializer(serializers.Serializer):
     pagination = serializers.DictField()
 
 class FocusBuddySessionSerializer(serializers.ModelSerializer):
-    creator = UserBasicSerializer(read_only=True)
+    creator_id = UserBasicSerializer(read_only=True)
     remaining_time_display = serializers.SerializerMethodField()
     participant_count = serializers.SerializerMethodField()
     is_expired = serializers.SerializerMethodField()
@@ -175,7 +175,7 @@ class FocusBuddySessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = FocusBuddySession
         fields = [
-            'id', 'creator', 'title', 'session_type', 'status', 
+            'id', 'creator_id', 'title', 'session_type', 'status', 
             'duration_minutes', 'max_participants', 'participant_count',
             'started_at', 'ends_at', 'ended_at', 'created_at', 'updated_at',
             'remaining_time_display', 'is_expired', 'can_join'
@@ -211,25 +211,19 @@ class FocusBuddySessionSerializer(serializers.ModelSerializer):
         return obj.can_join
 
 class FocusBuddySessionDetailSerializer(serializers.ModelSerializer):
-    creator = UserBasicSerializer(read_only=True)
+    creator_id = UserBasicSerializer(read_only=True)
     participants = serializers.SerializerMethodField()
     session_stats = serializers.SerializerMethodField()
     
     class Meta:
         model = FocusBuddySession
         fields = [
-            'id', 'creator', 'title', 'session_type', 'status', 
+            'id', 'creator_id', 'title', 'session_type', 'status', 
             'duration_minutes', 'max_participants', 'started_at', 
             'ends_at', 'ended_at', 'created_at', 'updated_at',
             'participants', 'session_stats'
         ]
     
-    def get_participants(self, obj):
-        """Get list of participants"""
-        # Assuming you have a FocusBuddyParticipant model
-        # participants = obj.participants.select_related('user').all()
-        # return [{'id': p.user.id, 'name': p.user.name, 'joined_at': p.joined_at, 'left_at': p.left_at} for p in participants]
-        return []  # Placeholder - implement based on your participant model
     
     def get_session_stats(self, obj):
         """Get session statistics"""

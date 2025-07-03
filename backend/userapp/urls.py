@@ -58,13 +58,14 @@ urlpatterns = [
 
     
     # Generic patterns with parameters 
-    path('<int:pk>/', SessionDetailAPIView.as_view(), name='session-detail'),
+    
     path('<int:pk>/cancel/', CancelSessionAPIView.as_view(), name='cancel-session'),
     path('<int:session_id>/payment/', SessionPaymentAPIView.as_view(), name='session-payment'),
     path('<int:session_id>/reviews/create/', CreateSessionReviewAPIView.as_view(), name='create-session-review'),
     path('<int:session_id>/reviews/', SessionReviewsListAPIView.as_view(), name='session-reviews-list'),
     path('<int:session_id>/messages/', SessionMessagesAPIView.as_view(), name='session-messages'),
-
+    
+    path('<int:pk>/', SessionDetailAPIView.as_view(), name='session-detail'),
     # Session management
     path('focus-sessions/', FocusBuddySessionListView.as_view(), name='session-list-create'),
     path('focus-sessions/<int:session_id>/', FocusBuddySessionDetailView.as_view(), name='session-detail'),

@@ -552,11 +552,10 @@ class SessionReviewSerializer(serializers.ModelSerializer):
         model = SessionReview
         fields = [
             'id', 'session', 'reviewer', 'rating', 'review_text',
-            'communication_rating', 'knowledge_rating', 'helpfulness_rating',
             'is_public', 'is_verified', 'created_at', 'updated_at',
             'reviewer_name', 'session_details'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'is_verified']
+        read_only_fields = ['created_at', 'updated_at', 'is_verified', 'reviewer', 'session']
     
     def get_session_details(self, obj):
         return {
@@ -564,6 +563,7 @@ class SessionReviewSerializer(serializers.ModelSerializer):
             'mentor_name': obj.session.mentor.user.name,
             'scheduled_date': obj.session.scheduled_date,
         }
+
 
 
 class SessionMessageSerializer(serializers.ModelSerializer):

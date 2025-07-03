@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardFooter } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Calendar, Clock, Video, X, MessageSquare, Star, Loader2, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { useSimpleToast } from "../ui/toast";
+import { userAxios } from "../../utils/axios"; 
 
-// Custom Avatar Components (same as in MentorGrid)
 const Avatar = ({ children, className = "" }) => (
   <div className={`rounded-full bg-gray-200 flex items-center justify-center ${className}`}>
     {children}
@@ -22,40 +22,25 @@ const AvatarImage = ({ src, alt, className = "" }) => {
   
   // Handle different URL formats
   if (src.includes('cloudinary.com')) {
-    // If it's already a full Cloudinary URL, check if it needs fixing
     if (src.includes('/v1/')) {
-      // Replace generic /v1/ with the specific version number and add .jpg extension
       fixedSrc = src.replace('/v1/', '/v1749732168/');
-      
-      // Add .jpg.jpg extension if it ends with .jpg but not .jpg.jpg
       if (fixedSrc.endsWith('.jpg') && !fixedSrc.endsWith('.jpg.jpg')) {
         fixedSrc = fixedSrc + '.jpg';
       }
     } else {
-      // Use the URL as is if it already has a proper version or no version
       fixedSrc = src;
     }
   } else if (src.startsWith('mentors/') || src.includes('/')) {
-    // If it's just the path from database, construct the full Cloudinary URL
-    // Remove any leading slash and ensure proper format
     const cleanPath = src.startsWith('/') ? src.substring(1) : src;
-    
-    // For mentor images, add .jpg.jpg as that seems to be the pattern
     let finalPath = cleanPath;
     if (cleanPath.includes('mentors/') && cleanPath.endsWith('.jpg') && !cleanPath.endsWith('.jpg.jpg')) {
       finalPath = `${cleanPath}.jpg`;
     } else if (!cleanPath.includes('.')) {
       finalPath = `${cleanPath}.jpg`;
     }
-    
-    // Use the specific version number
     fixedSrc = `https://res.cloudinary.com/dnq1fzs1l/image/upload/v1749732168/${finalPath}`;
   }
   
-  console.log('Original URL:', src);
-  console.log('Fixed URL:', fixedSrc);
-  
-  // Use a default image if image failed to load
   const defaultImage = "https://via.placeholder.com/150/cccccc/666666?text=No+Image";
   const imageSrc = imageError ? defaultImage : fixedSrc;
   
@@ -115,13 +100,13 @@ const PaginationInfo = ({ pagination, type }) => {
 
   return (
     <div className="text-sm text-gray-500 text-center mb-4">
-      Showing {actualDisplayedCount} of {pagination.count} {type} sessions
+      {pagination.count} {type} sessions
     </div>
   );
 };
 
 const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback, onRefresh, onLoadMore, loadingMore }) => {
-  const { toast } = useSimpleToast();
+  const { toast, ToastContainer } = useSimpleToast();
   const [cancelDialog, setCancelDialog] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [feedbackDialog, setFeedbackDialog] = useState(false);
@@ -129,6 +114,9 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
   const [feedbackComment, setFeedbackComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  
+  // Local state to track feedback updates without rerendering
+  const [localFeedbackUpdates, setLocalFeedbackUpdates] = useState({});
 
   const handleCancelSession = async () => {
     if (!selectedSession || !onCancelSession) return;
@@ -147,34 +135,88 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
   };
 
   const handleSubmitFeedback = async () => {
-    if (!selectedSession || !onSubmitFeedback || feedbackRating === 0) {
+    if (!selectedSession || feedbackRating === 0) {
       toast.error('Please provide a rating before submitting.');
       return;
     }
     
     try {
       setIsSubmitting(true);
-      await onSubmitFeedback(selectedSession.id, feedbackRating, feedbackComment);
-      toast.success('Feedback submitted successfully.');
-      setFeedbackDialog(false);
-      setSelectedSession(null);
-      setFeedbackRating(0);
-      setFeedbackComment('');
+      
+      const feedbackData = {
+        rating: feedbackRating,
+        review_text: feedbackComment.trim() || null,
+        is_public: true
+      };
+
+      const response = await userAxios.post(
+        `${selectedSession.id}/reviews/create/`,
+        feedbackData
+      );
+
+      if (response.data.success) {
+        // Update local state without triggering parent refresh
+        setLocalFeedbackUpdates(prev => ({
+          ...prev,
+          [selectedSession.id]: {
+            feedbackProvided: true,
+            rating: feedbackRating,
+            feedback: feedbackComment
+          }
+        }));
+
+        toast.success(`Thank you for your feedback! You rated ${selectedSession.mentor.name} ${feedbackRating} star${feedbackRating > 1 ? 's' : ''}.`);
+        
+        // Only call parent callback if provided (without triggering refresh)
+        if (onSubmitFeedback) {
+          // Don't await this to prevent blocking UI updates
+          onSubmitFeedback(selectedSession.id, feedbackRating, feedbackComment);
+        }
+        
+        // Close dialog and reset state
+        setFeedbackDialog(false);
+        setSelectedSession(null);
+        setFeedbackRating(0);
+        setFeedbackComment('');
+        
+        // DON'T call onRefresh() to prevent rerender
+        
+      } else {
+        throw new Error(response.data.message || 'Failed to submit feedback');
+      }
     } catch (error) {
-      toast.error(error.message || 'Failed to submit feedback.');
+      console.error('Error submitting feedback:', error);
+      
+      if (error.response?.status === 404) {
+        toast.error('Session not found. Please try again later.');
+      } else if (error.response?.status === 400) {
+        const errorMessages = error.response?.data?.errors;
+        if (errorMessages) {
+          const firstError = Object.values(errorMessages)[0];
+          toast.error(Array.isArray(firstError) ? firstError[0] : firstError);
+        } else {
+          toast.error('Please check your feedback and try again.');
+        }
+      } else if (error.response?.status === 401) {
+        toast.error('You must be logged in to submit feedback.');
+      } else if (error.response?.status === 409) {
+        toast.warning('You have already submitted feedback for this session.');
+      } else {
+        toast.error('Unable to submit feedback. Please try again later.');
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const openFeedbackDialog = (session) => {
+  const openFeedbackDialog = useCallback((session) => {
     setSelectedSession(session);
     setFeedbackRating(session.rating || 0);
     setFeedbackComment(session.feedback || '');
     setFeedbackDialog(true);
-  };
+  }, []);
 
-  const formatDateTime = (dateTimeString) => {
+  const formatDateTime = useCallback((dateTimeString) => {
     if (!dateTimeString) return { date: 'N/A', time: 'N/A' };
     
     const dateTime = new Date(dateTimeString);
@@ -189,9 +231,9 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
         minute: '2-digit' 
       })
     };
-  };
+  }, []);
 
-  const getSessionModeIcon = (mode) => {
+  const getSessionModeIcon = useCallback((mode) => {
     switch (mode?.toLowerCase()) {
       case 'video':
         return <Video className="h-4 w-4 mr-2 text-gray-500" />;
@@ -202,47 +244,42 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
       default:
         return <Video className="h-4 w-4 mr-2 text-gray-500" />;
     }
-  };
+  }, []);
 
-  const canCancelSession = (session) => {
+  const canCancelSession = useCallback((session) => {
     if (session.status === 'cancelled' || session.status === 'completed' || session.status === 'ongoing') {
       return false;
     }
     
-    // Check if session is more than 1 hour away
     const sessionTime = new Date(session.dateTime);
     const now = new Date();
     const hoursUntilSession = (sessionTime - now) / (1000 * 60 * 60);
     
-    return hoursUntilSession > 1; // Allow cancellation if more than 1 hour away
-  };
+    return hoursUntilSession > 1;
+  }, []);
 
-  const canJoinSession = (session) => {
-    // Allow joining if session is ongoing or confirmed and within the joinable time window
+  const canJoinSession = useCallback((session) => {
     if (session.status === 'ongoing') {
-      return true; // Always allow joining ongoing sessions
+      return true;
     }
     
     if (session.status !== 'confirmed') {
       return false;
     }
     
-    // Check if session is within 15 minutes of start time for confirmed sessions
     const sessionTime = new Date(session.dateTime);
     const now = new Date();
     const minutesUntilSession = (sessionTime - now) / (1000 * 60);
     
-    return minutesUntilSession <= 15 && minutesUntilSession >= -60; // 15 min before to 60 min after
-  };
+    return minutesUntilSession <= 15 && minutesUntilSession >= -60;
+  }, []);
 
-  const handleJoinSession = (session) => {
-    // For demo purposes, just show a message
-    // In real implementation, navigate to video call page
+  const handleJoinSession = useCallback((session) => {
     toast.success(`Joining session with ${session.mentor.name}...`);
     console.log('Joining session:', session);
-  };
+  }, [toast]);
 
-  const getJoinButtonText = (session) => {
+  const getJoinButtonText = useCallback((session) => {
     if (session.status === 'ongoing') {
       return 'Join Session';
     }
@@ -260,9 +297,9 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
     }
     
     return 'Join Session';
-  };
+  }, []);
 
-  const getStatusBadgeColor = (status) => {
+  const getStatusBadgeColor = useCallback((status) => {
     switch (status) {
       case 'confirmed': return 'bg-blue-100 text-blue-800';
       case 'ongoing': return 'bg-green-100 text-green-800';
@@ -271,12 +308,138 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
       case 'completed': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
     }
-  };
+  }, []);
 
-  const handleLoadMore = (type) => {
+  const handleLoadMore = useCallback((type) => {
     if (onLoadMore && !loadingMore[type]) {
       onLoadMore(type);
     }
+  }, [onLoadMore, loadingMore]);
+
+  // Memoize enhanced sessions with local feedback updates
+  const enhancedSessions = useMemo(() => ({
+    upcoming: sessions.upcoming,
+    past: sessions.past.map(session => ({
+      ...session,
+      ...(localFeedbackUpdates[session.id] || {})
+    }))
+  }), [sessions, localFeedbackUpdates]);
+
+  // Render session card
+  const renderSessionCard = (session, isPast = false) => {
+    const { date, time } = formatDateTime(session.dateTime);
+    
+    return (
+      <Card key={session.id}>
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            <Avatar className="h-12 w-12 border-2 border-purple-100">
+              <AvatarImage 
+                src={session.mentor.profilePicture || session.mentor.profile_image_url} 
+                alt={session.mentor.name}
+              />
+            </Avatar>
+            <div className="flex-1">
+              <h3 className="font-medium">{session.mentor.name}</h3>
+              <p className="text-sm text-gray-600">{session.mentor.specialization}</p>
+              
+              {session.status && !isPast && (
+                <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${getStatusBadgeColor(session.status)}`}>
+                  {session.status === 'ongoing' ? 'Live Now' : 
+                   session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+                </span>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                <div className="flex items-center text-sm">
+                  <Calendar className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>{date}</span>
+                </div>
+                <div className="flex items-center text-sm">
+                  <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>{time}</span>
+                </div>
+                <div className="flex items-center text-sm">
+                  {getSessionModeIcon(session.mode)}
+                  <span className="capitalize">{session.mode}</span>
+                </div>
+                <div className="flex items-center text-sm">
+                  <Clock className="h-4 w-4 mr-2 text-gray-500" />
+                  <span>{session.duration}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter className="flex justify-between bg-gray-50 border-t px-6 py-3">
+          {!isPast ? (
+            <>
+              {canCancelSession(session) && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setSelectedSession(session);
+                    setCancelDialog(true);
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+              
+              <div className="flex-1"></div>
+              
+              <Button 
+                variant="default" 
+                className={`${canJoinSession(session) 
+                  ? (session.status === 'ongoing' 
+                    ? 'bg-green-600 hover:bg-green-700 animate-pulse' 
+                    : 'bg-purple-600 hover:bg-purple-700')
+                  : 'bg-gray-400 cursor-not-allowed'
+                }`}
+                onClick={() => handleJoinSession(session)}
+                disabled={!canJoinSession(session)}
+              >
+                {canJoinSession(session) ? (
+                  <>
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    {getJoinButtonText(session)}
+                  </>
+                ) : (
+                  'Session Not Ready'
+                )}
+              </Button>
+            </>
+          ) : (
+            <div className="flex justify-end w-full">
+              {!session.feedbackProvided ? (
+                <Button
+                  variant="outline"
+                  onClick={() => openFeedbackDialog(session)}
+                >
+                  <MessageSquare className="h-4 w-4 mr-1" /> Leave Feedback
+                </Button>
+              ) : (
+                <div className="flex items-center text-sm text-gray-500">
+                  <span className="mr-1">Your rating:</span>
+                  <div className="flex">
+                    {[...Array(5)].map((_, i) => (
+                      <Star 
+                        key={i} 
+                        className={`h-4 w-4 ${
+                          i < session.rating 
+                            ? "text-yellow-500 fill-yellow-500" 
+                            : "text-gray-300"
+                        }`} 
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardFooter>
+      </Card>
+    );
   };
 
   return (
@@ -292,7 +455,7 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
             <PaginationInfo pagination={pagination.upcoming} type="upcoming" />
           )}
           
-          {sessions.upcoming.length === 0 ? (
+          {enhancedSessions.upcoming.length === 0 ? (
             <div className="text-center py-10">
               <h3 className="text-gray-500 mb-2">No upcoming sessions</h3>
               <p className="text-sm text-gray-400">Book a session with one of our mentors</p>
@@ -300,89 +463,9 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
           ) : (
             <>
               <div className="grid gap-4">
-                {sessions.upcoming.map((session) => {
-                  const { date, time } = formatDateTime(session.dateTime);
-                  return (
-                    <Card key={session.id}>
-                      <CardContent className="p-6">
-                        <div className="flex items-start gap-4">
-                          <Avatar className="h-12 w-12 border-2 border-purple-100">
-                            <AvatarImage 
-                              src={session.mentor.profilePicture || session.mentor.profile_image_url} 
-                              alt={session.mentor.name}
-                            />
-                          </Avatar>
-                          <div className="flex-1">
-                            <h3 className="font-medium">{session.mentor.name}</h3>
-                            <p className="text-sm text-gray-600">{session.mentor.specialization}</p>
-                            
-                            {session.status && (
-                              <span className={`inline-block px-2 py-1 text-xs rounded-full mt-1 ${getStatusBadgeColor(session.status)}`}>
-                                {session.status === 'ongoing' ? 'Live Now' : 
-                                 session.status.charAt(0).toUpperCase() + session.status.slice(1)}
-                              </span>
-                            )}
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                              <div className="flex items-center text-sm">
-                                <Calendar className="h-4 w-4 mr-2 text-gray-500" />
-                                <span>{date}</span>
-                              </div>
-                              <div className="flex items-center text-sm">
-                                <Clock className="h-4 w-4 mr-2 text-gray-500" />
-                                <span>{time}</span>
-                              </div>
-                              <div className="flex items-center text-sm">
-                                {getSessionModeIcon(session.mode)}
-                                <span className="capitalize">{session.mode}</span>
-                              </div>
-                              <div className="flex items-center text-sm">
-                                <Clock className="h-4 w-4 mr-2 text-gray-500" />
-                                <span>{session.duration}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                      <CardFooter className="flex justify-between bg-gray-50 border-t px-6 py-3">
-                        {canCancelSession(session) && (
-                          <Button 
-                            variant="outline" 
-                            onClick={() => {
-                              setSelectedSession(session);
-                              setCancelDialog(true);
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        )}
-                        
-                        <div className="flex-1"></div>
-                        
-                        <Button 
-                          variant="default" 
-                          className={`${canJoinSession(session) 
-                            ? (session.status === 'ongoing' 
-                              ? 'bg-green-600 hover:bg-green-700 animate-pulse' 
-                              : 'bg-purple-600 hover:bg-purple-700')
-                            : 'bg-gray-400 cursor-not-allowed'
-                          }`}
-                          onClick={() => handleJoinSession(session)}
-                          disabled={!canJoinSession(session)}
-                        >
-                          {canJoinSession(session) ? (
-                            <>
-                              <ExternalLink className="h-4 w-4 mr-1" />
-                              {getJoinButtonText(session)}
-                            </>
-                          ) : (
-                            'Session Not Ready'
-                          )}
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  );
-                })}
+                {enhancedSessions.upcoming.map((session) => 
+                  renderSessionCard(session, false)
+                )}
               </div>
 
               {pagination?.upcoming && (
@@ -402,7 +485,7 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
             <PaginationInfo pagination={pagination.past} type="past" />
           )}
           
-          {sessions.past.length === 0 ? (
+          {enhancedSessions.past.length === 0 ? (
             <div className="text-center py-10">
               <h3 className="text-gray-500 mb-2">No past sessions</h3>
               <p className="text-sm text-gray-400">Your completed sessions will appear here</p>
@@ -410,72 +493,9 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
           ) : (
             <>
               <div className="grid gap-4">
-                {sessions.past.map((session) => {
-                  const { date, time } = formatDateTime(session.dateTime);
-                  return (
-                    <Card key={session.id}>
-                      <CardContent className="p-6">
-                        <div className="flex items-start gap-4">
-                          <Avatar className="h-12 w-12 border-2 border-purple-100">
-                            <AvatarImage 
-                              src={session.mentor.profilePicture || session.mentor.profile_image_url} 
-                              alt={session.mentor.name}
-                            />
-                          </Avatar>
-                          <div className="flex-1">
-                            <h3 className="font-medium">{session.mentor.name}</h3>
-                            <p className="text-sm text-gray-600">{session.mentor.specialization}</p>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                              <div className="flex items-center text-sm">
-                                <Calendar className="h-4 w-4 mr-2 text-gray-500" />
-                                <span>{date}</span>
-                              </div>
-                              <div className="flex items-center text-sm">
-                                <Clock className="h-4 w-4 mr-2 text-gray-500" />
-                                <span>{time}</span>
-                              </div>
-                              <div className="flex items-center text-sm">
-                                {getSessionModeIcon(session.mode)}
-                                <span className="capitalize">{session.mode}</span>
-                              </div>
-                              <div className="flex items-center text-sm">
-                                <Clock className="h-4 w-4 mr-2 text-gray-500" />
-                                <span>{session.duration}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                      <CardFooter className="flex justify-end bg-gray-50 border-t px-6 py-3">
-                        {!session.feedbackProvided ? (
-                          <Button
-                            variant="outline"
-                            onClick={() => openFeedbackDialog(session)}
-                          >
-                            <MessageSquare className="h-4 w-4 mr-1" /> Leave Feedback
-                          </Button>
-                        ) : (
-                          <div className="flex items-center text-sm text-gray-500">
-                            <span className="mr-1">Your rating:</span>
-                            <div className="flex">
-                              {[...Array(5)].map((_, i) => (
-                                <Star 
-                                  key={i} 
-                                  className={`h-4 w-4 ${
-                                    i < session.rating 
-                                      ? "text-yellow-500 fill-yellow-500" 
-                                      : "text-gray-300"
-                                  }`} 
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </CardFooter>
-                    </Card>
-                  );
-                })}
+                {enhancedSessions.past.map((session) => 
+                  renderSessionCard(session, true)
+                )}
               </div>
 
               {pagination?.past && (
@@ -579,6 +599,7 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ToastContainer />
     </>
   );
 };

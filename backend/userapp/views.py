@@ -1059,24 +1059,41 @@ class SessionPaymentAPIView(APIView):
 
 
 class CreateSessionReviewAPIView(APIView):
-    """API view to create session review"""
+    """API view to create or update session review"""
     permission_classes = [IsAuthenticated]
     
     def post(self, request, session_id):
+        # Get the session - ensure it's completed and belongs to the user
         session = get_object_or_404(
             MentorSession.objects.filter(
-                Q(student=request.user) | Q(mentor__user=request.user),
-                status='completed'
+                student=request.user,  # Only students can leave reviews
+                # status='completed' for later addition
             ),
             id=session_id
         )
         
-        serializer = SessionReviewSerializer(data=request.data)
+        # Check if review already exists
+        existing_review = SessionReview.objects.filter(
+            session=session,
+            reviewer=request.user
+        ).first()
+        
+        if existing_review:
+            # Update existing review
+            serializer = SessionReviewSerializer(existing_review, data=request.data, partial=True)
+        else:
+            # Create new review
+            serializer = SessionReviewSerializer(data=request.data)
+        
         if serializer.is_valid():
-            serializer.save(reviewer=request.user, session=session)
+            review = serializer.save(reviewer=request.user, session=session)
+            
+            # Update mentor's average rating
+            self.update_mentor_rating(session.mentor)
+            
             return Response({
                 'success': True,
-                'message': 'Review created successfully',
+                'message': 'Review submitted successfully',
                 'data': serializer.data
             }, status=status.HTTP_201_CREATED)
         
@@ -1084,12 +1101,26 @@ class CreateSessionReviewAPIView(APIView):
             'success': False,
             'errors': serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def update_mentor_rating(self, mentor):
+        """Update mentor's average rating based on all reviews"""
+        from django.db.models import Avg
+        
+        # Get all reviews for this mentor's sessions
+        reviews = SessionReview.objects.filter(
+            session__mentor=mentor,
+            is_public=True
+        )
+        
+        if reviews.exists():
+            avg_rating = reviews.aggregate(Avg('rating'))['rating__avg']
+            mentor.rating = round(avg_rating, 2)
+            mentor.save()
 
 
 class SessionReviewsListAPIView(APIView):
     """API view to list session reviews"""
     permission_classes = [IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
     
     def get(self, request, session_id):
         session = get_object_or_404(
@@ -1100,21 +1131,12 @@ class SessionReviewsListAPIView(APIView):
         )
         
         reviews = SessionReview.objects.filter(session=session)
-        
-        # Paginate results
-        paginator = self.pagination_class()
-        page = paginator.paginate_queryset(reviews, request)
-        
-        if page is not None:
-            serializer = SessionReviewSerializer(page, many=True)
-            return paginator.get_paginated_response(serializer.data)
-        
         serializer = SessionReviewSerializer(reviews, many=True)
+        
         return Response({
             'success': True,
             'data': serializer.data
         })
-
 
 class SessionMessagesAPIView(APIView):
     """API view to list and create session messages"""

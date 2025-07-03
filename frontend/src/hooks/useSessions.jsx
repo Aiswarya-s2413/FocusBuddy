@@ -295,15 +295,16 @@ export const useSessions = () => {
   // Submit feedback for a session
   const submitFeedback = useCallback(async (sessionId, rating, feedback) => {
     try {
-      const response = await userAxios.patch(`/sessions/${sessionId}/`, {
-        student_rating: rating,
-        student_feedback: feedback
+      const response = await userAxios.post(`/${sessionId}/reviews/create/`, {
+        rating: rating,
+        review_text: feedback,
+        is_public: true
       });
-
+  
       if (response.data.success) {
-        // Refresh sessions after feedback submission
+        // Refresh sessions to show updated feedback status
         await fetchSessions();
-        return true;
+        return { success: true, message: 'Feedback submitted successfully!' };
       } else {
         throw new Error(response.data.message || 'Failed to submit feedback');
       }
@@ -312,6 +313,8 @@ export const useSessions = () => {
       throw new Error(err.response?.data?.message || 'Failed to submit feedback');
     }
   }, [fetchSessions]);
+  
+  
 
   // Get session details by ID
   const getSessionDetails = useCallback(async (sessionId) => {

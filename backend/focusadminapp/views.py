@@ -908,8 +908,8 @@ class AdminFocusBuddySessionListView(APIView):
                 from django.db.models import Q
                 queryset = queryset.filter(
                     Q(title__icontains=search_query) |
-                    Q(creator__name__icontains=search_query) |
-                    Q(creator__email__icontains=search_query) |
+                    Q(creator_id__name__icontains=search_query) |
+                    Q(creator_id__email__icontains=search_query) |
                     Q(session_type__icontains=search_query)
                 )
             
@@ -959,7 +959,7 @@ class AdminFocusBuddySessionDetailView(APIView):
         """Get detailed information about a specific focus buddy session"""
         try:
             try:
-                session = FocusBuddySession.objects.select_related('creator').get(id=session_id)
+                session = FocusBuddySession.objects.select_related('creator_id').get(id=session_id)
             except FocusBuddySession.DoesNotExist:
                 return Response(
                     {'error': 'Focus buddy session not found'},
@@ -1015,8 +1015,8 @@ class AdminFocusBuddySessionStatsView(APIView):
             
             # Most active creators (top 5)
             top_creators = FocusBuddySession.objects.values(
-                'creator__name',
-                'creator__email'
+                'creator_id__name',
+                'creator_id__email'
             ).annotate(
                 session_count=models.Count('id')
             ).order_by('-session_count')[:5]

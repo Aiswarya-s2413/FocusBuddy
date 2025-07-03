@@ -189,49 +189,6 @@ const AdminFocusSessions = () => {
           
         </div>
 
-        {/* Stats Panel */}
-        {showStats && stats && (
-          <div className="bg-white rounded-lg border p-6 mb-6">
-            <h2 className="text-lg font-semibold mb-4">Session Statistics</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats.overview.total_sessions}</div>
-                <div className="text-sm text-gray-500">Total Sessions</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{stats.overview.active_sessions}</div>
-                <div className="text-sm text-gray-500">Active</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats.overview.completed_sessions}</div>
-                <div className="text-sm text-gray-500">Completed</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-red-600">{stats.overview.cancelled_sessions}</div>
-                <div className="text-sm text-gray-500">Cancelled</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-600">{stats.overview.expired_sessions}</div>
-                <div className="text-sm text-gray-500">Expired</div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center">
-                <div className="text-lg font-semibold">{stats.time_based.today_sessions}</div>
-                <div className="text-sm text-gray-500">Today</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold">{stats.time_based.week_sessions}</div>
-                <div className="text-sm text-gray-500">This Week</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold">{stats.time_based.month_sessions}</div>
-                <div className="text-sm text-gray-500">This Month</div>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="flex flex-col sm:flex-row gap-4 mb-4">
           {/* Search Input */}
@@ -263,7 +220,7 @@ const AdminFocusSessions = () => {
 
           {/* Status Filter */}
           <div className="flex gap-2">
-            {["all", "active", "completed", "cancelled", "expired"].map((status) => (
+            {["all", "active", "completed",  "expired"].map((status) => (
               <Button
                 key={status}
                 variant={statusFilter === status ? "default" : "outline"}
@@ -324,9 +281,7 @@ const AdminFocusSessions = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -349,8 +304,8 @@ const AdminFocusSessions = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{session.creator?.name || 'Unknown'}</div>
-                      <div className="text-xs text-gray-500">{session.creator?.email || ''}</div>
+                      <div className="text-sm text-gray-900">{session.creator_id?.name || 'Unknown'}</div>
+                      <div className="text-xs text-gray-500">{session.creator_id?.email || ''}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{formatDuration(session.duration_minutes)}</div>
@@ -358,9 +313,9 @@ const AdminFocusSessions = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {session.participant_count || 0} / {session.max_participants || 'N/A'}
+                        {session.max_participants || 'N/A'}
                       </div>
-                      <div className="text-xs text-gray-500">participants</div>
+                      <div className="text-xs text-gray-500">max participants</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -375,27 +330,7 @@ const AdminFocusSessions = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewSession(session.id)}
-                          className="flex items-center gap-1"
-                        >
-                          <Eye className="h-3 w-3" />
-                          View
-                        </Button>
-                        {session.status === 'active' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEndSession(session.id)}
-                            className="flex items-center gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            End
-                          </Button>
-                        )}
-                      </div>
+                      
                     </td>
                   </tr>
                 ))}
