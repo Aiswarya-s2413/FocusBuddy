@@ -40,14 +40,13 @@ import {
 const adminMenuItems = [
   { title: "Dashboard", icon: LayoutDashboard, path: "/admin" },
   { title: "Users", icon: Users, path: "/admin/users" },
-  { title: "Sessions", icon: Calendar, path: "/admin/sessions" },
   { title: "Mentor Requests", icon: CreditCard, path: "/admin/mentors" },
   { title: "Wallet", icon: BookOpen, path: "/admin/wallet" },
   { title: "Focus Buddy", icon: Users2, path: "/admin/focussessions" },
-  { title: "Support", icon: HelpCircle, path: "/admin/support" },
-  { title: "FAQ", icon: MessageSquare, path: "/admin/faq" },
-  { title: "Notifications", icon: Bell, path: "/admin/notifications" },
-  { title: "Settings", icon: Settings, path: "/admin/settings" },
+  // { title: "Support", icon: HelpCircle, path: "/admin/support" },
+  // { title: "FAQ", icon: MessageSquare, path: "/admin/faq" },
+  // { title: "Notifications", icon: Bell, path: "/admin/notifications" },
+  // { title: "Settings", icon: Settings, path: "/admin/settings" },
 ];
 
 const AdminSidebar = () => {

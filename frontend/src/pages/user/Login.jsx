@@ -89,7 +89,7 @@ const Login = () => {
       localStorage.setItem('role', 'user');
       localStorage.setItem('user', JSON.stringify(JSON.parse(localStorage.getItem('user')) || response.data.user));
 
-      navigate("/settings");
+      navigate("/focus-buddy");
       dispatch(clearMessage()); 
     }
   }, [message, error, navigate, dispatch]);
