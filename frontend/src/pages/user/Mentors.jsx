@@ -9,7 +9,7 @@ const Mentors = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState({
     subjects: [],
-    expertise_level: [],
+    experience: [], // Changed from expertise_level to experience
     rating: 0,
     hourly_rate: [0, 1000]
   });
@@ -18,6 +18,32 @@ const Mentors = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { toast, ToastContainer } = useSimpleToast();
+
+  // Helper function to convert experience range to backend format
+  const convertExperienceToRange = (experienceRanges) => {
+    const ranges = [];
+    
+    experienceRanges.forEach(range => {
+      switch(range) {
+        case "0-1 years":
+          ranges.push({ min: 0, max: 1 });
+          break;
+        case "1-2 years":
+          ranges.push({ min: 1, max: 2 });
+          break;
+        case "2-5 years":
+          ranges.push({ min: 2, max: 5 });
+          break;
+        case "5+ years":
+          ranges.push({ min: 5, max: 999 });
+          break;
+        default:
+          break;
+      }
+    });
+    
+    return ranges;
+  };
 
   // Fetch mentors from backend using userAxios
   const fetchMentors = async (query = "", currentFilters = filters) => {
@@ -39,13 +65,23 @@ const Mentors = () => {
         params.append('subjects', currentFilters.subjects.join(','));
       }
       
-      // Handle expertise level array
-      if (currentFilters.expertise_level && Array.isArray(currentFilters.expertise_level) && currentFilters.expertise_level.length > 0) {
-        currentFilters.expertise_level.forEach(level => {
-          if (level && level.trim()) {
-            params.append('expertise_level', level.trim());
+      // Handle experience ranges - convert to min/max experience
+      if (currentFilters.experience && Array.isArray(currentFilters.experience) && currentFilters.experience.length > 0) {
+        const experienceRanges = convertExperienceToRange(currentFilters.experience);
+        
+        if (experienceRanges.length > 0) {
+          // Find the overall min and max from all selected ranges
+          const allMins = experienceRanges.map(r => r.min);
+          const allMaxs = experienceRanges.map(r => r.max);
+          
+          const minExperience = Math.min(...allMins);
+          const maxExperience = Math.max(...allMaxs);
+          
+          params.append('min_experience', minExperience.toString());
+          if (maxExperience !== 999) { // Don't set max if it's the "5+ years" case
+            params.append('max_experience', maxExperience.toString());
           }
-        });
+        }
       }
       
       // Handle rating

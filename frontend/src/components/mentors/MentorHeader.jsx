@@ -17,8 +17,8 @@ import { Label } from "../../components/ui/label";
 const MentorHeader = ({ onSearch, onFilterChange }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState({
-    topics: [],
-    experience: [],
+    subjects: [],
+    experience: [], // Changed from topics to subjects and experience
     rating: 0,
     availability: null,
   });
@@ -28,12 +28,13 @@ const MentorHeader = ({ onSearch, onFilterChange }) => {
     onSearch(e.target.value);
   };
 
-  const handleTopicChange = (topic, checked) => {
-    const updatedTopics = checked
-      ? [...filters.topics, topic]
-      : filters.topics.filter((t) => t !== topic);
+  // Changed from handleTopicChange to handleSubjectChange
+  const handleSubjectChange = (subject, checked) => {
+    const updatedSubjects = checked
+      ? [...filters.subjects, subject]
+      : filters.subjects.filter((s) => s !== subject);
 
-    const updatedFilters = { ...filters, topics: updatedTopics };
+    const updatedFilters = { ...filters, subjects: updatedSubjects };
     setFilters(updatedFilters);
     onFilterChange(updatedFilters);
   };
@@ -52,6 +53,18 @@ const MentorHeader = ({ onSearch, onFilterChange }) => {
     const updatedFilters = { ...filters, rating: value[0] };
     setFilters(updatedFilters);
     onFilterChange(updatedFilters);
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    const clearedFilters = {
+      subjects: [],
+      experience: [],
+      rating: 0,
+      availability: null,
+    };
+    setFilters(clearedFilters);
+    onFilterChange(clearedFilters);
   };
 
   return (
@@ -79,6 +92,12 @@ const MentorHeader = ({ onSearch, onFilterChange }) => {
             <Button variant="outline" className="flex items-center gap-2">
               <Filter size={16} />
               <span>Filters</span>
+              {/* Show active filter count */}
+              {(filters.subjects.length > 0 || filters.experience.length > 0 || filters.rating > 0) && (
+                <span className="bg-purple-600 text-white rounded-full px-2 py-1 text-xs">
+                  {filters.subjects.length + filters.experience.length + (filters.rating > 0 ? 1 : 0)}
+                </span>
+              )}
             </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-[300px] sm:w-[400px] overflow-y-auto">
@@ -87,26 +106,28 @@ const MentorHeader = ({ onSearch, onFilterChange }) => {
             </SheetHeader>
 
             <div className="py-4 space-y-6">
+              {/* Subjects Filter */}
               <div className="space-y-4">
-                <h3 className="font-medium">Topics</h3>
+                <h3 className="font-medium">Subjects</h3>
                 <div className="grid grid-cols-1 gap-3">
-                  {["Productivity", "Study Tips", "Time Management", "Focus Techniques", "Wellness"].map((topic) => (
-                    <div key={topic} className="flex items-center space-x-2">
+                  {["Mathematics", "Science", "Languages", "Social Science", "Computer", "Art", "Philosophy", "Psychology"].map((subject) => (
+                    <div key={subject} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`topic-${topic}`}
-                        checked={filters.topics.includes(topic)}
-                        onCheckedChange={(checked) => handleTopicChange(topic, checked === true)}
+                        id={`subject-${subject}`}
+                        checked={filters.subjects.includes(subject)}
+                        onCheckedChange={(checked) => handleSubjectChange(subject, checked === true)}
                       />
-                      <Label htmlFor={`topic-${topic}`}>{topic}</Label>
+                      <Label htmlFor={`subject-${subject}`}>{subject}</Label>
                     </div>
                   ))}
                 </div>
               </div>
 
+              {/* Experience Filter */}
               <div className="space-y-4">
                 <h3 className="font-medium">Experience</h3>
                 <div className="grid grid-cols-1 gap-3">
-                  {["1-2 years", "3-5 years", "5+ years", "10+ years"].map((exp) => (
+                  {["0-1 years", "1-2 years", "2-5 years", "5+ years"].map((exp) => (
                     <div key={exp} className="flex items-center space-x-2">
                       <Checkbox
                         id={`exp-${exp}`}
@@ -123,7 +144,7 @@ const MentorHeader = ({ onSearch, onFilterChange }) => {
                 <h3 className="font-medium">Minimum Rating</h3>
                 <div className="px-2">
                   <Slider
-                    defaultValue={[0]}
+                    value={[filters.rating]}
                     max={5}
                     step={1}
                     onValueChange={handleRatingChange}
@@ -137,16 +158,21 @@ const MentorHeader = ({ onSearch, onFilterChange }) => {
                     <span>⭐ 5</span>
                   </div>
                 </div>
+                <p className="text-sm text-gray-500">
+                  Current: {filters.rating === 0 ? "Any" : `⭐ ${filters.rating}+`}
+                </p>
               </div>
 
-              <Button
-                className="w-full bg-purple-600 hover:bg-purple-700"
-                onClick={() => {
-                  onFilterChange(filters);
-                }}
-              >
-                Apply Filters
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={clearFilters}
+                >
+                  Clear All
+                </Button>
+                
+              </div>
             </div>
           </SheetContent>
         </Sheet>
