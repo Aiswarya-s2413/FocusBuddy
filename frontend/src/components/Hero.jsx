@@ -1,11 +1,17 @@
 import React from 'react';
 import { Button } from "./ui/button";
 import { ArrowRight } from "lucide-react";
+import { useNavigate } from 'react-router-dom';
 
 const Hero = () => {
+  const navigate = useNavigate();
   const handleScroll = () => {
     const featuresSection = document.getElementById('features');
     featuresSection?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleClick = () => {
+    navigate('/signup');
   };
 
   return (
@@ -28,6 +34,7 @@ const Hero = () => {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
+              onClick={handleClick}
               size="lg"
               className="cta-button bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-medium px-8 py-6 rounded-lg shadow-lg"
             >
