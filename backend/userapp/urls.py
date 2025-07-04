@@ -84,4 +84,9 @@ urlpatterns = [
 
     path('webrtc/config/', WebRTCConfigView.as_view(), name='webrtc-config'),
 
+    path('user-settings/', UserSettingsAPIView.as_view(), name='user-settings'),
+    path('user-settings/password/', PasswordChangeAPIView.as_view(), name='change-password'),
+    path('user-settings/stats/', UserStatsAPIView.as_view(), name='user-stats'),
+    path('user-settings/delete-account/', DeleteAccountAPIView.as_view(), name='delete-account'),
+
 ]

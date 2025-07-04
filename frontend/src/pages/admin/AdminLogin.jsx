@@ -29,7 +29,7 @@ const AdminLogin = () => {
   // If admin is already authenticated, redirect to /admin/users
   useEffect(() => {
     if (isAuthenticated && admin) {
-      navigate('/admin/users');
+      navigate('/admin/dashboard');
     }
   }, [isAuthenticated, admin, navigate]);
 
@@ -44,7 +44,7 @@ const AdminLogin = () => {
     
     // If login is successful, navigate to users page
     if (!result.error) {
-      navigate("/admin/users", { replace: true });
+      navigate("/admin/dashboard", { replace: true });
     }
   };
 

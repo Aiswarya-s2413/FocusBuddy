@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from "../../components/ui/dialog";
 import { useSimpleToast } from "../../components/ui/toast";
+import { userAxios } from "../../utils/axios";
 import {
   User,
   Key,
@@ -23,36 +24,110 @@ import {
   TrendingUp,
   Edit,
   Shield,
-  Settings as SettingsIcon, // ✅ Renamed here
+  Settings as SettingsIcon,
+  Loader2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 const Settings = () => {
   const { toast, ToastContainer } = useSimpleToast();
-  const [userName, setUserName] = useState("Alex Johnson");
+  
+  // User data state
+  const [user, setUser] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    bio: "",
+    experience: "",
+    subjects: [],
+    date_joined: "",
+    is_mentor: false
+  });
+  
+  // UI states
   const [isEditingName, setIsEditingName] = useState(false);
-  const [tempName, setTempName] = useState(userName);
+  const [tempName, setTempName] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
 
+  // Password modal states
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  const userStats = {
-    pomodoroSessions: 187,
-    focusBuddySessions: 23,
-    journalsCreated: 45,
-    dailyStreak: 12,
-  };
+  // Password visibility states
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const handleNameSave = () => {
-    if (tempName.trim()) {
-      setUserName(tempName.trim());
-      setIsEditingName(false);
-      toast.success("Name updated successfully!");
+  // Stats state
+  const [userStats, setUserStats] = useState({
+    pomodoro_sessions: 0,
+    focus_buddy_sessions: 0,
+    journals_created: 0,
+    daily_streak: 0,
+    total_tasks: 0,
+    completed_tasks: 0,
+    mentor_sessions: 0,
+  });
+
+  // Fetch user data and stats on component mount
+  useEffect(() => {
+    fetchUserData();
+    fetchUserStats();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const response = await userAxios.get('user-settings/');
+      setUser(response.data.data);
+      setTempName(response.data.data.name);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      toast.error('Failed to load user data');
+      setIsLoading(false);
     }
   };
 
-  const handlePasswordChange = () => {
+  const fetchUserStats = async () => {
+    try {
+      const response = await userAxios.get('user-settings/stats/');
+      setUserStats(response.data.data);
+    } catch (error) {
+      console.error('Error fetching user stats:', error);
+      toast.error('Failed to load user statistics');
+    }
+  };
+
+  const handleNameSave = async () => {
+    if (!tempName.trim()) {
+      toast.error('Name cannot be empty');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const response = await userAxios.patch('user-settings/', {
+        name: tempName.trim()
+      });
+      
+      setUser(response.data.data);
+      setIsEditingName(false);
+      toast.success("Name updated successfully!");
+    } catch (error) {
+      console.error('Error updating name:', error);
+      toast.error(error.response?.data?.detail || 'Failed to update name');
+      setTempName(user.name); // Reset to original name
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handlePasswordChange = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       toast.error("Please fill in all password fields.");
       return;
@@ -68,21 +143,93 @@ const Settings = () => {
       return;
     }
 
-    setIsPasswordModalOpen(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    setIsChangingPassword(true);
+    try {
+      await userAxios.post('user-settings/password/', {
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword
+      });
 
-    toast.success("Password changed successfully!");
+      setIsPasswordModalOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      // Reset visibility states
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
+      toast.success("Password changed successfully!");
+    } catch (error) {
+      console.error('Error changing password:', error);
+      const errorMessage = error.response?.data?.current_password?.[0] || 
+                          error.response?.data?.new_password?.[0] || 
+                          error.response?.data?.non_field_errors?.[0] ||
+                          'Failed to change password';
+      toast.error(errorMessage);
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
-  const handleLogout = () => {
-    toast.success("Logged out successfully!");
+  const handleLogout = async () => {
+    try {
+      await userAxios.post('/logout/');
+      toast.success("Logged out successfully!");
+      // Redirect to login page after a brief delay
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 1000);
+    } catch (error) {
+      console.error('Error logging out:', error);
+      toast.error('Failed to logout');
+    }
   };
 
-  const handleDeleteAccount = () => {
-    toast.success("Account deleted successfully!");
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await userAxios.delete('user-settings/delete-account/');
+      toast.success("Account deleted successfully!");
+      // Redirect to home page after a brief delay
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error('Failed to delete account');
+    }
   };
+
+  const togglePasswordVisibility = (field) => {
+    switch (field) {
+      case 'current':
+        setShowCurrentPassword(!showCurrentPassword);
+        break;
+      case 'new':
+        setShowNewPassword(!showNewPassword);
+        break;
+      case 'confirm':
+        setShowConfirmPassword(!showConfirmPassword);
+        break;
+      default:
+        break;
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F8F6FB] flex items-center justify-center">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin text-[#9b87f5]" />
+          <span className="text-[#6E59A5] font-medium">Loading...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8F6FB]">
@@ -127,22 +274,32 @@ const Settings = () => {
                     <Input
                       value={tempName}
                       onChange={(e) => setTempName(e.target.value)}
+                      disabled={isUpdating}
                       className="flex-1 bg-white border-gray-300 focus:border-[#9b87f5] focus:ring-2 focus:ring-[#9b87f5]/20 rounded-xl"
                     />
                     <Button
                       size="sm"
                       onClick={handleNameSave}
+                      disabled={isUpdating}
                       className="bg-[#9b87f5] hover:bg-[#7E69AB] text-white px-6 rounded-xl shadow-lg"
                     >
-                      Save
+                      {isUpdating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save'
+                      )}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => {
                         setIsEditingName(false);
-                        setTempName(userName);
+                        setTempName(user.name);
                       }}
+                      disabled={isUpdating}
                       className="border-gray-300 text-gray-600 hover:bg-gray-50 rounded-xl"
                     >
                       Cancel
@@ -151,7 +308,7 @@ const Settings = () => {
                 ) : (
                   <div className="flex items-center justify-between">
                     <p className="text-xl font-semibold text-gray-900">
-                      {userName}
+                      {user.name}
                     </p>
                     <Button
                       size="sm"
@@ -165,11 +322,31 @@ const Settings = () => {
                 )}
               </div>
 
+              {/* Email Section (Read-only) */}
+              <div className="bg-[#F0EBFF] rounded-xl p-6 border border-gray-200">
+                <Label className="text-sm font-semibold text-[#6E59A5] uppercase tracking-wide mb-3 block">
+                  Email Address
+                </Label>
+                <p className="text-xl font-semibold text-gray-900">{user.email}</p>
+                <p className="text-sm text-gray-500 mt-1">Email cannot be changed</p>
+              </div>
+
               {/* Password Change Button */}
               <div>
                 <Dialog
                   open={isPasswordModalOpen}
-                  onOpenChange={setIsPasswordModalOpen}
+                  onOpenChange={(open) => {
+                    setIsPasswordModalOpen(open);
+                    if (!open) {
+                      // Reset all states when modal closes
+                      setCurrentPassword("");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                      setShowCurrentPassword(false);
+                      setShowNewPassword(false);
+                      setShowConfirmPassword(false);
+                    }
+                  }}
                 >
                   <DialogTrigger asChild>
                     <Button
@@ -192,28 +369,51 @@ const Settings = () => {
                           label: "Current Password",
                           value: currentPassword,
                           setValue: setCurrentPassword,
+                          showPassword: showCurrentPassword,
+                          toggleVisibility: () => togglePasswordVisibility('current'),
                         },
                         {
                           label: "New Password",
                           value: newPassword,
                           setValue: setNewPassword,
+                          showPassword: showNewPassword,
+                          toggleVisibility: () => togglePasswordVisibility('new'),
                         },
                         {
                           label: "Confirm New Password",
                           value: confirmPassword,
                           setValue: setConfirmPassword,
+                          showPassword: showConfirmPassword,
+                          toggleVisibility: () => togglePasswordVisibility('confirm'),
                         },
                       ].map((field, idx) => (
                         <div key={idx} className="space-y-2">
                           <Label className="text-sm font-semibold text-gray-700">
                             {field.label}
                           </Label>
-                          <Input
-                            type="password"
-                            value={field.value}
-                            onChange={(e) => field.setValue(e.target.value)}
-                            className="border-gray-300 focus:border-[#9b87f5] focus:ring-[#9b87f5]/20 rounded-xl"
-                          />
+                          <div className="relative">
+                            <Input
+                              type={field.showPassword ? "text" : "password"}
+                              value={field.value}
+                              onChange={(e) => field.setValue(e.target.value)}
+                              disabled={isChangingPassword}
+                              className="border-gray-300 focus:border-[#9b87f5] focus:ring-[#9b87f5]/20 rounded-xl pr-10"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                              onClick={field.toggleVisibility}
+                              disabled={isChangingPassword}
+                            >
+                              {field.showPassword ? (
+                                <EyeOff className="h-4 w-4 text-gray-500" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-gray-500" />
+                              )}
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -221,15 +421,24 @@ const Settings = () => {
                       <Button
                         variant="outline"
                         onClick={() => setIsPasswordModalOpen(false)}
+                        disabled={isChangingPassword}
                         className="border-gray-300 text-gray-600 hover:bg-gray-50 rounded-xl"
                       >
                         Cancel
                       </Button>
                       <Button
                         onClick={handlePasswordChange}
+                        disabled={isChangingPassword}
                         className="bg-[#9b87f5] hover:bg-[#7E69AB] text-white rounded-xl"
                       >
-                        Change Password
+                        {isChangingPassword ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Changing...
+                          </>
+                        ) : (
+                          'Change Password'
+                        )}
                       </Button>
                     </div>
                   </DialogContent>
@@ -257,19 +466,19 @@ const Settings = () => {
                     {
                       icon: Clock,
                       label: "Pomodoro Sessions",
-                      value: userStats.pomodoroSessions,
+                      value: userStats.pomodoro_sessions,
                       iconBg: "bg-rose-500",
                     },
                     {
                       icon: Users,
                       label: "Focus Buddy Sessions",
-                      value: userStats.focusBuddySessions,
+                      value: userStats.focus_buddy_sessions,
                       iconBg: "bg-blue-500",
                     },
                     {
                       icon: Book,
                       label: "Journals Created",
-                      value: userStats.journalsCreated,
+                      value: userStats.journals_created,
                       iconBg: "bg-amber-500",
                     },
                   ].map((stat, index) => {
@@ -317,7 +526,7 @@ const Settings = () => {
                   <div className="w-36 h-36 mx-auto bg-[#F0EBFF] rounded-full flex items-center justify-center shadow-inner border-4 border-[#9b87f5]/20">
                     <div className="text-center">
                       <div className="text-5xl font-bold text-[#6E59A5]">
-                        {userStats.dailyStreak}
+                        {userStats.daily_streak}
                       </div>
                       <div className="text-sm font-semibold text-gray-600 mt-1">
                         DAYS
@@ -361,14 +570,7 @@ const Settings = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button
-                variant="outline"
-                className="flex-1 sm:flex-none border-gray-300 text-gray-700 hover:bg-[#F0EBFF] hover:border-[#9b87f5] transition-all duration-200 rounded-xl py-3 px-6"
-                onClick={handleLogout}
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Logout
-              </Button>
+              
 
               <Button
                 variant="destructive"

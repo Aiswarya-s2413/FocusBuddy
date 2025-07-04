@@ -9,6 +9,8 @@ import razorpay
 from django.conf import settings
 from django.db import transaction
 from datetime import timedelta
+from django.contrib.auth.password_validation import validate_password
+
 
 logger = logging.getLogger(__name__)
 
@@ -757,6 +759,73 @@ class SessionStatsSerializer(serializers.Serializer):
     total_participants_online = serializers.IntegerField()
     sessions_by_duration = serializers.DictField()
     sessions_by_type = serializers.DictField()
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    """Serializer for user settings/profile updates"""
+    subjects = serializers.PrimaryKeyRelatedField(
+        queryset=Subject.objects.all(),
+        many=True,
+        required=False
+    )
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'name', 'email', 'phone', 'bio', 
+            'experience', 'subjects', 'date_joined', 'is_mentor'
+        ]
+        read_only_fields = ['id', 'email', 'date_joined', 'is_mentor']
+    
+    def update(self, instance, validated_data):
+        # Handle subjects separately if provided
+        subjects_data = validated_data.pop('subjects', None)
+        
+        # Update other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Update subjects if provided
+        if subjects_data is not None:
+            instance.subjects.set(subjects_data)
+        
+        instance.save()
+        return instance
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    """Serializer for password change"""
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+    
+    def validate_current_password(self, value):
+        """Validate current password"""
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Current password is incorrect.")
+        return value
+    
+    def validate_new_password(self, value):
+        """Validate new password using Django's password validators"""
+        validate_password(value)
+        return value
+    
+    def validate(self, attrs):
+        """Validate that new passwords match"""
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError("New passwords do not match.")
+        return attrs
+
+
+class UserStatsSerializer(serializers.Serializer):
+    """Serializer for user statistics"""
+    pomodoro_sessions = serializers.IntegerField()
+    focus_buddy_sessions = serializers.IntegerField()
+    journals_created = serializers.IntegerField()
+    daily_streak = serializers.IntegerField()
+    total_tasks = serializers.IntegerField()
+    completed_tasks = serializers.IntegerField()
+    mentor_sessions = serializers.IntegerField(required=False)
 
 
 

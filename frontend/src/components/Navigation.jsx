@@ -33,7 +33,7 @@ const Navigation = () => {
               <Link to="/journal" className="text-gray-600 hover:text-gray-900">Journal</Link>
               <a href="#features" className="text-gray-600 hover:text-gray-900" onClick={e => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); }}>Features</a>
               <a href="#" className="text-gray-600 hover:text-gray-900" onClick={e => { e.preventDefault(); document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }); }}>How It Works</a>
-              <a href="#" className="text-gray-600 hover:text-gray-900">Pricing</a>
+              
             </nav>
 
             <div className="flex items-center space-x-3">

@@ -23,6 +23,8 @@ from django.db.models import Count
 from django.db import IntegrityError
 from rest_framework.exceptions import ValidationError
 from .combine import *
+from django.contrib.auth import update_session_auth_hash
+
 
 
 logger = logging.getLogger(__name__)
@@ -1856,3 +1858,185 @@ class LeaveMentorSessionView(APIView):
         session.save()
 
         return Response({"message": "You have left the session. Marked as completed."})
+
+
+class UserSettingsAPIView(APIView):
+    """API view to get and update user settings"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get user settings and profile information"""
+        user = request.user
+        serializer = UserSettingsSerializer(user)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    
+    def patch(self, request):
+        """Update user settings"""
+        user = request.user
+        serializer = UserSettingsSerializer(user, data=request.data, partial=True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'success': True,
+                'message': 'Profile updated successfully',
+                'data': serializer.data
+            })
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordChangeAPIView(APIView):
+    """API view to change user password"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Change user password"""
+        serializer = PasswordChangeSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            user = request.user
+            new_password = serializer.validated_data['new_password']
+            
+            # Set new password
+            user.set_password(new_password)
+            user.save()
+            
+            # Keep user logged in after password change
+            update_session_auth_hash(request, user)
+            
+            return Response({
+                'success': True,
+                'message': 'Password changed successfully'
+            })
+        
+        return Response({
+            'success': False,
+            'errors': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserStatsAPIView(APIView):
+    """API view to get user statistics"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get user activity statistics"""
+        user = request.user
+        
+        # Get pomodoro sessions count
+        pomodoro_count = PomodoroSession.objects.filter(
+            task__user=user,
+            session_type='focus',
+            is_completed=True
+        ).count()
+        
+        # Get focus buddy sessions count
+        focus_buddy_count = FocusBuddySession.objects.filter(
+            Q(creator_id=user) | Q(participants__user=user)
+        ).distinct().count()
+        
+        # Get journals count
+        journals_count = Journal.objects.filter(user=user).count()
+        
+        # Get tasks count
+        total_tasks = Task.objects.filter(user=user).count()
+        completed_tasks = Task.objects.filter(user=user, is_completed=True).count()
+        
+        # Calculate daily streak
+        daily_streak = self.calculate_daily_streak(user)
+        
+        # Get mentor sessions if user is a mentor
+        mentor_sessions = 0
+        if hasattr(user, 'mentor_profile'):
+            mentor_sessions = MentorSession.objects.filter(mentor=user.mentor_profile).count()
+        
+        stats_data = {
+            'pomodoro_sessions': pomodoro_count,
+            'focus_buddy_sessions': focus_buddy_count,
+            'journals_created': journals_count,
+            'daily_streak': daily_streak,
+            'total_tasks': total_tasks,
+            'completed_tasks': completed_tasks,
+            'mentor_sessions': mentor_sessions
+        }
+        
+        serializer = UserStatsSerializer(stats_data)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    
+    def calculate_daily_streak(self, user):
+        """Calculate user's daily streak based on activity"""
+        today = timezone.now().date()
+        current_date = today
+        streak = 0
+        
+        # Check each day going backwards
+        for i in range(365):  # Check up to 365 days
+            # Check if user had any activity on this date
+            has_activity = (
+                # Pomodoro sessions
+                PomodoroSession.objects.filter(
+                    task__user=user,
+                    start_time__date=current_date,
+                    is_completed=True
+                ).exists() or
+                # Journal entries
+                Journal.objects.filter(
+                    user=user,
+                    date=current_date
+                ).exists() or
+                # Focus buddy sessions
+                FocusBuddySession.objects.filter(
+                    creator_id=user,
+                    started_at__date=current_date
+                ).exists()
+            )
+            
+            if has_activity:
+                streak += 1
+                current_date -= timedelta(days=1)
+            else:
+                # If it's today and no activity, streak is 0
+                # If it's not today, break the streak
+                if current_date == today:
+                    streak = 0
+                break
+        
+        return streak
+
+
+class DeleteAccountAPIView(APIView):
+    """API view to delete user account"""
+    permission_classes = [IsAuthenticated]
+    
+    def delete(self, request):
+        """Delete user account"""
+        user = request.user
+        
+        # You might want to add additional verification here
+        # like requiring password confirmation
+        
+        # Perform any cleanup operations before deletion
+        # For example, anonymize or delete related data
+        
+        # Delete the user account
+        user.delete()
+        
+        return Response({
+            'success': True,
+            'message': 'Account deleted successfully'
+        })

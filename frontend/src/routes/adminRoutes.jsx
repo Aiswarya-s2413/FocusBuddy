@@ -6,6 +6,7 @@ import AdminMentorsApproval from "../pages/admin/AdminMentorsApproval";
 import AdminLayout from "../components/admin/AdminLayout";
 import AdminWallet from "../pages/admin/AdminWallet";
 import AdminFocusSessions from "../pages/admin/AdminFocusSessions";
+import Admin from "../pages/admin/Admin";
 
 const ProtectedAdminRoute = ({ children }) => {
   const { admin } = useSelector((state) => state.admin);
@@ -32,6 +33,14 @@ const AdminRoutes = () => {
           </ProtectedAdminRoute>
         }
       />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedAdminRoute>
+            <AdminLayout><Admin /></AdminLayout>
+          </ProtectedAdminRoute>
+        }
+        />
       <Route
         path="/mentors"
         element={

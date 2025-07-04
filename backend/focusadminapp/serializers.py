@@ -3,6 +3,9 @@ from userapp.models import *
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User as DjangoUser
 from django.contrib.auth import authenticate, get_user_model
+from django.db.models import Count, Sum, Avg
+from django.utils import timezone
+from datetime import datetime, timedelta
 
 User = get_user_model()
 
@@ -245,3 +248,82 @@ class FocusBuddySessionDetailSerializer(serializers.ModelSerializer):
             delta = timezone.now() - obj.started_at
             return int(delta.total_seconds() / 60)
         return obj.duration_minutes
+
+class AdminMetricsSerializer(serializers.Serializer):
+    """Serializer for key platform metrics"""
+    registered_users = serializers.IntegerField()
+    approved_mentors = serializers.IntegerField()
+    total_focus_sessions = serializers.IntegerField()
+    total_mentor_sessions = serializers.IntegerField()
+    pending_mentor_approvals = serializers.IntegerField()
+
+
+class UsageDataSerializer(serializers.Serializer):
+    """Serializer for usage graph data"""
+    period = serializers.CharField()  # 'daily' or 'weekly'
+    data = serializers.ListField(
+        child=serializers.DictField()
+    )
+
+
+class RecentActivitySerializer(serializers.Serializer):
+    """Serializer for recent activity feed"""
+    id = serializers.IntegerField()
+    user = serializers.CharField()
+    action = serializers.CharField()
+    time = serializers.CharField()
+    type = serializers.CharField()
+
+
+class AdminDashboardSerializer(serializers.Serializer):
+    """Combined serializer for all admin dashboard data"""
+    metrics = AdminMetricsSerializer()
+    usage_data = UsageDataSerializer()
+    recent_activities = RecentActivitySerializer(many=True)
+
+
+class UserActivitySerializer(serializers.ModelSerializer):
+    """Serializer for user activity details"""
+    total_focus_sessions = serializers.IntegerField(read_only=True)
+    total_mentor_sessions = serializers.IntegerField(read_only=True)
+    total_tasks = serializers.IntegerField(read_only=True)
+    total_journal_entries = serializers.IntegerField(read_only=True)
+    is_mentor = serializers.BooleanField()
+    last_login = serializers.DateTimeField(read_only=True)
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'name', 'email', 'date_joined', 'is_active',
+            'is_mentor', 'total_focus_sessions', 'total_mentor_sessions',
+            'total_tasks', 'total_journal_entries', 'last_login'
+        ]
+
+
+
+class PlatformStatsSerializer(serializers.Serializer):
+    """Serializer for detailed platform statistics"""
+    total_users = serializers.IntegerField()
+    active_users_today = serializers.IntegerField()
+    active_users_week = serializers.IntegerField()
+    active_users_month = serializers.IntegerField()
+    
+    total_mentors = serializers.IntegerField()
+    active_mentors = serializers.IntegerField()
+    pending_mentors = serializers.IntegerField()
+    
+    total_sessions = serializers.IntegerField()
+    completed_sessions = serializers.IntegerField()
+    cancelled_sessions = serializers.IntegerField()
+    
+    total_focus_sessions = serializers.IntegerField()
+    active_focus_sessions = serializers.IntegerField()
+    
+    total_tasks = serializers.IntegerField()
+    completed_tasks = serializers.IntegerField()
+    
+    total_journal_entries = serializers.IntegerField()
+    journal_entries_today = serializers.IntegerField()
+    
+    avg_session_rating = serializers.DecimalField(max_digits=3, decimal_places=2)
+    total_revenue = serializers.DecimalField(max_digits=10, decimal_places=2)

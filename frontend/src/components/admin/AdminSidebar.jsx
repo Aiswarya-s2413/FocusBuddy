@@ -38,7 +38,7 @@ import {
 } from "../../components/ui/dialog";
 
 const adminMenuItems = [
-  { title: "Dashboard", icon: LayoutDashboard, path: "/admin" },
+  { title: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
   { title: "Users", icon: Users, path: "/admin/users" },
   { title: "Mentor Requests", icon: CreditCard, path: "/admin/mentors" },
   { title: "Wallet", icon: BookOpen, path: "/admin/wallet" },

@@ -19,6 +19,9 @@ from django.http import JsonResponse
 import traceback
 import sys
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db.models import Count, Sum, Avg, Q
+from django.utils import timezone
+from datetime import datetime, timedelta
 
 
 logger = logging.getLogger(__name__)
@@ -1092,5 +1095,403 @@ class AdminEndFocusBuddySessionView(APIView):
             logger.error(f"Error ending focus buddy session: {str(e)}")
             return Response(
                 {'error': 'An error occurred while ending the session'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class AdminDashboardView(APIView):
+    """
+    Main admin dashboard view that provides all the data needed for the dashboard
+    """
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        try:
+            # Get key metrics
+            metrics = self.get_key_metrics()
+            
+            # Get usage data
+            usage_data = self.get_usage_data(request.GET.get('period', 'daily'))
+            
+            # Get recent activities
+            recent_activities = self.get_recent_activities()
+            
+            # Combine all data
+            dashboard_data = {
+                'metrics': metrics,
+                'usage_data': usage_data,
+                'recent_activities': recent_activities
+            }
+            
+            serializer = AdminDashboardSerializer(dashboard_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch dashboard data: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def get_key_metrics(self):
+        """Get key platform metrics"""
+        return {
+            'registered_users': User.objects.count(),
+            'approved_mentors': Mentor.objects.filter(is_approved=True).count(),
+            'total_focus_sessions': FocusBuddySession.objects.count(),
+            'total_mentor_sessions': MentorSession.objects.count(),
+            'pending_mentor_approvals': MentorApprovalRequest.objects.filter(status='pending').count()
+        }
+
+    def get_usage_data(self, period='daily'):
+        """Get usage statistics for charts"""
+        now = timezone.now()
+        
+        if period == 'daily':
+            # Get last 7 days
+            data = []
+            for i in range(6, -1, -1):
+                date = now - timedelta(days=i)
+                day_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end = day_start + timedelta(days=1)
+                
+                # Count sessions for this day
+                focus_sessions = FocusBuddySession.objects.filter(
+                    created_at__range=[day_start, day_end]
+                ).count()
+                
+                mentor_sessions = MentorSession.objects.filter(
+                    created_at__range=[day_start, day_end]
+                ).count()
+                
+                # Calculate total hours (approximate)
+                total_hours = (focus_sessions * 0.5) + (mentor_sessions * 1.0)  # Rough estimate
+                
+                data.append({
+                    'day': date.strftime('%a'),
+                    'sessions': focus_sessions + mentor_sessions,
+                    'hours': total_hours
+                })
+        
+        elif period == 'weekly':
+            # Get last 4 weeks
+            data = []
+            for i in range(3, -1, -1):
+                week_start = now - timedelta(weeks=i+1)
+                week_end = week_start + timedelta(weeks=1)
+                
+                focus_sessions = FocusBuddySession.objects.filter(
+                    created_at__range=[week_start, week_end]
+                ).count()
+                
+                mentor_sessions = MentorSession.objects.filter(
+                    created_at__range=[week_start, week_end]
+                ).count()
+                
+                total_hours = (focus_sessions * 0.5) + (mentor_sessions * 1.0)
+                
+                data.append({
+                    'week': f'Week {4-i}',
+                    'sessions': focus_sessions + mentor_sessions,
+                    'hours': total_hours
+                })
+        
+        return {
+            'period': period,
+            'data': data
+        }
+
+    def get_recent_activities(self):
+        """Get recent platform activities"""
+        activities = []
+        now = timezone.now()
+        
+        # Get recent registrations
+        recent_users = User.objects.filter(
+            date_joined__gte=now - timedelta(hours=24)
+        ).order_by('-date_joined')[:3]
+        
+        for user in recent_users:
+            time_ago = self.get_time_ago(user.date_joined)
+            activities.append({
+                'id': user.id,
+                'user': user.email,
+                'action': 'New registration',
+                'time': time_ago,
+                'type': 'signup'
+            })
+        
+        # Get recent mentor sessions
+        recent_sessions = MentorSession.objects.filter(
+            created_at__gte=now - timedelta(hours=24)
+        ).select_related('student', 'mentor__user').order_by('-created_at')[:3]
+        
+        for session in recent_sessions:
+            time_ago = self.get_time_ago(session.created_at)
+            activities.append({
+                'id': session.id,
+                'user': session.student.email,
+                'action': f'Booked session with {session.mentor.user.name}',
+                'time': time_ago,
+                'type': 'session'
+            })
+        
+        # Get recent focus sessions
+        recent_focus = FocusBuddySession.objects.filter(
+            created_at__gte=now - timedelta(hours=24)
+        ).select_related('creator_id').order_by('-created_at')[:3]
+        
+        for session in recent_focus:
+            time_ago = self.get_time_ago(session.created_at)
+            activities.append({
+                'id': session.id,
+                'user': session.creator_id.email,
+                'action': 'Started a focus session',
+                'time': time_ago,
+                'type': 'session'
+            })
+        
+        # Get recent journal entries
+        recent_journals = Journal.objects.filter(
+            created_at__gte=now - timedelta(hours=24)
+        ).select_related('user').order_by('-created_at')[:2]
+        
+        for journal in recent_journals:
+            time_ago = self.get_time_ago(journal.created_at)
+            activities.append({
+                'id': journal.id,
+                'user': journal.user.email,
+                'action': 'Created a journal entry',
+                'time': time_ago,
+                'type': 'journal'
+            })
+        
+        # Sort all activities by time and return top 7
+        activities.sort(key=lambda x: x['time'])
+        return activities[:7]
+
+    def get_time_ago(self, timestamp):
+        """Convert timestamp to human readable time ago"""
+        now = timezone.now()
+        diff = now - timestamp
+        
+        if diff.days > 0:
+            return f"{diff.days} day{'s' if diff.days > 1 else ''} ago"
+        elif diff.seconds > 3600:
+            hours = diff.seconds // 3600
+            return f"{hours} hour{'s' if hours > 1 else ''} ago"
+        elif diff.seconds > 60:
+            minutes = diff.seconds // 60
+            return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+        else:
+            return "Just now"
+
+
+class AdminUsageGraphView(APIView):
+    """
+    Separate view for usage graph data with more detailed control
+    """
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        period = request.GET.get('period', 'daily')
+        
+        try:
+            dashboard_view = AdminDashboardView()
+            usage_data = dashboard_view.get_usage_data(period)
+            
+            serializer = UsageDataSerializer(usage_data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch usage data: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AdminRecentActivityView(APIView):
+    """
+    Separate view for recent activity feed
+    """
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        try:
+            dashboard_view = AdminDashboardView()
+            activities = dashboard_view.get_recent_activities()
+            
+            serializer = RecentActivitySerializer(activities, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch recent activities: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AdminMetricsView(APIView):
+    """
+    View for key platform metrics
+    """
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        try:
+            dashboard_view = AdminDashboardView()
+            metrics = dashboard_view.get_key_metrics()
+            
+            serializer = AdminMetricsSerializer(metrics)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch metrics: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AdminUserListView(APIView):
+    """
+    View for detailed user list with activity data
+    """
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        try:
+            users = User.objects.annotate(
+                total_focus_sessions=Count('focus_participations'),
+                total_mentor_sessions=Count('student_sessions'),
+                total_tasks=Count('tasks'),
+                total_journal_entries=Count('journals')
+            ).order_by('-date_joined')
+            
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 20))
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            paginated_users = users[start:end]
+            
+            serializer = UserActivitySerializer(paginated_users, many=True)
+            
+            return Response({
+                'users': serializer.data,
+                'total_count': users.count(),
+                'page': page,
+                'page_size': page_size,
+                'total_pages': (users.count() + page_size - 1) // page_size
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch users: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+
+class AdminPlatformStatsView(APIView):
+    """
+    View for detailed platform statistics
+    """
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        try:
+            now = timezone.now()
+            today = now.date()
+            week_ago = now - timedelta(days=7)
+            month_ago = now - timedelta(days=30)
+            
+            # User statistics
+            total_users = User.objects.count()
+            active_users_today = User.objects.filter(
+                last_login__date=today
+            ).count()
+            active_users_week = User.objects.filter(
+                last_login__gte=week_ago
+            ).count()
+            active_users_month = User.objects.filter(
+                last_login__gte=month_ago
+            ).count()
+            
+            # Mentor statistics
+            total_mentors = Mentor.objects.count()
+            active_mentors = Mentor.objects.filter(
+                is_approved=True, is_available=True
+            ).count()
+            pending_mentors = Mentor.objects.filter(
+                approval_status='pending'
+            ).count()
+            
+            # Session statistics
+            total_sessions = MentorSession.objects.count()
+            completed_sessions = MentorSession.objects.filter(
+                status='completed'
+            ).count()
+            cancelled_sessions = MentorSession.objects.filter(
+                status='cancelled'
+            ).count()
+            
+            # Focus session statistics
+            total_focus_sessions = FocusBuddySession.objects.count()
+            active_focus_sessions = FocusBuddySession.objects.filter(
+                status='active'
+            ).count()
+            
+            # Task statistics
+            total_tasks = Task.objects.count()
+            completed_tasks = Task.objects.filter(is_completed=True).count()
+            
+            # Journal statistics
+            total_journal_entries = Journal.objects.count()
+            journal_entries_today = Journal.objects.filter(
+                created_at__date=today
+            ).count()
+            
+            # Rating statistics
+            avg_session_rating = MentorSession.objects.filter(
+                student_rating__isnull=False
+            ).aggregate(Avg('student_rating'))['student_rating__avg'] or 0
+            
+            # Revenue statistics
+            total_revenue = SessionPayment.objects.filter(
+                status='completed'
+            ).aggregate(Sum('amount'))['amount__sum'] or 0
+            
+            stats = {
+                'total_users': total_users,
+                'active_users_today': active_users_today,
+                'active_users_week': active_users_week,
+                'active_users_month': active_users_month,
+                'total_mentors': total_mentors,
+                'active_mentors': active_mentors,
+                'pending_mentors': pending_mentors,
+                'total_sessions': total_sessions,
+                'completed_sessions': completed_sessions,
+                'cancelled_sessions': cancelled_sessions,
+                'total_focus_sessions': total_focus_sessions,
+                'active_focus_sessions': active_focus_sessions,
+                'total_tasks': total_tasks,
+                'completed_tasks': completed_tasks,
+                'total_journal_entries': total_journal_entries,
+                'journal_entries_today': journal_entries_today,
+                'avg_session_rating': round(avg_session_rating, 2),
+                'total_revenue': total_revenue
+            }
+            
+            serializer = PlatformStatsSerializer(stats)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch platform stats: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

@@ -22,5 +22,11 @@ urlpatterns = [
     path('sessions/stats/', AdminFocusBuddySessionStatsView.as_view(), name='admin-sessions-stats'),
     path('sessions/<int:session_id>/', AdminFocusBuddySessionDetailView.as_view(), name='admin-session-detail'),
     path('sessions/<int:session_id>/end/', AdminEndFocusBuddySessionView.as_view(), name='admin-session-end'),
+    path('dashboard/', AdminDashboardView.as_view(), name='admin_dashboard'),
+    path('metrics/', AdminMetricsView.as_view(), name='admin_metrics'),
+    path('usage-graph/', AdminUsageGraphView.as_view(), name='admin_usage_graph'),
+    path('recent-activity/', AdminRecentActivityView.as_view(), name='admin_recent_activity'),
+    path('platform-stats/', AdminPlatformStatsView.as_view(), name='admin_platform_stats'),
+    path('users-stats/', AdminUserListView.as_view(), name='admin_users'),
     
 ]
