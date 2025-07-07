@@ -189,20 +189,38 @@ class TaskSerializer(serializers.ModelSerializer):
                  'created_at', 'updated_at']
         read_only_fields = ['estimated_pomodoros', 'completed_pomodoros', 
                            'is_completed', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'estimated_minutes': {'required': False, 'allow_null': True}
+        }
+
+    def validate(self, data):
+        # If estimated_minutes is not provided, set to None
+        if 'estimated_minutes' not in data:
+            data['estimated_minutes'] = None
+        return data
 
 class PomodoroSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PomodoroSession
         fields = ['id', 'task', 'session_type', 'start_time', 'end_time',
                  'duration_minutes', 'is_completed']
-        read_only_fields = ['end_time', 'is_completed']
+        read_only_fields = [ 'is_completed']
+
+    def create(self, validated_data):
+        # Always calculate duration_minutes from start_time and end_time
+        start_time = validated_data.get('start_time')
+        end_time = validated_data.get('end_time')
+        if start_time and end_time:
+            duration = (end_time - start_time).total_seconds() / 60
+            validated_data['duration_minutes'] = max(1, int(round(duration)))
+        else:
+            validated_data['duration_minutes'] = 1
+        return super().create(validated_data)
 
 class PomodoroSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = PomodoroSettings
-        fields = ['id', 'focus_duration', 'short_break_duration',
-                 'long_break_duration', 'sessions_before_long_break',
-                 'auto_start_next_session', 'play_sound_when_session_ends']
+        fields = ['id', 'focus_duration', 'auto_start_next_session', 'play_sound_when_session_ends']
 
 class JournalSerializer(serializers.ModelSerializer):
     class Meta:

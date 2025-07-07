@@ -27,10 +27,12 @@ urlpatterns = [
     
     # Pomodoro Session URLs
     path('sessions/', PomodoroSessionListCreateAPIView.as_view(), name='session-list-create'),
+    path('sessions/<int:pk>/', PomodoroSessionDetailAPIView.as_view(), name='session-detail'),
+    
     path('sessions/create-order/', CreateOrderAPIView.as_view(), name='create-order'),
     path('sessions/confirm-booking/', ConfirmBookingAPIView.as_view(), name='confirm-booking'),
-    path('sessions/<int:pk>/', PomodoroSessionDetailAPIView.as_view(), name='session-detail'),
     path('sessions/<int:pk>/complete/', CompleteSessionAPIView.as_view(), name='session-complete'),
+    
    
     
     # Settings

@@ -181,44 +181,13 @@ const PomodoroHistoryTable = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg border shadow-sm">
-          <div className="flex items-center">
-            <Coffee className="h-5 w-5 text-red-600 mr-2" />
-            <div>
-              <p className="text-sm text-slate-600">Focus Sessions</p>
-              <p className="text-2xl font-bold">{meta.focus_sessions}</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg border shadow-sm">
-          <div className="flex items-center">
-            <div className="h-5 w-5 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mr-2"></div>
-            <div>
-              <p className="text-sm text-slate-600">Completion Rate</p>
-              <p className="text-2xl font-bold">{meta.completion_rate}%</p>
-            </div>
-          </div>
-        </div>
+        
       </div>
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-lg border shadow-sm">
         <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-slate-600" />
-            <span className="text-sm font-medium text-slate-700">Filters:</span>
-          </div>
           
-          <select 
-            value={filters.session_type}
-            onChange={(e) => handleFilterChange('session_type', e.target.value)}
-            className="px-3 py-1 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All Types</option>
-            <option value="focus">Focus</option>
-            <option value="short_break">Short Break</option>
-            <option value="long_break">Long Break</option>
-          </select>
           
           {/* <select 
             value={filters.is_completed}

@@ -9,7 +9,6 @@ export const TaskForm = ({ onTaskSubmit }) => {
   const { toast } = useToast();
   const [taskTitle, setTaskTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [estimatedTime, setEstimatedTime] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -23,23 +22,11 @@ export const TaskForm = ({ onTaskSubmit }) => {
       return;
     }
 
-    const timeInMinutes = parseInt(estimatedTime, 10);
-    if (isNaN(timeInMinutes) || timeInMinutes <= 0) {
-      toast({
-        title: "Invalid time",
-        description: "Please enter a valid positive number for the estimated time.",
-        variant: "destructive"
-      });
-      return;
-    }
-
     // Now match the backend expected format with snake_case keys
     const newTask = {
       title: taskTitle,
       description: description, // Added description field
-      estimated_minutes: timeInMinutes, // Changed to match backend field name
-      // No need to send estimated_pomodoros, backend treats it as read-only
-      // No need to send completed_pomodoros, backend treats it as read-only
+      
     };
 
     onTaskSubmit(newTask);
@@ -47,11 +34,10 @@ export const TaskForm = ({ onTaskSubmit }) => {
     // Reset form
     setTaskTitle('');
     setDescription('');
-    setEstimatedTime('');
 
     toast({
       title: "Task added",
-      description: `${taskTitle} added with an estimated time of ${timeInMinutes} minutes.`
+      description: `${taskTitle} added.`
     });
   };
 
@@ -78,18 +64,6 @@ export const TaskForm = ({ onTaskSubmit }) => {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="estimated-time">Estimated Time (minutes)</Label>
-          <Input
-            id="estimated-time"
-            type="number"
-            placeholder="How long will this take?"
-            value={estimatedTime}
-            onChange={(e) => setEstimatedTime(e.target.value)}
-            min="1"
           />
         </div>
 

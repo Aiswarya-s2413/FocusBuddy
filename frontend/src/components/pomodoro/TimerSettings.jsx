@@ -8,18 +8,12 @@ import { useToast } from "../ui/use-toast";
 export function TimerSettings({ onSaveSettings, defaultSettings }) {
   const { toast } = useToast();
   const [focusDuration, setFocusDuration] = useState(defaultSettings.focusDuration);
-  const [shortBreakDuration, setShortBreakDuration] = useState(defaultSettings.shortBreakDuration);
-  const [longBreakDuration, setLongBreakDuration] = useState(defaultSettings.longBreakDuration);
-  const [sessionsBeforeLongBreak, setSessionsBeforeLongBreak] = useState(defaultSettings.sessionsBeforeLongBreak);
   const [autoStartNextSession, setAutoStartNextSession] = useState(defaultSettings.autoStartNextSession);
   const [playSoundWhenSessionEnds, setPlaySoundWhenSessionEnds] = useState(defaultSettings.playSoundWhenSessionEnds);
 
   const handleSaveSettings = () => {
     onSaveSettings({
       focusDuration,
-      shortBreakDuration,
-      longBreakDuration,
-      sessionsBeforeLongBreak,
       autoStartNextSession,
       playSoundWhenSessionEnds
     });
@@ -45,46 +39,6 @@ export function TimerSettings({ onSaveSettings, defaultSettings }) {
             max={60} 
             step={1}
             onValueChange={(value) => setFocusDuration(value[0])}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Short Break Duration (minutes)</Label>
-            <span className="text-sm font-medium text-gray-600">{shortBreakDuration}</span>
-          </div>
-          <Slider 
-            value={[shortBreakDuration]} 
-            max={15} 
-            step={1}
-            onValueChange={(value) => setShortBreakDuration(value[0])}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Long Break Duration (minutes)</Label>
-            <span className="text-sm font-medium text-gray-600">{longBreakDuration}</span>
-          </div>
-          <Slider 
-            value={[longBreakDuration]} 
-            max={30} 
-            step={1}
-            onValueChange={(value) => setLongBreakDuration(value[0])}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Sessions before Long Break</Label>
-            <span className="text-sm font-medium text-gray-600">{sessionsBeforeLongBreak}</span>
-          </div>
-          <Slider 
-            value={[sessionsBeforeLongBreak]} 
-            max={6} 
-            min={1}
-            step={1}
-            onValueChange={(value) => setSessionsBeforeLongBreak(value[0])}
           />
         </div>
 

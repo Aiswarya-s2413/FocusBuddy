@@ -18,7 +18,7 @@ class Task(models.Model):
     user = models.ForeignKey('User', on_delete=models.CASCADE, related_name='tasks')
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
-    estimated_minutes = models.IntegerField()
+    estimated_minutes = models.IntegerField(blank=True, null=True)
     estimated_pomodoros = models.IntegerField()
     completed_pomodoros = models.IntegerField(default=0)
     is_completed = models.BooleanField(default=False)
@@ -31,7 +31,10 @@ class Task(models.Model):
     def save(self, *args, **kwargs):
         # Calculate estimated pomodoros (25 minutes per pomodoro)
         if not self.estimated_pomodoros:
-            self.estimated_pomodoros = (self.estimated_minutes + 24) // 25  # Round up
+            if self.estimated_minutes:
+                self.estimated_pomodoros = (self.estimated_minutes + 24) // 25  # Round up
+            else:
+                self.estimated_pomodoros = 1  # Default to 1 pomodoro if no estimate
         super().save(*args, **kwargs)
 
 class PomodoroSession(models.Model):
@@ -54,9 +57,6 @@ class PomodoroSession(models.Model):
 class PomodoroSettings(models.Model):
     user = models.OneToOneField('User', on_delete=models.CASCADE, related_name='pomodoro_settings')
     focus_duration = models.IntegerField(default=25)  # in minutes
-    short_break_duration = models.IntegerField(default=5)  # in minutes
-    long_break_duration = models.IntegerField(default=15)  # in minutes
-    sessions_before_long_break = models.IntegerField(default=4)
     auto_start_next_session = models.BooleanField(default=False)
     play_sound_when_session_ends = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -9,8 +9,6 @@ export const TimerControls = ({
   onPause,
   onReset,
   onStop,
-  sessionType,
-  onSessionTypeChange,
   currentSessionId,
 }) => {
   const handleStop = async () => {
@@ -36,30 +34,6 @@ export const TimerControls = ({
 
   return (
     <div className="space-y-6 mt-8">
-      <div className="flex justify-center space-x-2">
-        <Button
-          variant="outline"
-          className={`${sessionType === 'focus' ? 'bg-[#F8F6FB] border-[#9b87f5] text-[#9b87f5]' : 'border-gray-200'}`}
-          onClick={() => onSessionTypeChange('focus')}
-        >
-          Focus
-        </Button>
-        <Button
-          variant="outline"
-          className={`${sessionType === 'shortBreak' ? 'bg-[#F8F6FB] border-[#9b87f5] text-[#9b87f5]' : 'border-gray-200'}`}
-          onClick={() => onSessionTypeChange('shortBreak')}
-        >
-          Short Break
-        </Button>
-        <Button
-          variant="outline"
-          className={`${sessionType === 'longBreak' ? 'bg-[#F8F6FB] border-[#9b87f5] text-[#9b87f5]' : 'border-gray-200'}`}
-          onClick={() => onSessionTypeChange('longBreak')}
-        >
-          Long Break
-        </Button>
-      </div>
-
       <div className="flex justify-center space-x-4">
         <Button
           variant="outline"
