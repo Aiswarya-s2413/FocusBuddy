@@ -1,100 +1,135 @@
+# userapp/tasks.py
 from celery import shared_task
 from django.core.mail import send_mail
-from django.conf import settings
 from django.utils import timezone
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
+import pytz
 from .models import MentorSession
 
 @shared_task
 def send_session_reminders():
     """
-    Check for sessions starting in 15 minutes and send reminder emails
+    Send email reminders 15 minutes before scheduled sessions
+    Handles IST to UTC conversion
     """
-    now = timezone.now()
-    reminder_time = now + timedelta(minutes=15)
+    # Get IST timezone
+    ist = pytz.timezone('Asia/Kolkata')
+    utc = pytz.UTC
     
-    # Find sessions that start in approximately 15 minutes
-    # Using a 2-minute window to account for the task running every minute
-    start_window = reminder_time - timedelta(minutes=1)
-    end_window = reminder_time + timedelta(minutes=1)
+    # Get current time in IST
+    now_ist = timezone.now().astimezone(ist)
     
-    upcoming_sessions = MentorSession.objects.filter(
-        status='confirmed',
-        scheduled_date=reminder_time.date(),
-        scheduled_time__range=(start_window.time(), end_window.time())
-    ).select_related('student', 'mentor__user')
+    # Calculate the time window for reminders (15 minutes from now in IST)
+    reminder_time_ist = now_ist + timedelta(minutes=15)
     
-    for session in upcoming_sessions:
-        # Check if reminder already sent (to avoid duplicate emails)
-        if not hasattr(session, 'notification_sent') or not session.notification_sent:
-            send_session_reminder_email.delay(session.id)
+    # Convert to UTC for database query
+    reminder_time_utc = reminder_time_ist.astimezone(utc)
+    
+    # Create a time range (e.g., within 1 minute window)
+    start_time = reminder_time_utc - timedelta(minutes=1)
+    end_time = reminder_time_utc + timedelta(minutes=1)
+    
+    # Query sessions that need reminders
+    sessions = MentorSession.objects.filter(
+        scheduled_time__range=[start_time, end_time],
+        reminder_sent=False 
+    )
+    
+    for session in sessions:
+        try:
+            # Convert session time to IST for display
+            session_time_ist = session.scheduled_time.astimezone(ist)
+            
+            # Send email
+            send_mail(
+                subject=f'Session Reminder - Starting in 15 minutes',
+                message=f'''
+                Hi {session.user.first_name},
+                
+                This is a reminder that your session is starting in 15 minutes.
+                
+                Session Time: {session_time_ist.strftime('%I:%M %p IST on %B %d, %Y')}
+                
+                Please be ready to join your session.
+                
+                Best regards,
+                Focus Buddy Team
+                ''',
+                from_email='noreply@focusbuddy.com',
+                recipient_list=[session.user.email],
+                fail_silently=False,
+            )
+            
+            # Mark reminder as sent
+            session.reminder_sent = True
+            session.save()
+            
+            print(f"Reminder sent for session at {session_time_ist}")
+            
+        except Exception as e:
+            print(f"Failed to send reminder for session {session.id}: {e}")
+    
+    return f"Processed {sessions.count()} sessions"
 
 @shared_task
-def send_session_reminder_email(session_id):
+def schedule_session_reminder(session_id, scheduled_time_ist_str):
     """
-    Send reminder email for a specific session
+    Alternative: Schedule individual reminders when a session is created
+    """
+    from django.utils.dateparse import parse_datetime
+    
+    ist = pytz.timezone('Asia/Kolkata')
+    
+    # Parse the IST time string
+    scheduled_time_ist = parse_datetime(scheduled_time_ist_str)
+    if scheduled_time_ist.tzinfo is None:
+        scheduled_time_ist = ist.localize(scheduled_time_ist)
+    
+    # Calculate reminder time (15 minutes before)
+    reminder_time_ist = scheduled_time_ist - timedelta(minutes=15)
+    
+    # Convert to UTC for Celery
+    reminder_time_utc = reminder_time_ist.astimezone(pytz.UTC)
+    
+    # Schedule the email task
+    send_individual_reminder.apply_async(
+        args=[session_id],
+        eta=reminder_time_utc
+    )
+
+@shared_task
+def send_individual_reminder(session_id):
+    """
+    Send reminder for a specific session
     """
     try:
-        session = MentorSession.objects.select_related(
-            'student', 'mentor__user'
-        ).get(id=session_id)
+        session = YourSessionModel.objects.get(id=session_id)
+        ist = pytz.timezone('Asia/Kolkata')
         
-        # Send email to student
+        # Convert session time to IST for display
+        session_time_ist = session.scheduled_time.astimezone(ist)
+        
         send_mail(
-            subject=f'Session Reminder - Starting in 15 minutes',
+            subject=f'Session Starting Soon - 15 minutes reminder',
             message=f'''
-            Hi {session.student.name},
+            Hi {session.user.first_name},
             
-            This is a reminder that your mentoring session with {session.mentor.user.name} 
-            is starting in 15 minutes.
+            Your session is starting in 15 minutes!
             
-            Session Details:
-            - Date: {session.scheduled_date}
-            - Time: {session.scheduled_time}
-            - Duration: {session.duration_minutes} minutes
-            - Mode: {session.get_session_mode_display()}
+            Session Time: {session_time_ist.strftime('%I:%M %p IST on %B %d, %Y')}
             
-            Please join on time. Looking forward to your session!
+            Please be ready to join.
             
             Best regards,
-            Your Mentoring Platform Team
+            Focus Buddy Team
             ''',
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[session.student.email],
-            fail_silently=False,
+            from_email='noreply@focusbuddy.com',
+            recipient_list=[session.user.email],
         )
         
-        # Send email to mentor
-        send_mail(
-            subject=f'Session Reminder - Starting in 15 minutes',
-            message=f'''
-            Hi {session.mentor.user.name},
-            
-            This is a reminder that your mentoring session with {session.student.name} 
-            is starting in 15 minutes.
-            
-            Session Details:
-            - Date: {session.scheduled_date}
-            - Time: {session.scheduled_time}
-            - Duration: {session.duration_minutes} minutes
-            - Mode: {session.get_session_mode_display()}
-            
-            Please join on time. Your student is counting on you!
-            
-            Best regards,
-            Your Mentoring Platform Team
-            ''',
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[session.mentor.user.email],
-            fail_silently=False,
-        )
+        return f"Reminder sent for session {session_id}"
         
-        print(f"Reminder emails sent for session {session_id}")
-        return f"Reminder emails sent successfully for session {session_id}"
-        
-    except MentorSession.DoesNotExist:
-        print(f"Session {session_id} not found")
+    except YourSessionModel.DoesNotExist:
         return f"Session {session_id} not found"
     except Exception as e:
-        print(f"Error sending reminder for session {session_id}: {str(e)}")
-        return f"Error: {str(e)}"
+        return f"Error sending reminder: {e}"

@@ -2026,13 +2026,7 @@ class DeleteAccountAPIView(APIView):
     def delete(self, request):
         """Delete user account"""
         user = request.user
-        
-        # You might want to add additional verification here
-        # like requiring password confirmation
-        
-        # Perform any cleanup operations before deletion
-        # For example, anonymize or delete related data
-        
+                
         # Delete the user account
         user.delete()
         

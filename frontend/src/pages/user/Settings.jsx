@@ -28,6 +28,7 @@ import {
   Loader2,
   Eye,
   EyeOff,
+  AlertTriangle,
 } from "lucide-react";
 
 const Settings = () => {
@@ -62,6 +63,11 @@ const Settings = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Delete account modal states
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   // Stats state
   const [userStats, setUserStats] = useState({
@@ -187,13 +193,16 @@ const Settings = () => {
   };
 
   const handleDeleteAccount = async () => {
-    if (!window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+    if (deleteConfirmText.toLowerCase() !== 'delete my account') {
+      toast.error('Please type "DELETE MY ACCOUNT" to confirm');
       return;
     }
 
+    setIsDeletingAccount(true);
     try {
       await userAxios.delete('user-settings/delete-account/');
       toast.success("Account deleted successfully!");
+      setIsDeleteModalOpen(false);
       // Redirect to home page after a brief delay
       setTimeout(() => {
         window.location.href = '/';
@@ -201,6 +210,8 @@ const Settings = () => {
     } catch (error) {
       console.error('Error deleting account:', error);
       toast.error('Failed to delete account');
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -570,16 +581,93 @@ const Settings = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">
-              
-
-              <Button
-                variant="destructive"
-                className="flex-1 sm:flex-none bg-red-500 hover:bg-red-600 text-white transition-all duration-200 rounded-xl py-3 px-6 shadow-lg"
-                onClick={handleDeleteAccount}
+              {/* Delete Account Modal */}
+              <Dialog
+                open={isDeleteModalOpen}
+                onOpenChange={(open) => {
+                  setIsDeleteModalOpen(open);
+                  if (!open) {
+                    // Reset states when modal closes
+                    setDeleteConfirmText("");
+                  }
+                }}
               >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Account
-              </Button>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    className="flex-1 sm:flex-none bg-red-500 hover:bg-red-600 text-white transition-all duration-200 rounded-xl py-3 px-6 shadow-lg"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Account
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px] bg-white rounded-2xl">
+                  <DialogHeader>
+                    <DialogTitle className="text-xl font-bold text-red-600 flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5" />
+                      Delete Account
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4 space-y-4">
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                      <p className="text-red-800 font-semibold mb-2">
+                        ⚠️ Warning: This action cannot be undone!
+                      </p>
+                      <p className="text-red-700 text-sm">
+                        Deleting your account will permanently remove all your data, including:
+                      </p>
+                      <ul className="text-red-700 text-sm mt-2 space-y-1">
+                        <li>• All your journal entries</li>
+                        <li>• Pomodoro session history</li>
+                        <li>• Focus buddy sessions</li>
+                        <li>• Daily streak progress</li>
+                        <li>• Account settings and preferences</li>
+                      </ul>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <Label className="text-sm font-semibold text-gray-700">
+                        To confirm deletion, type "DELETE MY ACCOUNT" below:
+                      </Label>
+                      <Input
+                        value={deleteConfirmText}
+                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                        placeholder="DELETE MY ACCOUNT"
+                        disabled={isDeletingAccount}
+                        className="border-gray-300 focus:border-red-500 focus:ring-red-500/20 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-3 pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsDeleteModalOpen(false)}
+                      disabled={isDeletingAccount}
+                      className="border-gray-300 text-gray-600 hover:bg-gray-50 rounded-xl"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleDeleteAccount}
+                      disabled={isDeletingAccount || deleteConfirmText.toLowerCase() !== 'delete my account'}
+                      className="bg-red-500 hover:bg-red-600 text-white rounded-xl"
+                    >
+                      {isDeletingAccount ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Account
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </Card>

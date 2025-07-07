@@ -26,10 +26,10 @@ const AdminLogin = () => {
     dispatch(clearMessage());
   }, [dispatch]);
 
-  // If admin is already authenticated, redirect to /admin/users
+  // If admin is already authenticated, redirect to /admin/dashboard
   useEffect(() => {
     if (isAuthenticated && admin) {
-      navigate('/admin/dashboard');
+      navigate('/admin/dashboard', { replace: true });
     }
   }, [isAuthenticated, admin, navigate]);
 
@@ -42,10 +42,40 @@ const AdminLogin = () => {
     // Dispatch the admin login action
     const result = await dispatch(adminLogin({ email, password }));
     
-    // If login is successful, navigate to users page
+    // If login is successful, navigate to dashboard
     if (!result.error) {
       navigate("/admin/dashboard", { replace: true });
     }
+  };
+
+  // Function to get the proper error message
+  const getErrorMessage = () => {
+    if (!error) return null;
+    
+    // If error is a string, return it directly
+    if (typeof error === 'string') {
+      return error;
+    }
+    
+    // If error is an object, try to extract the message
+    if (typeof error === 'object') {
+      // Check for various possible error message properties
+      if (error.message) return error.message;
+      if (error.error) return error.error;
+      if (error.detail) return error.detail;
+      if (error.non_field_errors && Array.isArray(error.non_field_errors)) {
+        return error.non_field_errors[0];
+      }
+      if (error.email && Array.isArray(error.email)) {
+        return error.email[0];
+      }
+      if (error.password && Array.isArray(error.password)) {
+        return error.password[0];
+      }
+    }
+    
+    // Fallback to generic error message
+    return "An error occurred. Please try again.";
   };
 
   return (
@@ -100,6 +130,25 @@ const AdminLogin = () => {
                 </button>
               </div>
             </div>
+            
+            {/* Display error message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                <div className="text-red-600 text-sm text-center font-medium">
+                  {getErrorMessage()}
+                </div>
+              </div>
+            )}
+            
+            {/* Display success message */}
+            {message && !error && (
+              <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                <div className="text-green-600 text-sm text-center font-medium">
+                  {message}
+                </div>
+              </div>
+            )}
+            
             <Button
               type="submit"
               className="w-full bg-purple-600 hover:bg-purple-700"
@@ -117,16 +166,6 @@ const AdminLogin = () => {
                 "Log In"
               )}
             </Button>
-            {error && (
-              <div className="text-red-500 text-sm mt-2 text-center">
-                {typeof error === 'string' ? error : error.message || "An error occurred. Please try again."}
-              </div>
-            )}
-            {message && !error && (
-              <div className="text-green-500 text-sm mt-2 text-center">
-                {message}
-              </div>
-            )}
           </form>
         </CardContent>
       </Card>
