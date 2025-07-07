@@ -89,4 +89,16 @@ urlpatterns = [
     path('user-settings/stats/', UserStatsAPIView.as_view(), name='user-stats'),
     path('user-settings/delete-account/', DeleteAccountAPIView.as_view(), name='delete-account'),
 
+    path('focus-buddy/history/', FocusBuddyHistoryListView.as_view(), name='focus-buddy-history'),
+    path('focus-buddy/created/', UserCreatedSessionsView.as_view(), name='user-created-sessions'),
+    path('focus-buddy/participated/', UserParticipatedSessionsView.as_view(), name='user-participated-sessions'),
+    path('focus-buddy/sessions/<int:pk>/', FocusBuddySessionDetailView.as_view(), name='focus-buddy-session-detail'),
+    path('focus-buddy/stats/', FocusBuddyStatsView.as_view(), name='focus-buddy-stats'),
+
+    path('pomodoro-history/', PomodoroHistoryListView.as_view(), name='pomodoro-history-list'),
+    path('pomodoro-history/<int:pk>/', PomodoroSessionDetailView.as_view(), name='pomodoro-session-detail'),
+    path('pomodoro-history/<int:pk>/update/', PomodoroSessionUpdateView.as_view(), name='pomodoro-session-update'),
+    path('pomodoro-history/<int:pk>/delete/', PomodoroSessionDeleteView.as_view(), name='pomodoro-session-delete'),
+    
+
 ]

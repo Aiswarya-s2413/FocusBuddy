@@ -2034,3 +2034,426 @@ class DeleteAccountAPIView(APIView):
             'success': True,
             'message': 'Account deleted successfully'
         })
+
+class FocusBuddyPagination(PageNumberPagination):
+    """Custom pagination for focus buddy sessions"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class FocusBuddyHistoryListView(APIView):
+    """
+    API view to retrieve focus buddy session history for the authenticated user.
+    Shows sessions the user created or participated in.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        # Get sessions where user was creator or participant
+        queryset = FocusBuddySession.objects.filter(
+            Q(creator_id=user) |  # Sessions created by user
+            Q(participants__user=user)  # Sessions user participated in
+        ).distinct().select_related('creator_id').prefetch_related('participants')
+        
+        # Optional filtering by status
+        status_param = request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        
+        # Optional filtering by session type
+        session_type = request.query_params.get('session_type', None)
+        if session_type:
+            queryset = queryset.filter(session_type=session_type)
+        
+        # Optional date range filtering
+        start_date = request.query_params.get('start_date', None)
+        end_date = request.query_params.get('end_date', None)
+        if start_date:
+            queryset = queryset.filter(created_at__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(created_at__lte=end_date)
+        
+        queryset = queryset.order_by('-created_at')
+        
+        # Apply pagination
+        paginator = FocusBuddyPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        
+        if page is not None:
+            serializer = FocusBuddySessionHistorySerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = FocusBuddySessionHistorySerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UserCreatedSessionsView(APIView):
+    """
+    API view to retrieve sessions created by the authenticated user only.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        queryset = FocusBuddySession.objects.filter(
+            creator_id=user
+        ).select_related('creator_id').prefetch_related('participants').order_by('-created_at')
+        
+        # Optional filtering by status
+        status_param = request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        
+        # Optional filtering by session type
+        session_type = request.query_params.get('session_type', None)
+        if session_type:
+            queryset = queryset.filter(session_type=session_type)
+        
+        # Apply pagination
+        paginator = FocusBuddyPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        
+        if page is not None:
+            serializer = FocusBuddySessionHistorySerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = FocusBuddySessionHistorySerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UserParticipatedSessionsView(APIView):
+    """
+    API view to retrieve sessions the authenticated user participated in (but didn't create).
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        queryset = FocusBuddySession.objects.filter(
+            participants__user=user
+        ).exclude(
+            creator_id=user
+        ).distinct().select_related('creator_id').prefetch_related('participants').order_by('-created_at')
+        
+        # Optional filtering by status
+        status_param = request.query_params.get('status', None)
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        
+        # Optional filtering by session type
+        session_type = request.query_params.get('session_type', None)
+        if session_type:
+            queryset = queryset.filter(session_type=session_type)
+        
+        # Apply pagination
+        paginator = FocusBuddyPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        
+        if page is not None:
+            serializer = FocusBuddySessionHistorySerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = FocusBuddySessionHistorySerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class FocusBuddySessionDetailView(APIView):
+    """
+    API view to retrieve details of a specific focus buddy session.
+    Only allows access to sessions the user created or participated in.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        user = request.user
+        
+        try:
+            session = FocusBuddySession.objects.filter(
+                Q(creator_id=user) | Q(participants__user=user)
+            ).distinct().select_related('creator_id').prefetch_related('participants').get(pk=pk)
+        except FocusBuddySession.DoesNotExist:
+            return Response(
+                {"error": "Session not found or you don't have permission to view it"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = FocusBuddySessionHistorySerializer(session)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class FocusBuddyStatsView(APIView):
+    """
+    API view to get user's focus buddy statistics
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        
+        # Get user's session statistics
+        created_sessions = FocusBuddySession.objects.filter(creator_id=user)
+        participated_sessions = FocusBuddySession.objects.filter(participants__user=user).distinct()
+        
+        # Calculate total focus minutes
+        user_participations = FocusBuddyParticipant.objects.filter(user=user)
+        total_focus_minutes = sum([
+            p.participation_duration_minutes for p in user_participations
+        ])
+        
+        stats = {
+            'sessions_created': created_sessions.count(),
+            'sessions_participated': participated_sessions.count(),
+            'sessions_completed': participated_sessions.filter(status='completed').count(),
+            'total_focus_minutes': total_focus_minutes,
+            'sessions_by_type': {
+                'study': participated_sessions.filter(session_type='study').count(),
+                'work': participated_sessions.filter(session_type='work').count(),
+                'reading': participated_sessions.filter(session_type='reading').count(),
+            },
+            'sessions_by_status': {
+                'completed': participated_sessions.filter(status='completed').count(),
+                'cancelled': participated_sessions.filter(status='cancelled').count(),
+                'expired': participated_sessions.filter(status='expired').count(),
+            }
+        }
+        
+        return Response(stats, status=status.HTTP_200_OK)
+
+class PomodoroHistoryPagination(PageNumberPagination):
+    """Custom pagination for pomodoro history"""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class PomodoroHistoryListView(APIView):
+    """
+    API view to retrieve paginated pomodoro session history for authenticated user
+    """
+    permission_classes = [IsAuthenticated]
+    pagination_class = PomodoroHistoryPagination
+
+    def get_queryset(self, request):
+        """
+        Filter sessions by authenticated user and order by most recent first
+        """
+        user = request.user
+        queryset = PomodoroSession.objects.filter(
+            task__user=user
+        ).select_related('task').order_by('-start_time')
+        
+        # Optional filtering by session type
+        session_type = request.query_params.get('session_type', None)
+        if session_type:
+            queryset = queryset.filter(session_type=session_type)
+        
+        # Optional filtering by completion status
+        is_completed = request.query_params.get('is_completed', None)
+        if is_completed is not None:
+            is_completed_bool = is_completed.lower() == 'true'
+            queryset = queryset.filter(is_completed=is_completed_bool)
+        
+        # Optional filtering by task
+        task_id = request.query_params.get('task_id', None)
+        if task_id:
+            queryset = queryset.filter(task_id=task_id)
+        
+        # Optional date range filtering
+        start_date = request.query_params.get('start_date', None)
+        end_date = request.query_params.get('end_date', None)
+        
+        if start_date:
+            queryset = queryset.filter(start_time__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(start_time__date__lte=end_date)
+        
+        return queryset
+
+    def get(self, request, *args, **kwargs):
+        """
+        Handle GET request to retrieve paginated pomodoro session history
+        """
+        try:
+            queryset = self.get_queryset(request)
+            
+            # Get statistics for the current user
+            user_sessions = PomodoroSession.objects.filter(task__user=request.user)
+            total_sessions = user_sessions.count()
+            completed_sessions = user_sessions.filter(is_completed=True).count()
+            focus_sessions = user_sessions.filter(session_type='focus').count()
+            
+            # Initialize paginator
+            paginator = self.pagination_class()
+            page = paginator.paginate_queryset(queryset, request)
+            
+            if page is not None:
+                serializer = PomodoroSessionHistorySerializer(page, many=True)
+                response = paginator.get_paginated_response(serializer.data)
+                
+                # Add metadata to response
+                response.data['meta'] = {
+                    'total_sessions': total_sessions,
+                    'completed_sessions': completed_sessions,
+                    'focus_sessions': focus_sessions,
+                    'completion_rate': round((completed_sessions / total_sessions * 100), 2) if total_sessions > 0 else 0
+                }
+                
+                return response
+            
+            # If no pagination is needed
+            serializer = PomodoroSessionHistorySerializer(queryset, many=True)
+            return Response({
+                'results': serializer.data,
+                'meta': {
+                    'total_sessions': total_sessions,
+                    'completed_sessions': completed_sessions,
+                    'focus_sessions': focus_sessions,
+                    'completion_rate': round((completed_sessions / total_sessions * 100), 2) if total_sessions > 0 else 0
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'An error occurred while fetching pomodoro history: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class PomodoroSessionDetailView(APIView):
+    """
+    API view to retrieve a specific pomodoro session
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk, user):
+        """
+        Get pomodoro session object, ensuring user can only access their own sessions
+        """
+        try:
+            return PomodoroSession.objects.select_related('task').get(
+                pk=pk, 
+                task__user=user
+            )
+        except PomodoroSession.DoesNotExist:
+            return None
+
+    def get(self, request, pk, *args, **kwargs):
+        """
+        Handle GET request to retrieve a specific pomodoro session
+        """
+        try:
+            session = self.get_object(pk, request.user)
+            
+            if session is None:
+                return Response(
+                    {'error': 'Pomodoro session not found or you do not have permission to access it.'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            serializer = PomodoroSessionHistorySerializer(session)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'An error occurred while fetching the pomodoro session: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class PomodoroSessionUpdateView(APIView):
+    """
+    API view to update a specific pomodoro session (optional - for future use)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk, user):
+        """
+        Get pomodoro session object, ensuring user can only access their own sessions
+        """
+        try:
+            return PomodoroSession.objects.select_related('task').get(
+                pk=pk, 
+                task__user=user
+            )
+        except PomodoroSession.DoesNotExist:
+            return None
+
+    def patch(self, request, pk, *args, **kwargs):
+        """
+        Handle PATCH request to partially update a pomodoro session
+        """
+        try:
+            session = self.get_object(pk, request.user)
+            
+            if session is None:
+                return Response(
+                    {'error': 'Pomodoro session not found or you do not have permission to access it.'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            serializer = PomodoroSessionHistorySerializer(
+                session, 
+                data=request.data, 
+                partial=True
+            )
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'An error occurred while updating the pomodoro session: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class PomodoroSessionDeleteView(APIView):
+    """
+    API view to delete a specific pomodoro session (optional - for future use)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk, user):
+        """
+        Get pomodoro session object, ensuring user can only access their own sessions
+        """
+        try:
+            return PomodoroSession.objects.select_related('task').get(
+                pk=pk, 
+                task__user=user
+            )
+        except PomodoroSession.DoesNotExist:
+            return None
+
+    def delete(self, request, pk, *args, **kwargs):
+        """
+        Handle DELETE request to remove a pomodoro session
+        """
+        try:
+            session = self.get_object(pk, request.user)
+            
+            if session is None:
+                return Response(
+                    {'error': 'Pomodoro session not found or you do not have permission to access it.'}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            session.delete()
+            return Response(
+                {'message': 'Pomodoro session deleted successfully.'}, 
+                status=status.HTTP_204_NO_CONTENT
+            )
+            
+        except Exception as e:
+            return Response(
+                {'error': f'An error occurred while deleting the pomodoro session: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

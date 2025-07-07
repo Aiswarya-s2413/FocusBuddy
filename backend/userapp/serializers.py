@@ -827,5 +827,57 @@ class UserStatsSerializer(serializers.Serializer):
     completed_tasks = serializers.IntegerField()
     mentor_sessions = serializers.IntegerField(required=False)
 
+class CreatorSerializer(serializers.ModelSerializer):
+    """Serializer for session creator info"""
+    class Meta:
+        model = User  # Replace with your User model
+        fields = ['id', 'name']
 
+
+class FocusBuddySessionHistorySerializer(serializers.ModelSerializer):
+    """Serializer for focus buddy session history"""
+    creator = CreatorSerializer(source='creator_id', read_only=True)
+    participant_count = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = FocusBuddySession
+        fields = [
+            'id',
+            'title',
+            'session_type',
+            'status',
+            'duration_minutes',
+            'max_participants',
+            'participant_count',
+            'started_at',
+            'ends_at',
+            'ended_at',
+            'creator',
+            'created_at',
+            'updated_at'
+        ]
+
+class TaskForHistorySerializer(serializers.ModelSerializer):
+    """Serializer for task data within pomodoro session history"""
+    
+    class Meta:
+        model = Task
+        fields = ['id', 'title', 'estimated_pomodoros', 'completed_pomodoros']
+
+
+class PomodoroSessionHistorySerializer(serializers.ModelSerializer):
+    """Serializer for pomodoro session history with nested task data"""
+    task = TaskForHistorySerializer(read_only=True)
+    
+    class Meta:
+        model = PomodoroSession
+        fields = [
+            'id', 
+            'task', 
+            'session_type', 
+            'start_time', 
+            'end_time', 
+            'duration_minutes', 
+            'is_completed'
+        ]
 

@@ -103,6 +103,19 @@ const AuthNavbar = () => {
             </NavLink>
 
             <NavLink
+              to="/history"
+              className={({ isActive }) => cn(
+                "flex items-center px-3 py-2 rounded-md text-sm font-medium",
+                isActive
+                  ? "bg-[#F8F6FB] text-[#7E69AB]"
+                  : "text-gray-600 hover:text-[#7E69AB] hover:bg-[#F8F6FB]"
+              )}
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              History
+            </NavLink>
+
+            <NavLink
               to="/settings"
               className={({ isActive }) => cn(
                 "flex items-center px-3 py-2 rounded-md text-sm font-medium",

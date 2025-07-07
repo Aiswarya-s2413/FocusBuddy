@@ -14,6 +14,7 @@ import Mentors from "../pages/user/Mentors";
 import FocusBuddy from "../pages/user/FocusBuddy";
 import VideoCallPage from "../components/VideoCallPage";
 import MySessions from "../pages/user/MySessions";
+import SessionHistory from "../pages/user/SessionHistory";
 
 const ProtectedRoute = ({ children }) => {
   const { user } = useSelector((state) => state.user);
@@ -82,6 +83,14 @@ const UserRoutes = () => {
         element={
           <ProtectedRoute>
             <AuthLayout><MySessions /></AuthLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/history"
+        element={
+          <ProtectedRoute>
+            <AuthLayout><SessionHistory /></AuthLayout>
           </ProtectedRoute>
         }
       />
