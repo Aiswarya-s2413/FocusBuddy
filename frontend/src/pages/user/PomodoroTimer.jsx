@@ -388,6 +388,11 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
     setTimerVisible(false);
   };
 
+  const stopTimer = () => {
+    setIsRunning(false);
+    resetTimer();
+  };
+
   return (
     <div className="space-y-8">
       {/* Error message if there's an error */}
@@ -426,13 +431,15 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
           />
           
           <TimerControls 
-            isRunning={isRunning}
-            onStart={startTimer}
-            onPause={pauseTimer}
-            onReset={resetTimer}
-            sessionType={sessionType}
-            onSessionTypeChange={setSessionType}
-          />
+              isRunning={isRunning}
+              onStart={startTimer}
+              onPause={pauseTimer}
+              onReset={resetTimer}
+              onStop={stopTimer}  
+              sessionType={sessionType}
+              onSessionTypeChange={setSessionType}
+              currentSessionId={null} 
+            />
           
           <div className="mt-8 space-y-6">
             <ProgressTracker 
