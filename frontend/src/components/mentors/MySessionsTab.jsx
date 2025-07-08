@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardFooter } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -107,6 +108,7 @@ const PaginationInfo = ({ pagination, type }) => {
 
 const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback, onRefresh, onLoadMore, loadingMore }) => {
   const { toast, ToastContainer } = useSimpleToast();
+  const navigate = useNavigate();
   const [cancelDialog, setCancelDialog] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [feedbackDialog, setFeedbackDialog] = useState(false);
@@ -277,7 +279,9 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
   const handleJoinSession = useCallback((session) => {
     toast.success(`Joining session with ${session.mentor.name}...`);
     console.log('Joining session:', session);
-  }, [toast]);
+    // Navigate to video call page
+    navigate(`/video-call/${session.id}`);
+  }, [toast, navigate]);
 
   const getJoinButtonText = useCallback((session) => {
     if (session.status === 'ongoing') {
