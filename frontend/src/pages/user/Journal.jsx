@@ -5,10 +5,11 @@ import { JournalDatePicker } from '../../components/journal/JournalDatePicker';
 import { JournalEntries } from '../../components/journal/JournalEntries';
 import { useToast } from "../../hooks/use-toast";
 import { userAxios } from '../../utils/axios';
+import { useSimpleToast } from "../../components/ui/toast";
 
 const Journal = () => {
   console.log("Journal component initialized");
-  const { toast } = useToast();
+  const { toast, ToastContainer } = useSimpleToast();
 
   const [moods, setMoods] = useState([]);
   const [selectedMood, setSelectedMood] = useState(null);
@@ -84,21 +85,13 @@ const Journal = () => {
     console.log(" Checking selectedMood:", selectedMood, typeof selectedMood);
     
     if (!selectedMood || !content.trim()) {
-      toast({
-        title: "Missing Information",
-        description: "Please select a mood and write your entry before saving.",
-        variant: "destructive",
-      });
+      toast.error('Please select a mood and write your entry before saving.');
       console.log(" Validation failed: missing mood or content");
       return;
     }
 
     if (!userId) {
-      toast({
-        title: "User Not Loaded",
-        description: "Your user information isn't available. Please refresh the page.",
-        variant: "destructive",
-      });
+      toast.error("Your user information isn't available. Please refresh the page.");
       console.log(" User ID not available");
       return;
     }
@@ -149,19 +142,13 @@ const Journal = () => {
         setEntries(entries.map(entry => (entry.id === editingEntry.id ? response.data : entry)));
         setIsEditing(false);
         setEditingEntry(null);
-        toast({
-          title: "Entry Updated",
-          description: "Your journal entry has been updated successfully.",
-        });
+        toast.success('Journal entry updated successfully.');
       } else {
         console.log(" Creating new journal entry");
         response = await userAxios.post('/journals/', payload);
         console.log(" Create response:", response.data);
         setEntries([response.data, ...entries]);
-        toast({
-          title: "Entry Saved",
-          description: "Your journal entry has been saved successfully.",
-        });
+        toast.success('Journal entry added successfully.');
       }
   
       // Reset form
@@ -174,11 +161,17 @@ const Journal = () => {
       console.error(" Error saving journal entry:", errorResponse);
       console.error("Full error:", error);
   
-      toast({
-        title: "Error Saving Entry",
-        description: JSON.stringify(errorResponse || error.message || "Unknown error occurred"),
-        variant: "destructive",
-      });
+      let errorMsg = "Unknown error occurred";
+      if (errorResponse) {
+        if (typeof errorResponse === 'string') {
+          errorMsg = errorResponse;
+        } else if (typeof errorResponse === 'object') {
+          errorMsg = Object.values(errorResponse).flat().join(' ');
+        }
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
+      toast.error(errorMsg);
     }
   };
   
@@ -197,6 +190,7 @@ const Journal = () => {
   
       // Update local state after deletion
       setEntries((prev) => prev.filter((entry) => entry.id !== id));
+      toast.success('Journal entry deleted successfully.');
     } catch (error) {
       console.error("Failed to delete entry:", error);
     }
@@ -205,6 +199,7 @@ const Journal = () => {
 
   return (
     <div className="space-y-6">
+      <ToastContainer />
       <h2 className="text-2xl font-bold">My Journal</h2>
 
       
