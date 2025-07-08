@@ -283,3 +283,6 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 60.0,  
     },
 }
+
+GOOGLE_CLIENT_ID = config('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = config('GOOGLE_CLIENT_SECRET')

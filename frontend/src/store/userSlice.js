@@ -166,7 +166,15 @@ const userSlice = createSlice({
     },
     clearMessage: (state) => {
       state.message = '';
-    }
+    },
+    hydrateUserFromLocalStorage: (state) => {
+      // Hydrate Redux user state from localStorage
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        state.user = JSON.parse(savedUser);
+        state.success = true;
+      }
+    },
   },
   extraReducers: (builder) => {
     // SIGNUP
@@ -226,6 +234,6 @@ const userSlice = createSlice({
   },
 });
 
-export const { logout, clearMessage } = userSlice.actions;
+export const { logout, clearMessage, hydrateUserFromLocalStorage } = userSlice.actions;
 
 export default userSlice.reducer;

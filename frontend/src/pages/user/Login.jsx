@@ -5,13 +5,15 @@ import { Mail, KeyRound, Eye, EyeOff, CheckCircle, Target, Users, PenTool, BookO
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Card, CardHeader, CardContent, CardFooter } from "../../components/ui/card";
 import { useDispatch, useSelector } from "react-redux";
-import { loginUser } from "../../store/userSlice"; 
-import { clearMessage } from "../../store/userSlice";
+import { loginUser, clearMessage, hydrateUserFromLocalStorage } from "../../store/userSlice";
+import GoogleAuthButton from '../../components/ui/GoogleAuthButton';
+import { useSimpleToast } from '../../components/ui/toast';
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast, ToastContainer } = useSimpleToast();
 
   // Redux states for loading, error, and success messages
   const { loading, error, message } = useSelector((state) => state.user);
@@ -104,6 +106,21 @@ useEffect(() => {
       dispatch(clearMessage()); 
     }
   }, [message, error, navigate, dispatch]);
+
+  // Google login handler
+  const handleGoogleSuccess = (data) => {
+    if (data && data.user) {
+      localStorage.setItem('role', 'user');
+      localStorage.setItem('user', JSON.stringify(data.user));
+      dispatch(hydrateUserFromLocalStorage()); // <-- Hydrate Redux from localStorage
+      navigate('/focus-buddy');
+    } else {
+      toast.error('Google login failed. Please try again.');
+    }
+  };
+  const handleGoogleError = (err) => {
+    toast.error(typeof err === 'string' ? err : 'Google login failed.');
+  };
 
   return (
     <div className="min-h-screen flex">
@@ -276,6 +293,13 @@ useEffect(() => {
                 </div>
               )}
             </form>
+            {/* Divider and Google Auth Button */}
+            <div className="flex items-center my-6">
+              <div className="flex-grow h-px bg-gray-200" />
+              <span className="mx-3 text-gray-400 text-xs">or</span>
+              <div className="flex-grow h-px bg-gray-200" />
+            </div>
+            <GoogleAuthButton onSuccess={handleGoogleSuccess} onError={handleGoogleError} buttonText="Continue with Google" />
           </CardContent>
           
           <CardFooter className="flex justify-center pt-4">
@@ -287,6 +311,7 @@ useEffect(() => {
             </p>
           </CardFooter>
         </Card>
+        <ToastContainer />
       </div>
     </div>
   );

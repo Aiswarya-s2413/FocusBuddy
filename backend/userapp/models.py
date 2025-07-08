@@ -66,13 +66,20 @@ class PomodoroSettings(models.Model):
         return f"Pomodoro Settings - {self.user.name}"
 
 class UserManager(BaseUserManager):
-    def create_user(self,email,name,password=None,**extra_fields):
+    def create_user(self, email, name, password=None, **extra_fields):
         if not email:
             raise ValueError("Users must have an email address")
         email = self.normalize_email(email)
-        user = self.model(email=email,name=name,**extra_fields)
-        user.set_password(password)
-        user.date_joined=timezone.now()
+        user = self.model(email=email, name=name, **extra_fields)
+        
+        # Handle password setting - support both regular and Google users
+        if password:
+            user.set_password(password)
+        else:
+            # For Google users or users without passwords
+            user.set_unusable_password()
+        
+        user.date_joined = timezone.now()
         user.save(using=self._db)
         return user
     
@@ -84,7 +91,7 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=255)
     email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=15)
+    phone = models.CharField(max_length=15, blank=True, null=True)  # Made optional for Google users
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     is_mentor = models.BooleanField(default=False)
@@ -95,19 +102,37 @@ class User(AbstractBaseUser, PermissionsMixin):
     subjects = models.ManyToManyField(Subject, related_name='users', blank=True)
     bio = models.TextField(blank=True, null=True)
     experience = models.IntegerField(default=0)
-
+    
+    # Google Auth specific fields
+    google_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    auth_provider = models.CharField(
+        max_length=50, 
+        choices=[
+            ('email', 'Email/Password'),
+            ('google', 'Google'),
+        ],
+        default='email'
+    )
+    
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['name']
-
+    
     objects = UserManager()
-
+    
     def __str__(self):
         return self.email
-
+    
     @property
     def username(self):
         return self.email
-
+    
+    def is_google_user(self):
+        """Check if user registered via Google"""
+        return self.auth_provider == 'google'
+    
+    def can_login_with_password(self):
+        """Check if user can login with password"""
+        return self.auth_provider == 'email' and self.has_usable_password()
 
 class Mentor(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='mentor_profile')

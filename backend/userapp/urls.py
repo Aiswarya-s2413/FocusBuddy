@@ -19,6 +19,7 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path('update-profile/', UpdateProfileView.as_view(), name='update-profile'),
     path('check-user-status/', CheckUserStatusView.as_view(), name='check-user-status'),
+    path('auth/google/', GoogleAuthView.as_view(), name='google_auth'),
     
     # Task URLs
     path('tasks/', TaskListCreateAPIView.as_view(), name='task-list-create'),

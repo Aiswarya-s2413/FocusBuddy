@@ -1,13 +1,15 @@
 import React, { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { signupUser } from "../../store/userSlice";
+import { signupUser, hydrateUserFromLocalStorage } from "../../store/userSlice";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
 import { Card, CardHeader, CardContent, CardFooter } from "../../components/ui/card";
 import { Mail, Phone, User, Eye, EyeOff, BookOpen, Users, PenTool, Target, Star, Trophy, Brain, Heart, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import GoogleAuthButton from '../../components/ui/GoogleAuthButton';
+import { useSimpleToast } from '../../components/ui/toast';
 
 const initialErrors = {
   name: "",
@@ -20,6 +22,7 @@ const initialErrors = {
 const Signup = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { toast, ToastContainer } = useSimpleToast();
 
   const { error } = useSelector((state) => state.user);
 
@@ -209,6 +212,21 @@ const Signup = () => {
       console.log("=== CLEANUP ===");
       setIsLoading(false);
     }
+  };
+
+  // Google signup handler
+  const handleGoogleSuccess = (data) => {
+    if (data && data.user) {
+      localStorage.setItem('role', 'user');
+      localStorage.setItem('user', JSON.stringify(data.user));
+      dispatch(hydrateUserFromLocalStorage()); // <-- Hydrate Redux from localStorage
+      navigate('/focus-buddy');
+    } else {
+      toast.error('Google signup failed. Please try again.');
+    }
+  };
+  const handleGoogleError = (err) => {
+    toast.error(typeof err === 'string' ? err : 'Google signup failed.');
   };
 
   
@@ -447,6 +465,13 @@ const Signup = () => {
                 {isLoading ? "Creating Account..." : "Create Account"}
               </Button>
             </form>
+            {/* Divider and Google Auth Button */}
+            <div className="flex items-center my-6">
+              <div className="flex-grow h-px bg-gray-200" />
+              <span className="mx-3 text-gray-400 text-xs">or</span>
+              <div className="flex-grow h-px bg-gray-200" />
+            </div>
+            <GoogleAuthButton onSuccess={handleGoogleSuccess} onError={handleGoogleError} buttonText="Sign up with Google" />
           </CardContent>
           <CardFooter>
             <p className="text-center text-sm text-gray-600 w-full">
@@ -457,6 +482,7 @@ const Signup = () => {
             </p>
           </CardFooter>
         </Card>
+        <ToastContainer />
       </div>
     </div>
   );

@@ -10,7 +10,9 @@ from django.conf import settings
 from django.db import transaction
 from datetime import timedelta
 from django.contrib.auth.password_validation import validate_password
-
+from google.auth.transport import requests
+from google.oauth2 import id_token
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +20,11 @@ logger = logging.getLogger(__name__)
 class SignupSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['name','email','phone','password']
+        fields = ['name', 'email', 'phone', 'password']
         extra_kwargs = {
             'password': {'write_only': True},
-            'email': {'validators': []}  
+            'email': {'validators': []},
+            'phone': {'required': False}  # Made optional for Google users
         }
 
     def validate_email(self, value):
@@ -50,10 +53,11 @@ class SignupSerializer(serializers.ModelSerializer):
                 logger.info("Updating unverified user")
                 # Update existing unverified user
                 existing_user.name = validated_data['name']
-                existing_user.phone = validated_data['phone']
+                existing_user.phone = validated_data.get('phone', '')
                 existing_user.set_password(validated_data['password'])
                 existing_user.otp = f"{random.randint(100000, 999999)}"
                 existing_user.otp_created_at = timezone.now()
+                existing_user.auth_provider = 'email'  # Set auth provider
                 existing_user.save()
                 return existing_user
 
@@ -62,10 +66,10 @@ class SignupSerializer(serializers.ModelSerializer):
         otp = f"{random.randint(100000, 999999)}"
         validated_data['otp'] = otp
         validated_data['otp_created_at'] = timezone.now()
+        validated_data['auth_provider'] = 'email'  # Set auth provider
         user = User.objects.create_user(**validated_data)
         logger.info(f"Created new user: {user.email}")
         return user
-
 #OTP verification
 class OtpVerifySerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -90,10 +94,22 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, data):
         email = data.get("email")
         password = data.get("password")
+        
+        # Check if user exists
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Invalid credentials")
+        
+        # Check if user is a Google user trying to login with password
+        if user.is_google_user():
+            raise serializers.ValidationError("This account was created with Google. Please use 'Sign in with Google' instead.")
+        
+        # Authenticate user
         user = authenticate(email=email, password=password)
 
         if not user:
-            raise serializers.ValidationError("Invalid credentials or unverified user")
+            raise serializers.ValidationError("Invalid credentials")
 
         if not user.is_verified:
             raise serializers.ValidationError("User not verified with OTP")
@@ -112,6 +128,112 @@ class LoginSerializer(serializers.Serializer):
                 "is_mentor": user.is_mentor,
             }
         }
+
+
+class GoogleAuthSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    
+    def validate_token(self, token):
+        try:
+            # Verify the Google ID token
+            idinfo = id_token.verify_oauth2_token(
+                token, 
+                requests.Request(), 
+                settings.GOOGLE_CLIENT_ID
+            )
+            
+            if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                raise serializers.ValidationError('Invalid token issuer')
+                
+            return idinfo
+        except ValueError as e:
+            logger.error(f"Invalid Google token: {str(e)}")
+            raise serializers.ValidationError('Invalid Google token')
+    
+    def create(self, validated_data):
+        google_data = validated_data['token']
+        email = google_data.get('email')
+        name = google_data.get('name', '')
+        
+        # Check if user exists
+        existing_user = User.objects.filter(email=email).first()
+        
+        if existing_user:
+            if existing_user.is_verified:
+                # User exists and is verified - login
+                logger.info(f"Google login for existing user: {email}")
+                
+                # Update Google-specific fields if not already set
+                if not existing_user.google_id:
+                    existing_user.google_id = google_data.get('sub')
+                if existing_user.auth_provider == 'email':
+                    existing_user.auth_provider = 'google'
+                existing_user.save()
+                
+                refresh = RefreshToken.for_user(existing_user)
+                return {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "user": {
+                        "id": existing_user.id,
+                        "name": existing_user.name,
+                        "email": existing_user.email,
+                        "is_mentor": existing_user.is_mentor,
+                        "has_subjects": existing_user.subjects.exists(),
+                    },
+                    "is_new_user": False,
+                    "needs_subjects": not existing_user.subjects.exists()
+                }
+            else:
+                # User exists but not verified - verify and login
+                logger.info(f"Verifying existing unverified user via Google: {email}")
+                existing_user.is_verified = True
+                existing_user.otp = None
+                existing_user.otp_created_at = None
+                existing_user.google_id = google_data.get('sub')
+                existing_user.auth_provider = 'google'
+                existing_user.save()
+                
+                refresh = RefreshToken.for_user(existing_user)
+                return {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "user": {
+                        "id": existing_user.id,
+                        "name": existing_user.name,
+                        "email": existing_user.email,
+                        "is_mentor": existing_user.is_mentor,
+                        "has_subjects": existing_user.subjects.exists(),
+                    },
+                    "is_new_user": False,
+                    "needs_subjects": not existing_user.subjects.exists()
+                }
+        else:
+            # Create new user
+            logger.info(f"Creating new user via Google: {email}")
+            user = User.objects.create_user(
+                email=email,
+                name=name,
+                is_verified=True,  # Google users are auto-verified
+                password=None,  # No password for Google users
+                google_id=google_data.get('sub'),
+                auth_provider='google'
+            )
+            
+            refresh = RefreshToken.for_user(user)
+            return {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": {
+                    "id": user.id,
+                    "name": user.name,
+                    "email": user.email,
+                    "is_mentor": user.is_mentor,
+                    "has_subjects": False,
+                },
+                "is_new_user": True,
+                "needs_subjects": True
+            }
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()

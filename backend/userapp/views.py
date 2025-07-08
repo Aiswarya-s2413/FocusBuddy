@@ -173,6 +173,50 @@ class LoginView(APIView):
         logger.warning("Login failed with errors: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class GoogleAuthView(APIView):
+    permission_classes = []
+    authentication_classes = []
+    
+    def post(self, request):
+        logger.info("Received Google auth request")
+        serializer = GoogleAuthSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            try:
+                data = serializer.save()
+                
+                response_data = {
+                    "message": "Google authentication successful",
+                    "user": data["user"],
+                    "is_new_user": data["is_new_user"],
+                    "needs_subjects": data["needs_subjects"]
+                }
+                
+                response = Response(response_data, status=status.HTTP_200_OK)
+                
+                # Set JWT tokens in HttpOnly cookies
+                response.set_cookie(
+                    "access", data["access"], httponly=False, 
+                    secure=False, samesite='Lax', path="/"
+                )
+                response.set_cookie(
+                    "refresh", data["refresh"], httponly=False, 
+                    secure=False, samesite='Lax', path="/"
+                )
+                
+                logger.info(f"Google auth successful for user: {data['user']['email']}")
+                return response
+                
+            except Exception as e:
+                logger.error(f"Google auth error: {str(e)}")
+                return Response(
+                    {"error": "Google authentication failed. Please try again."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        logger.warning("Google auth validation failed: %s", serializer.errors)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
