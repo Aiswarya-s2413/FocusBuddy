@@ -102,6 +102,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     subjects = models.ManyToManyField(Subject, related_name='users', blank=True)
     bio = models.TextField(blank=True, null=True)
     experience = models.IntegerField(default=0)
+    wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     # Google Auth specific fields
     google_id = models.CharField(max_length=100, blank=True, null=True, unique=True)
@@ -178,6 +179,7 @@ class Mentor(models.Model):
         blank=True,
         related_name='approved_mentors'
     )
+    wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     class Meta:
         ordering = ['-rating']
@@ -794,3 +796,14 @@ class FocusBuddyStats(models.Model):
         if self.completed_sessions == 0:
             return 0
         return self.total_focus_minutes / self.completed_sessions
+
+
+class WalletTransaction(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='wallet_transactions')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    transaction_type = models.CharField(max_length=20, choices=[('credit', 'Credit'), ('debit', 'Debit')])
+    description = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.transaction_type} - {self.amount}"

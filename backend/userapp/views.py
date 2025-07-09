@@ -24,6 +24,9 @@ from django.db import IntegrityError
 from rest_framework.exceptions import ValidationError
 from .combine import *
 from django.contrib.auth import update_session_auth_hash
+from .serializers import CancelSessionSerializer
+from decimal import Decimal
+from .models import WalletTransaction
 
 
 
@@ -1027,31 +1030,55 @@ class CancelSessionAPIView(APIView):
                 'error': 'Cannot cancel session in current status'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if cancellation is allowed (e.g., at least 24 hours before session)
+        # Check if cancellation is allowed (at least 24 hours before session)
         session_datetime = timezone.datetime.combine(session.scheduled_date, session.scheduled_time)
-        if session_datetime <= timezone.now() + timezone.timedelta(hours=24):
+        now = timezone.now()
+        if timezone.is_naive(session_datetime):
+            session_datetime = timezone.make_aware(session_datetime, now.tzinfo)
+        if session_datetime <= now + timezone.timedelta(hours=24):
             return Response({
                 'success': False,
                 'error': 'Cannot cancel session less than 24 hours before scheduled time'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        reason = request.data.get('reason', '')
+        serializer = CancelSessionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reason = serializer.validated_data.get('reason', '')
         session.cancel_session(user, reason)
         
         # Handle refund if payment was made
         if hasattr(session, 'payment') and session.payment.status == 'completed':
             payment = session.payment
-            payment.status = 'refunded'
-            payment.refund_amount = payment.amount
-            payment.refund_reason = f"Session cancelled by {'student' if session.student == user else 'mentor'}"
-            payment.refunded_at = timezone.now()
-            payment.save()
+            refund_amount = payment.amount * Decimal('0.90')  # 90% refund
+            platform_fee = payment.amount * Decimal('0.10')   # 10% platform fee
+
+            # Refund to user (student)
+            session.student.wallet_balance += refund_amount
+            session.student.save()
+            WalletTransaction.objects.create(
+                user=session.student,
+                amount=refund_amount,
+                transaction_type='credit',
+                description=f'Refund for cancelled session {session.id}'
+            )
+
+            # Deduct from mentor (if already credited)
+            if hasattr(session.mentor, 'wallet_balance'):
+                mentor_user = session.mentor.user
+                session.mentor.wallet_balance -= refund_amount
+                session.mentor.save()
+                WalletTransaction.objects.create(
+                    user=mentor_user,
+                    amount=refund_amount,
+                    transaction_type='debit',
+                    description=f'Refund for cancelled session {session.id}'
+                )
         
-        serializer = MentorSessionSerializer(session)
+        session_serializer = MentorSessionSerializer(session)
         return Response({
             'success': True,
             'message': 'Session cancelled successfully',
-            'data': serializer.data
+            'data': session_serializer.data
         })
 
 

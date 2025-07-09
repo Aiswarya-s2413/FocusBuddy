@@ -272,13 +272,9 @@ export const useSessions = () => {
   }, [pagination, loadingMore, transformSessionData, extractPaginationInfo]);
 
   // Cancel a session
-  const cancelSession = useCallback(async (sessionId) => {
+  const cancelSession = useCallback(async (sessionId, reason = '') => {
     try {
-      const response = await userAxios.patch(`/sessions/${sessionId}/`, {
-        status: 'cancelled',
-        cancellation_reason: 'Cancelled by student'
-      });
-
+      const response = await userAxios.patch(`/${sessionId}/cancel/`, { reason });
       if (response.data.success) {
         // Refresh sessions after cancellation
         await fetchSessions();
@@ -288,7 +284,7 @@ export const useSessions = () => {
       }
     } catch (err) {
       console.error('Error cancelling session:', err);
-      throw new Error(err.response?.data?.message || 'Failed to cancel session');
+      throw new Error(err.response?.data?.error || err.response?.data?.message || 'Failed to cancel session');
     }
   }, [fetchSessions]);
 

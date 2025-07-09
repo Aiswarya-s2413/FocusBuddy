@@ -1021,3 +1021,6 @@ class PomodoroSessionHistorySerializer(serializers.ModelSerializer):
             'is_completed'
         ]
 
+class CancelSessionSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True)
+
