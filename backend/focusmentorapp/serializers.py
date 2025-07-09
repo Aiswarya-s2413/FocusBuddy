@@ -682,14 +682,18 @@ class SessionDetailSerializer(serializers.ModelSerializer):
 
 class MentorEarningsSerializer(serializers.ModelSerializer):
     session = SessionDetailSerializer(read_only=True)
-    
+    is_cancelled = serializers.SerializerMethodField()
+
     class Meta:
         model = MentorEarnings
         fields = [
             'id', 'session', 'session_amount', 'platform_commission',
             'mentor_earning', 'payout_status', 'payout_date', 
-            'payout_reference', 'created_at', 'updated_at'
+            'payout_reference', 'created_at', 'updated_at', 'is_cancelled'
         ]
+
+    def get_is_cancelled(self, obj):
+        return obj.session.status == 'cancelled'
 
 
 class WalletSummarySerializer(serializers.Serializer):

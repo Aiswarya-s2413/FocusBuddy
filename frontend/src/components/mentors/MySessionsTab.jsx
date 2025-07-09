@@ -126,7 +126,7 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
     try {
       setIsCancelling(true);
       await onCancelSession(selectedSession.id);
-      toast.success('Session cancelled successfully.');
+      toast.success('Session cancelled'); // Changed message as requested
       setCancelDialog(false);
       setSelectedSession(null);
     } catch (error) {

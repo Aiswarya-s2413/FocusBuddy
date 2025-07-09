@@ -424,6 +424,10 @@ const MentorWallet = () => {
                                 formatDateTime(earning.created_at)
                               }
                             </div>
+                            {/* Show Cancelled Badge if transaction is cancelled */}
+                            {earning.is_cancelled && (
+                              <span className="inline-block mt-2 px-2 py-1 text-xs rounded-full bg-red-100 text-red-800 font-semibold">Cancelled</span>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="font-medium">{formatCurrency(earning.session_amount)}</TableCell>

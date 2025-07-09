@@ -832,25 +832,28 @@ class MentorWalletView(APIView):
         now = timezone.now()
         current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        total_earnings = earnings.aggregate(
+        # Only include non-cancelled sessions in wallet calculations
+        non_cancelled_earnings = earnings.exclude(session__status='cancelled')
+
+        total_earnings = non_cancelled_earnings.aggregate(
             total=Sum('mentor_earning')
         )['total'] or Decimal('0.00')
 
         available_balance = total_earnings
 
-        pending_earnings = earnings.filter(
+        pending_earnings = non_cancelled_earnings.filter(
             payout_status__in=['pending', 'processing']
         ).aggregate(
             total=Sum('mentor_earning')
         )['total'] or Decimal('0.00')
 
-        this_month_earnings = earnings.filter(
+        this_month_earnings = non_cancelled_earnings.filter(
             created_at__gte=current_month_start
         ).aggregate(
             total=Sum('mentor_earning')
         )['total'] or Decimal('0.00')
 
-        total_sessions = MentorSession.objects.filter(mentor=mentor).count()
+        total_sessions = MentorSession.objects.filter(mentor=mentor).exclude(status='cancelled').count()
 
         return {
             'total_earnings': total_earnings,
