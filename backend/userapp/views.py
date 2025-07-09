@@ -27,10 +27,23 @@ from django.contrib.auth import update_session_auth_hash
 from .serializers import CancelSessionSerializer
 from decimal import Decimal
 from .models import WalletTransaction
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 
 
 logger = logging.getLogger(__name__)
+
+def notify_mentor(mentor_user_id, message):
+    print(f"[notify_mentor] Called for user {mentor_user_id} with message: {message}")
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"mentor_notify_{mentor_user_id}",
+        {
+            "type": "send_notification",
+            "content": message
+        }
+    )
 
 class SignupView(APIView):
     permission_classes=[]
@@ -848,50 +861,54 @@ class ConfirmBookingAPIView(APIView):
         if serializer.is_valid():
             try:
                 session = serializer.save()
-                
                 # Get the payment object
                 try:
-                    # Try to get payment from the stored reference first
                     if hasattr(session, '_payment'):
                         payment = session._payment
                     else:
-                        # Fallback: query the payment
                         payment = SessionPayment.objects.get(session=session)
-                    
-                    # Return the created session with payment details
                     session_serializer = MentorSessionSerializer(session)
                     payment_serializer = SessionPaymentSerializer(payment)
-                    
+                    # Send real-time notification to mentor
+                    notify_mentor(session.mentor.user.id, {
+                        "event": "session_booked",
+                        "session_id": session.id,
+                        "student_name": session.student.name,
+                        "scheduled_date": str(session.scheduled_date),
+                        "scheduled_time": str(session.scheduled_time)
+                    })
+                    print(f"[ConfirmBookingAPIView] Notifying mentor {session.mentor.user.id} for session {session.id}")
                     return Response({
                         'success': True,
                         'message': 'Session booked successfully',
                         'session': session_serializer.data,
                         'payment': payment_serializer.data
                     }, status=status.HTTP_201_CREATED)
-                    
                 except SessionPayment.DoesNotExist:
-                    # If payment not found, still return session data but log the issue
                     session_serializer = MentorSessionSerializer(session)
                     print("Warning: Payment object not found for session")
-                    
+                    notify_mentor(session.mentor.user.id, {
+                        "event": "session_booked",
+                        "session_id": session.id,
+                        "student_name": session.student.name,
+                        "scheduled_date": str(session.scheduled_date),
+                        "scheduled_time": str(session.scheduled_time)
+                    })
                     return Response({
                         'success': True,
                         'message': 'Session booked successfully',
                         'session': session_serializer.data,
                         'payment': None
                     }, status=status.HTTP_201_CREATED)
-                
             except Exception as e:
                 print(f"Error in confirm booking: {str(e)}")
                 import traceback
                 traceback.print_exc()
-                
                 return Response({
                     'success': False,
                     'message': 'Failed to create session',
                     'error': str(e)
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
         return Response({
             'success': False,
             'errors': serializer.errors
@@ -1073,6 +1090,17 @@ class CancelSessionAPIView(APIView):
                     transaction_type='debit',
                     description=f'Refund for cancelled session {session.id}'
                 )
+        
+        # Send real-time notification to mentor
+        notify_mentor(session.mentor.user.id, {
+            "event": "session_cancelled",
+            "session_id": session.id,
+            "student_name": session.student.name,
+            "scheduled_date": str(session.scheduled_date),
+            "scheduled_time": str(session.scheduled_time),
+            "reason": reason
+        })
+        print(f"[CancelSessionAPIView] Notifying mentor {session.mentor.user.id} for session {session.id}")
         
         session_serializer = MentorSessionSerializer(session)
         return Response({

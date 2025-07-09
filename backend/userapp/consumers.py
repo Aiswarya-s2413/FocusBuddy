@@ -1,6 +1,7 @@
 import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
+from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -218,4 +219,31 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             'sender_name': event['sender_name'],
             'message': event['message']
         }))
+
+
+class MentorNotificationConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        user = self.scope["user"]
+        is_authenticated = user.is_authenticated
+        has_mentor_profile = False
+        if is_authenticated:
+            from userapp.models import Mentor
+            has_mentor_profile = await sync_to_async(Mentor.objects.filter(user_id=user.id).exists)()
+        if is_authenticated and has_mentor_profile:
+            self.group_name = f"mentor_notify_{user.id}"
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            await self.accept()
+        else:
+            await self.close()
+
+    async def disconnect(self, close_code):
+        if hasattr(self, "group_name"):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def receive(self, text_data):
+        # Not needed for notifications
+        pass
+
+    async def send_notification(self, event):
+        await self.send(text_data=json.dumps(event["content"]))
   

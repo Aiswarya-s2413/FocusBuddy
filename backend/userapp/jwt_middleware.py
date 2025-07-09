@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -117,3 +118,35 @@ class JWTWebSocketMiddleware:
 
 def JWTAuthMiddlewareStack(inner):
     return JWTWebSocketMiddleware(inner)
+
+class JWTAuthMiddleware:
+    def __init__(self, inner):
+        self.inner = inner
+
+    async def __call__(self, scope, receive, send):
+        headers = dict(scope.get('headers', {}))
+        cookies = headers.get(b'cookie', b'').decode()
+        token = None
+        # Try to get token from cookies
+        if 'mentor_access=' in cookies:
+            token = cookies.split('mentor_access=')[1].split(';')[0]
+        elif 'access=' in cookies:
+            token = cookies.split('access=')[1].split(';')[0]
+        # If not in cookies, try query string (for WebSocket auth)
+        if not token:
+            query_string = scope.get('query_string', b'').decode()
+            query_params = parse_qs(query_string)
+            if 'token' in query_params:
+                token = query_params['token'][0]
+        # Validate token and set user
+        if token:
+            try:
+                validated_token = AccessToken(token) # Changed from UntypedToken to AccessToken
+                user_id = validated_token.get('user_id')
+                user = await sync_to_async(get_user_from_jwt)(token) # Changed from User.objects.get to get_user_from_jwt
+                scope['user'] = user
+            except (InvalidToken, TokenError, User.DoesNotExist):
+                scope['user'] = AnonymousUser()
+        else:
+            scope['user'] = AnonymousUser()
+        return await self.inner(scope, receive, send)
