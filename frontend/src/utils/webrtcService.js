@@ -357,6 +357,7 @@ class WebRTCService {
         }
 
         const peerConnection = new RTCPeerConnection(this.config);
+        console.log(`[WebRTC] Creating peer connection for user ${userId}`);
         
         // Initialize state tracking
         this.peerConnectionStates.set(userId, {
@@ -370,9 +371,13 @@ class WebRTCService {
         this.pendingCandidates.set(userId, []);
 
         if (this.localStream) {
+            console.log(`[WebRTC] Adding local tracks to peer connection for user ${userId}`);
             this.localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, this.localStream);
+                console.log(`[WebRTC] Added track (${track.kind}) to user ${userId}`);
             });
+        } else {
+            console.warn(`[WebRTC] No local stream available when creating peer connection for user ${userId}`);
         }
 
         peerConnection.ontrack = (event) => {
@@ -417,23 +422,49 @@ class WebRTCService {
                     console.log('Authenticated as user:', message.user_id);
                     this.userId = message.user_id;
                     break;
-                    case 'existing-users':
-                        console.log('Existing users in session:', message.users);
-                        if (this.callType === '1on1') {
-                            if (message.users.length > 0) {
-                                const peerId = message.users[0]; 
-                                if (peerId !== this.userId) {
-                                    await this.createOffer(peerId);
-                                }
-                            }
-                        } else {
-                            for (const id of message.users) {
-                                if (id !== this.userId) {
-                                    await this.createOffer(id);
-                                }
-                            }
-                        }
-                        break;
+                case 'admission-status':
+                    // Handle admission status updates
+                    console.log('Received admission status:', message.status, message.message);
+                    this.emit('admissionStatus', message.status, message.message, message.session_id);
+                    
+                    if (message.status === 'approved') {
+                        // Participant was approved - they can now join the call
+                        console.log('Participant approved - initializing WebRTC connection');
+                        // The frontend should handle this by reconnecting to the session
+                        this.emit('admissionApproved', message.session_id);
+                    } else if (message.status === 'rejected') {
+                        // Participant was rejected - show error and cleanup
+                        console.log('Participant rejected - cleaning up');
+                        this.emit('admissionRejected', message.message);
+                        this.cleanup();
+                    } else if (message.status === 'pending') {
+                        // Still pending - just show status
+                        console.log('Participant still pending approval');
+                    } else {
+                        // Other status - cleanup
+                        this.cleanup();
+                    }
+                    break;
+                case 'new_join_request':
+                    // Handle new join request notification (for hosts)
+                    this.emit('newJoinRequest', {
+                        participant_id: message.participant_id,
+                        user_name: message.user_name,
+                        user_id: message.user_id
+                    });
+                    break;
+                case 'join_request_updated':
+                    // Handle join request status update (for hosts)
+                    this.emit('joinRequestUpdated', {
+                        participant_id: message.participant_id,
+                        user_name: message.user_name,
+                        status: message.status
+                    });
+                    break;
+                case 'existing-users':
+                    console.log('Existing users:', message.users);
+                    this.existingUsers = message.users;
+                    break;
                     
                         case 'user-joined':
                             console.log('User joined:', message);

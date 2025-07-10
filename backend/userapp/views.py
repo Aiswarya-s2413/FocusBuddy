@@ -29,6 +29,15 @@ from decimal import Decimal
 from .models import WalletTransaction
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate, login, logout
+from django.db.models import Q, Count, Avg, Sum, F
+from django.utils import timezone
+from datetime import datetime, timedelta
+import json
 
 
 
@@ -1410,13 +1419,15 @@ class FocusBuddySessionDetailView(APIView):
     
     def get(self, request, session_id):
         """Get detailed session information"""
-        session = get_object_or_404(FocusBuddySession, id=session_id)
-        
+        session = get_object_or_404(
+            FocusBuddySession.objects.prefetch_related('participants__user'),
+            id=session_id
+        )
         # Check if session expired and update status
         if session.is_expired and session.status == 'active':
             session.end_session('expired')
-        
-        serializer = FocusBuddySessionDetailSerializer(session)
+        serializer = FocusBuddySessionDetailSerializer(session, context={'request': request})
+        print("[DEBUG] Serializer output:", serializer.data)
         return Response(serializer.data)
     
     def delete(self, request, session_id):
@@ -1478,23 +1489,40 @@ class JoinSessionView(APIView):
                 user=request.user,
                 defaults={
                     'camera_enabled': request.data.get('camera_enabled', True),
-                    'microphone_enabled': request.data.get('microphone_enabled', True)
+                    'microphone_enabled': request.data.get('microphone_enabled', True),
+                    'status': 'pending',  # New join requests are pending
                 }
             )
 
             if not created:
                 if participant.left_at is None:
-                    print(f"DEBUG: User already in session as participant {participant.id}")
-                    return Response(
-                        {'error': 'You are already in this session'}, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    if participant.status == 'pending':
+                        return Response(
+                            {'message': 'Join request is still pending approval', 'pending': True},
+                            status=status.HTTP_202_ACCEPTED
+                        )
+                    elif participant.status == 'rejected':
+                        return Response(
+                            {'error': 'Your join request was rejected by the host', 'rejected': True},
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+                    else:
+                        print(f"DEBUG: User already in session as participant {participant.id}")
+                        return Response(
+                            {'error': 'You are already in this session'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
                 else:
                     print(f"DEBUG: Rejoining session - updating left_at = None for {participant.id}")
                     participant.left_at = None
                     participant.camera_enabled = request.data.get('camera_enabled', True)
                     participant.microphone_enabled = request.data.get('microphone_enabled', True)
+                    participant.status = 'pending'  # Rejoining requires approval again
                     participant.save()
+                    return Response(
+                        {'message': 'Join request is now pending approval', 'pending': True},
+                        status=status.HTTP_202_ACCEPTED
+                    )
             
             # Check session status
             if session.status not in ['waiting', 'active']:
@@ -1507,11 +1535,12 @@ class JoinSessionView(APIView):
             # Check capacity *after* confirming not already in
             current_participants = FocusBuddyParticipant.objects.filter(
                 session=session, 
-                left_at__isnull=True
+                left_at__isnull=True,
+                status='approved'
             ).count()
             print(f"DEBUG: Current participants: {current_participants}/{session.max_participants}")
             
-            if current_participants > session.max_participants:
+            if current_participants >= session.max_participants:
                 # Undo if newly created
                 if created:
                     print(f"DEBUG: Rolling back participant creation due to full session")
@@ -1521,15 +1550,28 @@ class JoinSessionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Activate session if waiting
-            if session.status == 'waiting':
-                session.status = 'active'
-                session.started_at = timezone.now()
-                session.save()
-                print("DEBUG: Session status updated to active")
-            
-            serializer = FocusBuddySessionDetailSerializer(session)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            # Send real-time notification to host about new join request
+            if created or (not created and participant.status == 'pending'):
+                try:
+                    channel_layer = get_channel_layer()
+                    async_to_sync(channel_layer.group_send)(
+                        f'webrtc_session_{session_id}',
+                        {
+                            'type': 'notify_host_new_request',
+                            'participant_id': participant.id,
+                            'user_name': request.user.name,
+                            'user_id': request.user.id
+                        }
+                    )
+                    print(f"DEBUG: Sent real-time notification to host for participant {participant.id}")
+                except Exception as e:
+                    print(f"DEBUG: Failed to send real-time notification: {e}")
+
+            # Return pending status to user
+            return Response(
+                {'message': 'Join request sent. Waiting for host approval.', 'pending': True},
+                status=status.HTTP_202_ACCEPTED
+            )
 
         except Exception as e:
             print(f"DEBUG: Exception in join session: {str(e)}")
@@ -2261,20 +2303,20 @@ class UserParticipatedSessionsView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class FocusBuddySessionDetailView(APIView):
+class FocusBuddySessionDetailedView(APIView):
     """
     API view to retrieve details of a specific focus buddy session.
     Only allows access to sessions the user created or participated in.
     """
     permission_classes = [IsAuthenticated]
     
-    def get(self, request, pk):
+    def get(self, request, session_id):
         user = request.user
         
         try:
             session = FocusBuddySession.objects.filter(
                 Q(creator_id=user) | Q(participants__user=user)
-            ).distinct().select_related('creator_id').prefetch_related('participants').get(pk=pk)
+            ).distinct().select_related('creator_id').prefetch_related('participants').get(id=session_id)
         except FocusBuddySession.DoesNotExist:
             return Response(
                 {"error": "Session not found or you don't have permission to view it"}, 
@@ -2556,3 +2598,91 @@ class PomodoroSessionDeleteView(APIView):
                 {'error': f'An error occurred while deleting the pomodoro session: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class ApproveParticipantView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, session_id, participant_id):
+        session = get_object_or_404(FocusBuddySession, id=session_id)
+        if session.creator_id != request.user:
+            return Response({'error': 'Only the session creator can approve participants.'}, status=403)
+        participant = get_object_or_404(FocusBuddyParticipant, id=participant_id, session=session)
+        if participant.status != 'pending':
+            return Response({'error': 'Participant is not pending approval.'}, status=400)
+        participant.status = 'approved'
+        participant.save()
+        
+        # Send real-time notification to host about updated request
+        try:
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'webrtc_session_{session_id}',
+                {
+                    'type': 'notify_host_request_updated',
+                    'participant_id': participant.id,
+                    'user_name': participant.user.name,
+                    'status': 'approved'
+                }
+            )
+            print(f"DEBUG: Sent approval notification for participant {participant.id}")
+            
+            # Send notification directly to the participant
+            async_to_sync(channel_layer.group_send)(
+                f'user_{participant.user.id}',
+                {
+                    'type': 'notify_participant_admission_status',
+                    'status': 'approved',
+                    'message': 'Your join request has been approved! You can now join the video call.',
+                    'session_id': session_id
+                }
+            )
+            print(f"DEBUG: Sent approval notification to participant {participant.user.id}")
+        except Exception as e:
+            print(f"DEBUG: Failed to send approval notification: {e}")
+        
+        serializer = ParticipantSerializer(participant)
+        return Response({'message': 'Participant approved.', 'participant': serializer.data}, status=200)
+
+class RejectParticipantView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, session_id, participant_id):
+        session = get_object_or_404(FocusBuddySession, id=session_id)
+        if session.creator_id != request.user:
+            return Response({'error': 'Only the session creator can reject participants.'}, status=403)
+        participant = get_object_or_404(FocusBuddyParticipant, id=participant_id, session=session)
+        if participant.status != 'pending':
+            return Response({'error': 'Participant is not pending approval.'}, status=400)
+        participant.status = 'rejected'
+        participant.save()
+        
+        # Send real-time notification to host about updated request
+        try:
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'webrtc_session_{session_id}',
+                {
+                    'type': 'notify_host_request_updated',
+                    'participant_id': participant.id,
+                    'user_name': participant.user.name,
+                    'status': 'rejected'
+                }
+            )
+            print(f"DEBUG: Sent rejection notification for participant {participant.id}")
+            
+            # Send notification directly to the participant
+            async_to_sync(channel_layer.group_send)(
+                f'user_{participant.user.id}',
+                {
+                    'type': 'notify_participant_admission_status',
+                    'status': 'rejected',
+                    'message': 'Your join request was rejected by the host.',
+                    'session_id': session_id
+                }
+            )
+            print(f"DEBUG: Sent rejection notification to participant {participant.user.id}")
+        except Exception as e:
+            print(f"DEBUG: Failed to send rejection notification: {e}")
+        
+        serializer = ParticipantSerializer(participant)
+        return Response({'message': 'Participant rejected.', 'participant': serializer.data}, status=200)

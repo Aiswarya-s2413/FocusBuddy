@@ -75,6 +75,8 @@ urlpatterns = [
     path('focus-sessions/<int:session_id>/join/', JoinSessionView.as_view(), name='join-session'),
     path('focus-sessions/<int:session_id>/leave/', LeaveSessionView.as_view(), name='leave-session'),
     path('focus-sessions/<int:session_id>/participant/', UpdateParticipantView.as_view(), name='update-participant'),
+    path('focus-sessions/<int:session_id>/participants/<int:participant_id>/approve/', ApproveParticipantView.as_view(), name='approve-participant'),
+    path('focus-sessions/<int:session_id>/participants/<int:participant_id>/reject/', RejectParticipantView.as_view(), name='reject-participant'),
     
     # Chat functionality
     path('focus-sessions/<int:session_id>/messages/', SessionMessagesView.as_view(), name='session-messages'),
@@ -95,7 +97,7 @@ urlpatterns = [
     path('focus-buddy/history/', FocusBuddyHistoryListView.as_view(), name='focus-buddy-history'),
     path('focus-buddy/created/', UserCreatedSessionsView.as_view(), name='user-created-sessions'),
     path('focus-buddy/participated/', UserParticipatedSessionsView.as_view(), name='user-participated-sessions'),
-    path('focus-buddy/sessions/<int:pk>/', FocusBuddySessionDetailView.as_view(), name='focus-buddy-session-detail'),
+    path('focus-buddy/sessions/<int:pk>/', FocusBuddySessionDetailedView.as_view(), name='focus-buddy-session-detail'),
     path('focus-buddy/stats/', FocusBuddyStatsView.as_view(), name='focus-buddy-stats'),
 
     path('pomodoro-history/', PomodoroHistoryListView.as_view(), name='pomodoro-history-list'),

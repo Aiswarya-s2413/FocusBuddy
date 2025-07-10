@@ -638,6 +638,14 @@ class FocusBuddyParticipant(models.Model):
     # Participation preferences
     camera_enabled = models.BooleanField(default=True)
     microphone_enabled = models.BooleanField(default=True)
+
+    # Host admit status
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='approved')  # Default to approved for backward compatibility
     
     class Meta:
         ordering = ['joined_at']
@@ -650,7 +658,7 @@ class FocusBuddyParticipant(models.Model):
     @property
     def is_active(self):
         """Check if participant is currently active in the session"""
-        return self.left_at is None
+        return self.left_at is None and self.status == 'approved'
     
     @property
     def participation_duration_minutes(self):

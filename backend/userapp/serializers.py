@@ -724,15 +724,16 @@ class ParticipantSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.name', read_only=True)
     user_id = serializers.IntegerField(source='user.id', read_only=True)
     participation_duration = serializers.IntegerField(source='participation_duration_minutes', read_only=True)
+    status = serializers.CharField(read_only=True)
     
     class Meta:
         model = FocusBuddyParticipant
         fields = [
             'id', 'user_id', 'user_name', 'joined_at', 'left_at', 
             'camera_enabled', 'microphone_enabled', 'is_active', 
-            'participation_duration'
+            'participation_duration', 'status'
         ]
-        read_only_fields = ['id', 'joined_at', 'left_at', 'is_active']
+        read_only_fields = ['id', 'joined_at', 'left_at', 'is_active', 'status']
 
 
 class FocusBuddySessionListSerializer(serializers.ModelSerializer):
@@ -757,7 +758,7 @@ class FocusBuddySessionDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for individual session with participants"""
     creator_name = serializers.CharField(source='creator_id.name', read_only=True)
     creator_id = serializers.IntegerField(source='creator_id.id', read_only=True)
-    participants = ParticipantSerializer(many=True, read_only=True)
+    participants = serializers.SerializerMethodField()
     participant_count = serializers.IntegerField(read_only=True)
     remaining_time_seconds = serializers.IntegerField(read_only=True)
     can_join = serializers.BooleanField(read_only=True)
@@ -773,6 +774,12 @@ class FocusBuddySessionDetailSerializer(serializers.ModelSerializer):
             'ended_at', 'remaining_time_seconds', 'can_join', 'is_full', 
             'is_expired', 'created_at', 'updated_at'
         ]
+
+    def get_participants(self, obj):
+        qs = obj.participants.all()
+        import sys
+        print(f"[DEBUG] Serializing participants for session {obj.id}: {[p.user.name for p in qs]}", file=sys.stderr)
+        return ParticipantSerializer(qs, many=True).data
 
 
 class FocusBuddySessionCreateSerializer(serializers.ModelSerializer):

@@ -2,6 +2,7 @@ import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
+from userapp.models import FocusBuddyParticipant
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +12,7 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.session_id = self.scope['url_route']['kwargs']['session_id']
         self.room_group_name = f'webrtc_session_{self.session_id}'
+        self.user_group_name = f'user_{self.scope["user"].id}'  # User-specific group
         self.user = self.scope['user']
 
         logger.info(f"[WebSocket] Connection attempt for session {self.session_id}")
@@ -28,9 +30,58 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             await self.close(code=4001)
             return
 
+        # Host admit logic: Only allow approved participants
         try:
+            # Only check for non-hosts (host is always allowed)
+            from userapp.models import FocusBuddySession
+            session = await sync_to_async(FocusBuddySession.objects.get)(id=self.session_id)
+            if session.creator_id_id != self.user.id:
+                try:
+                    participant = await sync_to_async(FocusBuddyParticipant.objects.get)(session_id=self.session_id, user_id=self.user.id)
+                    if participant.status == 'pending':
+                        await self.accept()
+                        # Add user to their specific group for admission notifications
+                        await self.channel_layer.group_add(self.user_group_name, self.channel_name)
+                        print(f"WebSocket: Added user {self.user.id} to group {self.user_group_name} (pending)")
+                        await self.send(text_data=json.dumps({
+                            'type': 'admission-status',
+                            'status': 'pending',
+                            'message': 'Waiting for host approval.'
+                        }))
+                        return
+                    elif participant.status == 'rejected':
+                        await self.accept()
+                        await self.send(text_data=json.dumps({
+                            'type': 'admission-status',
+                            'status': 'rejected',
+                            'message': 'Your join request was rejected by the host.'
+                        }))
+                        await self.close(code=4003)
+                        return
+                    elif participant.status != 'approved':
+                        await self.accept()
+                        await self.send(text_data=json.dumps({
+                            'type': 'admission-status',
+                            'status': participant.status,
+                            'message': 'You are not approved to join this session.'
+                        }))
+                        await self.close(code=4004)
+                        return
+                except FocusBuddyParticipant.DoesNotExist:
+                    await self.accept()
+                    await self.send(text_data=json.dumps({
+                        'type': 'admission-status',
+                        'status': 'not-registered',
+                        'message': 'You are not registered as a participant.'
+                    }))
+                    await self.close(code=4005)
+                    return
+            # If host or approved participant, proceed as before
             await self.accept()
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+            # Also add user to their specific group for admission notifications
+            await self.channel_layer.group_add(self.user_group_name, self.channel_name)
+            print(f"WebSocket: Added user {self.user.id} to group {self.user_group_name} (approved/host)")
 
             if self.session_id not in active_participants:
                 active_participants[self.session_id] = set()
@@ -65,6 +116,9 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         try:
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+            # Also remove from user-specific group
+            if hasattr(self, 'user_group_name'):
+                await self.channel_layer.group_discard(self.user_group_name, self.channel_name)
 
             if self.session_id in active_participants:
                 active_participants[self.session_id].discard(self.user.id)
@@ -158,13 +212,42 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
                 self.room_group_name,
                 {
                     'type': 'chat_message',
+                    'message': message,
                     'sender_id': self.user.id,
-                    'sender_name': self.user.username,
-                    'message': message
+                    'sender_name': self.user.username
                 }
             )
 
-    # ---------- Group Message Events ----------
+    # ---------- Host Notification Handler ----------
+    async def notify_host_new_request(self, event):
+        """Send notification to host about new join request"""
+        await self.send(text_data=json.dumps({
+            'type': 'new_join_request',
+            'participant_id': event['participant_id'],
+            'user_name': event['user_name'],
+            'user_id': event['user_id']
+        }))
+
+    async def notify_host_request_updated(self, event):
+        """Send notification to host about updated join request status"""
+        await self.send(text_data=json.dumps({
+            'type': 'join_request_updated',
+            'participant_id': event['participant_id'],
+            'user_name': event['user_name'],
+            'status': event['status']
+        }))
+
+    # ---------- Participant Admission Status Handler ----------
+    async def notify_participant_admission_status(self, event):
+        print(f"WebSocket: notify_participant_admission_status called for user {self.user.id} with event: {event}")
+        await self.send(text_data=json.dumps({
+            'type': 'admission-status',
+            'status': event['status'],
+            'message': event['message'],
+            'session_id': event['session_id']
+        }))
+
+    # ---------- WebRTC Message Handlers ----------
     async def webrtc_offer(self, event):
         if event['target_id'] == self.user.id:
             await self.send(text_data=json.dumps({

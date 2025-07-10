@@ -15,7 +15,10 @@ import {
   VideoOff,
   Settings,
   UserPlus,
-  Calendar
+  Calendar,
+  Phone,
+  PhoneOff,
+  Check
 } from "lucide-react";
 import { Toggle } from "../../components/ui/toggle";
 import {
@@ -45,6 +48,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { userAxios } from "../../utils/axios";
 import { useSimpleToast } from "../../components/ui/toast";
 import WebRTCService from "../../utils/webrtcService";
+import { toast } from "../../hooks/use-toast";
 
 
 const WEBRTC_CONFIG = {
@@ -84,15 +88,99 @@ function FocusBuddy() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
 
+  // Add new state for pending join and rejection
+  const [pendingApproval, setPendingApproval] = useState(false);
+  const [rejected, setRejected] = useState(false);
+  const [pendingParticipants, setPendingParticipants] = useState([]);
+  const [isHost, setIsHost] = useState(false);
+  const [showPendingRequestsDialog, setShowPendingRequestsDialog] = useState(false);
   
   // WebRTC service ref
   const webrtcService = useRef(null);
   const localVideoRef = useRef(null);
 
+  // Add state for unread messages
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [chatOpen, setChatOpen] = useState(false);
+
+  // Increment unread count when a new message arrives and chat is closed
+  useEffect(() => {
+    if (!chatOpen && messages.length > 0) {
+      setUnreadMessages((prev) => prev + 1);
+    }
+    // eslint-disable-next-line
+  }, [messages.length]);
+
+  // Reset unread count when chat is opened
+  useEffect(() => {
+    if (chatOpen) setUnreadMessages(0);
+  }, [chatOpen]);
+
+  // Setup local video stream in the video element
+  const setupLocalVideo = async () => {
+    if (webrtcService.current && localVideoRef.current) {
+      const stream = webrtcService.current.localStream;
+      if (stream) {
+        localVideoRef.current.srcObject = stream;
+      }
+    }
+  };
+
   useEffect(() => {
     // Fetch active sessions on component mount
     fetchSessions();
   }, []);
+
+  // Add useEffect to check if user is host and fetch pending participants
+  useEffect(() => {
+    if (currentSession && sessionStarted) {
+      const checkIfHost = currentSession.creator_id === JSON.parse(localStorage.getItem('user'))?.id;
+      setIsHost(checkIfHost);
+      
+      if (checkIfHost) {
+        fetchPendingParticipants();
+      }
+    }
+  }, [currentSession, sessionStarted]);
+
+  // Function to fetch pending participants
+  const fetchPendingParticipants = async () => {
+    if (!currentSession || !isHost) return;
+    
+    try {
+      const response = await userAxios.get(`/focus-sessions/${currentSession.id}/`);
+      if (response.data && response.data.participants) {
+        const pending = response.data.participants.filter(p => p.status === 'pending');
+        setPendingParticipants(pending);
+      }
+    } catch (err) {
+      console.error('Failed to fetch pending participants:', err);
+    }
+  };
+
+  // Function to handle admitting a participant
+  const handleAdmit = async (participantId) => {
+    try {
+      await userAxios.post(`/focus-sessions/${currentSession.id}/participants/${participantId}/approve/`);
+      toast.success('Participant admitted successfully');
+      // Real-time WebSocket update will handle UI refresh
+    } catch (err) {
+      console.error('Failed to admit participant:', err);
+      toast.error('Failed to admit participant');
+    }
+  };
+
+  // Function to handle rejecting a participant
+  const handleReject = async (participantId) => {
+    try {
+      await userAxios.post(`/focus-sessions/${currentSession.id}/participants/${participantId}/reject/`);
+      toast.success('Participant rejected');
+      // Real-time WebSocket update will handle UI refresh
+    } catch (err) {
+      console.error('Failed to reject participant:', err);
+      toast.error('Failed to reject participant');
+    }
+  };
 
   const fetchSessions = async () => {
     try {
@@ -193,206 +281,157 @@ const initializeWebRTC = async (sessionId, isCreator = false) => {
         const hasAudio = devices.some(device => device.kind === 'audioinput');
         
         if (!hasVideo && isVideoOn) {
-          toast.warning('No camera detected');
+          console.warn('No video devices found, disabling video');
           setIsVideoOn(false);
         }
         if (!hasAudio && isAudioOn) {
-          toast.warning('No microphone detected');
+          console.warn('No audio devices found, disabling audio');
           setIsAudioOn(false);
         }
-        
-        return true;
       } catch (err) {
-        console.error('Media devices check failed:', err);
-        toast.error('Failed to access media devices');
-        return false;
+        console.error('Error checking media devices:', err);
       }
     };
-    
-    if (!(await checkMediaDevices())) {
-      throw new Error('Media devices not available');
-    }
+
+    await checkMediaDevices();
 
     // Initialize WebRTC service
-    webrtcService.current = new WebRTCService({
-      config: WEBRTC_CONFIG,
-      mediaConstraints: {
-        audio: isAudioOn,
-        video: isVideoOn ? {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user'
-        } : false
-      }
-    });
+    webrtcService.current = new WebRTCService();
     
-    // CRITICAL: Set up localStream event listener BEFORE initialization
-    webrtcService.current.on('localStream', (stream) => {
-      console.log('Local stream received:', stream);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-        // Force video to play
-        localVideoRef.current.play().catch(e => console.log('Video play failed:', e));
-        console.log('Local video element set with stream');
-      } else {
-        console.error('Local video ref is null!');
-      }
+    // Set up event listeners
+    webrtcService.current.on('userJoined', (userId, userName) => {
+      // Defensive: ensure userId is always a number
+      const id = typeof userId === 'object' && userId !== null ? userId.id : userId;
+      console.log(`[FocusBuddy] userJoined event: userId=${id}, userName=${userName}`);
+      setParticipants(prev => {
+        // Prevent duplicates
+        if (prev.some(p => p.id === id)) return prev;
+        return [...prev, { id, user_name: userName, stream: null }];
+      });
     });
 
-    // Set up all other event listeners
     webrtcService.current.on('remoteStream', (userId, stream) => {
-      console.log('Remote stream received from user:', userId);
-      setParticipants(prev => {
-        const existing = prev.find(p => p.id === userId);
-        if (existing) {
-          return prev.map(p => p.id === userId ? { ...p, stream } : p);
-        }
-        return [...prev, { id: userId, stream, user_name: `User ${userId}` }];
-      });
-    });
-
-    webrtcService.current.on('userJoined', (user) => {
-      console.log('User joined:', user);
-      setParticipants(prev => {
-        const existing = prev.find(p => p.id === user.id);
-        if (!existing) {
-          return [...prev, { 
-            id: user.id, 
-            user_name: user.name,
-            camera_enabled: true,
-            microphone_enabled: true,
-            is_active: true
-          }];
-        }
-        return prev;
-      });
+      const id = typeof userId === 'object' && userId !== null ? userId.id : userId;
+      console.log(`[FocusBuddy] remoteStream event: userId=${id}, stream=`, stream);
+      setParticipants(prev =>
+        prev.map(p => p.id === id ? { ...p, stream } : p)
+      );
     });
 
     webrtcService.current.on('userLeft', (userId) => {
-      console.log('User left:', userId);
-      setParticipants(prev => prev.filter(p => p.id !== userId));
-    });
-
-    webrtcService.current.on('peerMediaStateChanged', ({ videoEnabled, audioEnabled, senderId }) => {
-      setParticipants(prev => prev.map(p => 
-        p.id === senderId 
-          ? { ...p, camera_enabled: videoEnabled, microphone_enabled: audioEnabled }
-          : p
-      ));
-    });
-
-    webrtcService.current.on('error', (error) => {
-      console.error('WebRTC Error:', error);
-      toast.error('Connection error occurred');
-    });
-
-    webrtcService.current.on('connectionStateChange', (state) => {
-      console.log('Connection state:', state);
-      if (state === 'connected') {
-        toast.success('Connected to session');
-      } else if (state === 'disconnected') {
-        toast.warning('Disconnected from session');
-      }
+      const id = typeof userId === 'object' && userId !== null ? userId.id : userId;
+      console.log(`User left: ${id}`);
+      setParticipants(prev => prev.filter(p => p.id !== id));
     });
 
     webrtcService.current.on('chatMessage', (message) => {
-      console.log('Received chat message event:', message);
-      setMessages(prev => [...prev, {
-        sender_name: message.sender_name,
-        message: message.message
-      }]);
+      console.log('Chat message received:', message);
+      setMessages(prev => [...prev, message]);
     });
 
-    webrtcService.current.on('iceConnectionStateChange', (state) => {
-      console.log('ICE connection state:', state);
-      if (state === 'failed') {
-        toast.error('Connection failed - attempting to reconnect...');
-        webrtcService.current.restartIce();
-      } else if (state === 'disconnected') {
-        toast.warning('Connection interrupted - attempting to recover...');
+    webrtcService.current.on('existing-users', (users) => {
+      console.log('Existing users:', users);
+      setParticipants(prev => {
+        // Add any users not already present
+        const newParticipants = users
+          .filter(userId => !prev.some(p => p.id === userId))
+          .map(userId => ({ id: userId, user_name: `User ${userId}`, stream: null }));
+        return [...prev, ...newParticipants];
+      });
+    });
+
+    // Add real-time notification listeners for hosts
+    if (isCreator) {
+      webrtcService.current.on('newJoinRequest', (data) => {
+        console.log('New join request received:', data);
+        setPendingParticipants(prev => [...prev, {
+          id: data.participant_id,
+          user_name: data.user_name,
+          user_id: data.user_id
+        }]);
+        toast.info(`${data.user_name} wants to join your session`);
+        
+        // Play notification sound
+        try {
+          const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT');
+          audio.volume = 0.3;
+          audio.play().catch(e => console.log('Audio play failed:', e));
+        } catch (e) {
+          console.log('Audio creation failed:', e);
+        }
+      });
+
+      webrtcService.current.on('joinRequestUpdated', (data) => {
+        console.log('Join request updated:', data);
+        if (data.status === 'approved' || data.status === 'rejected') {
+          setPendingParticipants(prev => prev.filter(p => p.id !== data.participant_id));
+        }
+      });
+    }
+
+    webrtcService.current.on('admissionStatus', async (status, message, sessionIdFromWS) => {
+      console.log('Admission status:', status, message, sessionIdFromWS);
+      if (status === 'pending') {
+        setPendingApproval(true);
+        setRejected(false);
+        toast.info(message);
+      } else if (status === 'rejected') {
+        setRejected(true);
+        setPendingApproval(false);
+        setSessionStarted(false);
+        setCurrentSession(null);
+        toast.error(message);
+      } else if (status === 'approved') {
+        setPendingApproval(false);
+        setRejected(false);
+        toast.success('You have been admitted to the session!');
+        if (sessionIdFromWS) {
+          try {
+            const sessionRes = await userAxios.get(`/focus-sessions/${sessionIdFromWS}/`);
+            console.log('Fetched session details after approval:', sessionRes.data);
+            if (sessionRes.data && Array.isArray(sessionRes.data.participants)) {
+              console.log('Participants from API:', sessionRes.data.participants);
+              setParticipants(sessionRes.data.participants.map(p => ({
+                id: p.user_id,
+                user_name: p.user_name,
+                stream: null
+              })));
+            } else {
+              console.warn('No participants array in session details response:', sessionRes.data);
+              setParticipants([]);
+            }
+            setCurrentSession(sessionRes.data);
+            // Set timer in sync with session start
+            if (sessionRes.data.duration_minutes && sessionRes.data.started_at) {
+              const startedAt = new Date(sessionRes.data.started_at);
+              const now = new Date();
+              const elapsed = Math.floor((now - startedAt) / 1000); // seconds
+              const total = sessionRes.data.duration_minutes * 60;
+              setTimeRemaining(Math.max(total - elapsed, 0));
+            }
+            setSessionStarted(true); // Only after session is fully loaded!
+            await initializeWebRTC(sessionIdFromWS, true);
+          } catch (err) {
+            console.error('Failed to fetch session after approval:', err);
+            toast.error('Failed to join session after approval.');
+          }
+        } else {
+          toast.error('Session ID missing in approval event.');
+        }
       }
     });
 
-    // Initialize WebRTC - this should trigger the localStream event
-    console.log('Initializing WebRTC...');
-    const initSuccess = await webrtcService.current.initialize(sessionId);
-    if (!initSuccess) {
-      throw new Error('Failed to initialize WebRTC');
-    }
+    // Initialize WebRTC connection
+    await webrtcService.current.initialize(sessionId, null, 'group');
+    
+    // Set up local video
+    await setupLocalVideo();
     
     console.log('WebRTC initialized successfully');
     
-    // ENHANCED: Multiple attempts to get local stream with different methods
-    const setupLocalVideo = async () => {
-      // Method 1: Try to get from WebRTC service
-      let localStream = webrtcService.current.getLocalStream?.();
-      
-      if (!localStream) {
-        console.log('No local stream from WebRTC service, trying direct media access...');
-        
-        // Method 2: Get stream directly from getUserMedia
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({
-            audio: isAudioOn,
-            video: isVideoOn ? {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              facingMode: 'user'
-            } : false
-          });
-          console.log('Got stream directly from getUserMedia:', localStream);
-        } catch (err) {
-          console.error('Failed to get stream from getUserMedia:', err);
-          throw err;
-        }
-      }
-      
-      if (localStream && localVideoRef.current) {
-        console.log('Setting local stream to video element...');
-        localVideoRef.current.srcObject = localStream;
-        
-        // Force video to play and handle autoplay restrictions
-        try {
-          await localVideoRef.current.play();
-          console.log('Local video started playing successfully');
-        } catch (playError) {
-          console.log('Autoplay failed, but video is set:', playError);
-          // This is usually fine, the video will play when user interacts
-        }
-        
-        // If WebRTC service doesn't have the stream, set it
-        if (!webrtcService.current.getLocalStream?.()) {
-          webrtcService.current.setLocalStream?.(localStream);
-        }
-      }
-    };
-    
-    // Try immediately
-    await setupLocalVideo();
-    
-    // Also try after a short delay in case there's a timing issue
-    setTimeout(async () => {
-      if (localVideoRef.current && !localVideoRef.current.srcObject) {
-        console.warn('Local video still not set up after 1 second, trying again...');
-        try {
-          await setupLocalVideo();
-        } catch (err) {
-          console.error('Failed to setup local video on retry:', err);
-        }
-      }
-    }, 1000);
-    
-    return true;
-    
   } catch (err) {
     console.error('Failed to initialize WebRTC:', err);
-    toast.error('Failed to initialize video/audio');
-    
-    if (webrtcService.current) {
-      webrtcService.current.cleanup();
-      webrtcService.current = null;
-    }
-    
+    toast.error('Failed to initialize video/audio. Please check your permissions.');
     throw err;
   }
 };
@@ -413,6 +452,8 @@ const initializeWebRTCForCreator = async (sessionId) => {
 const joinSession = async (sessionId) => {
   try {
     setLoading(true);
+    setPendingApproval(false);
+    setRejected(false);
     
     const payload = {
       camera_enabled: isVideoOn,
@@ -423,22 +464,30 @@ const joinSession = async (sessionId) => {
     
     // First try to join the session
     const joinResponse = await userAxios.post(`/focus-sessions/${sessionId}/join/`, payload);
-    
-    if (!joinResponse.data) {
-      throw new Error('No data received from join request');
-    }
 
-    console.log('Successfully joined session:', joinResponse.data);
-
-    // Initialize WebRTC using the unified function
+    // Always set currentSession and open WebRTC, even if pending
+    setCurrentSession({ id: sessionId });
     await initializeWebRTC(sessionId, false);
-    
-    setCurrentSession(joinResponse.data);
-    setTimeRemaining(joinResponse.data.duration_minutes * 60);
-    setSessionStarted(true);
-    toast.success('Joined session successfully');
-    
+
+    if (joinResponse.data && joinResponse.data.pending) {
+      setPendingApproval(true);
+      setRejected(false);
+      setSessionStarted(false);
+      toast.info('Waiting for host approval...');
+      // Do NOT return here! WebSocket must stay open!
+    } else {
+      setSessionStarted(true);
+      toast.success('Joined session successfully');
+    }
   } catch (err) {
+    if (err.response && err.response.data && err.response.data.rejected) {
+      setRejected(true);
+      setPendingApproval(false);
+      setSessionStarted(false);
+      setCurrentSession(null);
+      toast.error('Your join request was rejected by the host.');
+      return;
+    }
     console.error('Join session error:', err);
     
     // Error handling code remains the same...
@@ -819,29 +868,40 @@ const getVideoGridLayout = () => {
               </div>
             </div>
             
+
+
             {/* Video Grid */}
               {(() => {
                 const layout = getVideoGridLayout();
+                // Get current user ID
+                const myUserId = JSON.parse(localStorage.getItem('user'))?.id;
+                console.log('Rendering participants:', participants, 'myUserId:', myUserId);
                 return (
                   <div className={layout.containerClass}>
-                    {/* Your video */}
-                    <div className={layout.videoClass}>
-                      {isVideoOn ? (
-                        <video 
-                          ref={localVideoRef}
-                          autoPlay 
-                          muted 
+                    {/* Render remote participants */}
+                    {participants.filter(p => p.id !== myUserId).map(p => (
+                      <div key={p.id} className={layout.videoClass}>
+                        <video
+                          ref={el => {
+                            if (el && p.stream) {
+                              el.srcObject = p.stream;
+                              console.log('Attached stream to video element for user', p.id, p.stream);
+                            }
+                          }}
+                          autoPlay
                           playsInline
                           className="w-full h-full object-cover"
                         />
-                      ) : (
-                        <div className="text-center">
-                          <div className="bg-gradient-to-br from-purple-400 to-purple-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                            <VideoOff className="h-8 w-8 text-white" />
-                          </div>
-                          <p className="text-gray-400 text-sm font-medium">Camera Off</p>
+                        <div className="absolute bottom-3 left-3">
+                          <Badge className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-lg">
+                            {p.user_name || `User ${p.id}`}
+                          </Badge>
                         </div>
-                      )}
+                      </div>
+                    ))}
+                    {/* Render local video separately */}
+                    <div className={layout.videoClass}>
+                      <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                       <div className="absolute bottom-3 left-3">
                         <Badge className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-lg">
                           You
@@ -860,52 +920,6 @@ const getVideoGridLayout = () => {
                         )}
                       </div>
                     </div>
-                    
-                    {/* Other participants */}
-                    {Array.isArray(participants) && participants
-                      .filter(p => p.is_active !== false)
-                      .map((participant) => (
-                      <div key={participant.id} className={layout.videoClass}>
-                        {participant.stream ? (
-                          <video 
-                            autoPlay 
-                            playsInline
-                            className="w-full h-full object-cover"
-                            ref={(videoEl) => {
-                              if (videoEl && participant.stream) {
-                                videoEl.srcObject = participant.stream;
-                              }
-                            }}
-                          />
-                        ) : (
-                          <div className="text-center">
-                            <div className="bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                              <span className="text-white font-bold text-xl">
-                                {participant.user_name?.charAt(0) || 'U'}
-                              </span>
-                            </div>
-                            <p className="text-gray-400 text-sm font-medium">{participant.user_name}</p>
-                          </div>
-                        )}
-                        <div className="absolute bottom-3 left-3">
-                          <Badge className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-0 shadow-lg">
-                            {participant.user_name}
-                          </Badge>
-                        </div>
-                        <div className="absolute top-3 right-3 flex space-x-1">
-                          {!participant.camera_enabled && (
-                            <div className="bg-red-500 bg-opacity-80 rounded-full p-1">
-                              <VideoOff className="h-3 w-3 text-white" />
-                            </div>
-                          )}
-                          {!participant.microphone_enabled && (
-                            <div className="bg-red-500 bg-opacity-80 rounded-full p-1">
-                              <MicOff className="h-3 w-3 text-white" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 );
               })()}
@@ -936,14 +950,21 @@ const getVideoGridLayout = () => {
                   >
                     {isAudioOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
                   </Button>
-                  <Popover>
+                  <Popover open={chatOpen} onOpenChange={setChatOpen}>
                     <PopoverTrigger asChild>
                       <Button 
                         variant="outline"
                         size="lg"
-                        className="border-2 border-purple-300 text-purple-600 bg-white hover:bg-purple-50 transition-all duration-200 shadow-sm"
+                        className="border-2 border-purple-300 text-purple-600 bg-white hover:bg-purple-50 transition-all duration-200 shadow-sm relative"
                       >
-                        <MessageCircle className="h-5 w-5" />
+                        <span className="relative">
+                          <MessageCircle className="h-5 w-5" />
+                          {unreadMessages > 0 && (
+                            <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center">
+                              {unreadMessages}
+                            </Badge>
+                          )}
+                        </span>
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-80">
@@ -980,6 +1001,24 @@ const getVideoGridLayout = () => {
                       </div>
                     </PopoverContent>
                   </Popover>
+                  
+                  {/* Host: Pending Requests Button */}
+                  {isHost && (
+                    <Button 
+                      variant="outline"
+                      size="lg"
+                      className="border-2 border-orange-300 text-orange-600 bg-white hover:bg-orange-50 transition-all duration-200 shadow-sm relative"
+                      onClick={() => setShowPendingRequestsDialog(true)}
+                      disabled={pendingParticipants.length === 0}
+                    >
+                      <UserPlus className="h-5 w-5" />
+                      {pendingParticipants.length > 0 && (
+                        <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center">
+                          {pendingParticipants.length}
+                        </Badge>
+                      )}
+                    </Button>
+                  )}
                 </div>
                 <Button 
                   variant="destructive"
@@ -1064,6 +1103,87 @@ const getVideoGridLayout = () => {
             ) : null}
           </div>
         )}
+        {pendingApproval && (
+          <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4 text-center">
+            Waiting for host approval to join the session...
+          </div>
+        )}
+        {rejected && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-center">
+            Your join request was rejected by the host.
+          </div>
+        )}
+
+        {/* Pending Requests Dialog */}
+        <Dialog open={showPendingRequestsDialog} onOpenChange={setShowPendingRequestsDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center text-orange-600">
+                <UserPlus className="h-5 w-5 mr-2" />
+                Pending Join Requests ({pendingParticipants.length})
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {pendingParticipants.length === 0 ? (
+                <div className="text-center py-8">
+                  <UserPlus className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-500">No pending join requests</p>
+                </div>
+              ) : (
+                pendingParticipants.map(participant => (
+                  <div key={participant.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <Avatar className="h-10 w-10 mr-3">
+                        <AvatarFallback className="bg-blue-100 text-blue-600">
+                          {participant.user_name?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-gray-900">{participant.user_name}</p>
+                        <p className="text-sm text-gray-500">Wants to join your session</p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button 
+                        size="sm" 
+                        className="bg-green-500 hover:bg-green-600 text-white"
+                        onClick={() => {
+                          handleAdmit(participant.id);
+                          if (pendingParticipants.length === 1) {
+                            setShowPendingRequestsDialog(false);
+                          }
+                        }}
+                      >
+                        Admit
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => {
+                          handleReject(participant.id);
+                          if (pendingParticipants.length === 1) {
+                            setShowPendingRequestsDialog(false);
+                          }
+                        }}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowPendingRequestsDialog(false)}
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </div>
       <ToastContainer/>
     </div>
