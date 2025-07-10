@@ -3,8 +3,8 @@ import {
   Table, 
   TableBody, 
   TableCell, 
-  TableHead, 
   TableHeader, 
+  TableHeaderCell, 
   TableRow 
 } from "../ui/table";
 import { Badge } from "../ui/badge";
@@ -130,11 +130,11 @@ const RecentActivityTable = ({ activities: propActivities }) => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[50px]"></TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>Time</TableHead>
-              <TableHead className="w-[100px]">Type</TableHead>
+              <TableHeaderCell className="w-[50px]"></TableHeaderCell>
+              <TableHeaderCell>User</TableHeaderCell>
+              <TableHeaderCell>Action</TableHeaderCell>
+              <TableHeaderCell>Time</TableHeaderCell>
+              <TableHeaderCell className="w-[100px]">Type</TableHeaderCell>
             </TableRow>
           </TableHeader>
           <TableBody>

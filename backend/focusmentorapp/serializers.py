@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.db import transaction
 from .utils import CloudinaryService
 from django.contrib.auth import authenticate, get_user_model
+from userapp.models import SessionReview
 
 User = get_user_model()
 
@@ -613,11 +614,17 @@ class SubjectSerializer(serializers.ModelSerializer):
         model = Subject
         fields = ['id', 'name']
 
+class SessionReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionReview
+        fields = ['rating', 'review_text']
+
 class MentorSessionSerializer(serializers.ModelSerializer):
     """Serializer for MentorSession with nested relationships"""
     student = UserBasicSerializer(read_only=True)
     mentor = serializers.SerializerMethodField()
     subjects = SubjectSerializer(many=True, read_only=True)
+    review = SessionReviewSerializer(read_only=True)
     
     class Meta:
         model = MentorSession
@@ -649,6 +656,7 @@ class MentorSessionSerializer(serializers.ModelSerializer):
             'subjects',
             'is_upcoming',
             'session_datetime',
+            'review',
         ]
         read_only_fields = [
             'id',
@@ -708,3 +716,34 @@ class MentorWalletSerializer(serializers.Serializer):
     wallet_summary = WalletSummarySerializer()
     earnings = MentorEarningsSerializer(many=True)
     earnings_count = serializers.IntegerField()
+
+class MentorSessionReviewSerializer(serializers.ModelSerializer):
+    session_id = serializers.IntegerField(source='session.id', read_only=True)
+    scheduled_date = serializers.DateField(source='session.scheduled_date', read_only=True)
+    scheduled_time = serializers.TimeField(source='session.scheduled_time', read_only=True)
+    student = UserBasicSerializer(source='session.student', read_only=True)
+    mentor = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SessionReview
+        fields = [
+            'id',
+            'session_id',
+            'scheduled_date',
+            'scheduled_time',
+            'student',
+            'mentor',
+            'rating',
+            'review_text',
+            'created_at',
+        ]
+
+    def get_mentor(self, obj):
+        mentor = getattr(obj.session, 'mentor', None)
+        if mentor and hasattr(mentor, 'user'):
+            return {
+                'id': mentor.user.id,
+                'name': mentor.user.name,
+                'email': mentor.user.email,
+            }
+        return None

@@ -22,6 +22,7 @@ urlpatterns = [
     path('mentor-sessions/<int:session_id>/start/', StartMentorSessionView.as_view(), name='mentor-session-start'),
     path('mentor-sessions/<int:session_id>/cancel/', CancelMentorSessionView.as_view(), name='mentor-session-cancel'),
     path('wallet/', MentorWalletView.as_view(), name='mentor-wallet'),
+    path('session-reviews/', MentorSessionReviewListView.as_view(), name='mentor-session-reviews'),
     
     
     

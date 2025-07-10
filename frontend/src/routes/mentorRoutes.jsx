@@ -10,6 +10,7 @@ import MentorLayout from "../components/mentors/MentorLayout";
 import MentorProfileDisplay from "../pages/mentor/MentorProfileDisplay";
 import VideoCallPage from "../components/VideoCallPage";
 import MentorWallet from "../pages/mentor/MentorWallet";
+import MentorFeedback from "../pages/mentor/MentorFeedback";
 
 // Protected route wrapper
 const PrivateRoute = ({ children }) => {
@@ -54,6 +55,16 @@ const MentorRoutes = () => {
                 }
             />
             <Route path="/video-call/:sessionId" element={<PrivateRoute><VideoCallPage /></PrivateRoute>} />
+            <Route
+                path="/feedback"
+                element={
+                    <PrivateRoute>
+                        <MentorLayout>
+                            <MentorFeedback />
+                        </MentorLayout>
+                    </PrivateRoute>
+                }
+            />
         </Routes>
     );
 };

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Wallet, DollarSign, TrendingUp, CheckCircle, AlertCircle, Clock, RefreshCw, WifiOff, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from "../../components/ui/table";
 import axios from "axios";
 
 const MentorWallet = () => {
@@ -391,11 +391,11 @@ const MentorWallet = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-gray-50">
-                      <TableHead className="font-semibold text-gray-700">Session Details</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Amount</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Commission</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Your Earning</TableHead>
-                      <TableHead className="font-semibold text-gray-700">Date</TableHead>
+                      <TableHeaderCell className="font-semibold text-gray-700">Session Details</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700">Amount</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700">Commission</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700">Your Earning</TableHeaderCell>
+                      <TableHeaderCell className="font-semibold text-gray-700">Date</TableHeaderCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

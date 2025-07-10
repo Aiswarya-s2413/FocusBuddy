@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Clock, CheckCircle, XCircle, Coffee, ChevronLeft, ChevronRight, Loader2, AlertCircle, Filter } from 'lucide-react';
 import { userAxios } from '../../utils/axios';
@@ -216,12 +216,12 @@ const PomodoroHistoryTable = () => {
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50/80">
-              <TableHead className="font-semibold text-slate-700">Task</TableHead>
-              <TableHead className="font-semibold text-slate-700">Session Type</TableHead>
-              <TableHead className="font-semibold text-slate-700">Start Time</TableHead>
-              <TableHead className="font-semibold text-slate-700">End Time</TableHead>
-              <TableHead className="font-semibold text-slate-700">Duration</TableHead>
-              <TableHead className="font-semibold text-slate-700">Status</TableHead>
+              <TableHeaderCell className="font-semibold text-slate-700">Task</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Session Type</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Start Time</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">End Time</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Duration</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Status</TableHeaderCell>
             </TableRow>
           </TableHeader>
           <TableBody>

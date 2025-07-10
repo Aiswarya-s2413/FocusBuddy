@@ -15,6 +15,7 @@ const Table = React.forwardRef((props, ref) => {
 });
 Table.displayName = "Table";
 
+// TableHeader renders <thead>
 const TableHeader = React.forwardRef((props, ref) => {
   const { className, ...rest } = props;
   return (
@@ -26,6 +27,22 @@ const TableHeader = React.forwardRef((props, ref) => {
   );
 });
 TableHeader.displayName = "TableHeader";
+
+// TableHeaderCell renders <th>
+const TableHeaderCell = React.forwardRef((props, ref) => {
+  const { className, ...rest } = props;
+  return (
+    <th
+      ref={ref}
+      className={cn(
+        "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+        className
+      )}
+      {...rest}
+    />
+  );
+});
+TableHeaderCell.displayName = "TableHeaderCell";
 
 const TableBody = React.forwardRef((props, ref) => {
   const { className, ...rest } = props;
@@ -63,21 +80,6 @@ const TableRow = React.forwardRef((props, ref) => {
 });
 TableRow.displayName = "TableRow";
 
-const TableHead = React.forwardRef((props, ref) => {
-  const { className, ...rest } = props;
-  return (
-    <th
-      ref={ref}
-      className={cn(
-        "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
-        className
-      )}
-      {...rest}
-    />
-  );
-});
-TableHead.displayName = "TableHead";
-
 const TableCell = React.forwardRef((props, ref) => {
   const { className, ...rest } = props;
   return (
@@ -107,7 +109,7 @@ export {
   TableHeader,
   TableBody,
   TableFooter,
-  TableHead,
+  TableHeaderCell,
   TableRow,
   TableCell,
   TableCaption,

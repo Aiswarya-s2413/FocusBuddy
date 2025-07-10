@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Users, CheckCircle, XCircle, Clock, AlertCircle, Filter, RefreshCw, Loader2 } from 'lucide-react';
@@ -219,14 +219,14 @@ const FocusBuddyHistoryTable = () => {
         <Table>
           <TableHeader>
             <TableRow className="bg-slate-50/80">
-              <TableHead className="font-semibold text-slate-700">Session</TableHead>
-              <TableHead className="font-semibold text-slate-700">Type</TableHead>
-              <TableHead className="font-semibold text-slate-700">Creator</TableHead>
-              <TableHead className="font-semibold text-slate-700">Start Time</TableHead>
-              <TableHead className="font-semibold text-slate-700">End Time</TableHead>
-              <TableHead className="font-semibold text-slate-700">Duration</TableHead>
-              <TableHead className="font-semibold text-slate-700">Participants</TableHead>
-              <TableHead className="font-semibold text-slate-700">Status</TableHead>
+              <TableHeaderCell className="font-semibold text-slate-700">Session</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Type</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Creator</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Start Time</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">End Time</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Duration</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Participants</TableHeaderCell>
+              <TableHeaderCell className="font-semibold text-slate-700">Status</TableHeaderCell>
             </TableRow>
           </TableHeader>
           <TableBody>

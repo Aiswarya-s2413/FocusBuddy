@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
-import { LogOut, User, Wallet } from "lucide-react";
+import { LogOut, User, Wallet, Star } from "lucide-react";
 import { useToast } from "../../hooks/use-toast";
 import axios from "axios";
 
@@ -93,6 +93,21 @@ const MentorNavbar = () => {
           >
             <Wallet size={18} />
             <span>Wallet</span>
+          </NavLink>
+
+          {/* Feedback NavLink */}
+          <NavLink
+            to="/mentor/feedback"
+            className={({ isActive }) =>
+              `flex items-center space-x-2 px-4 py-2 rounded-md transition-colors duration-200 ${
+                isActive
+                  ? 'text-yellow-600 bg-yellow-50'
+                  : 'text-gray-700 hover:text-yellow-600 hover:bg-yellow-100'
+              }`
+            }
+          >
+            <Star size={18} />
+            <span>Feedback</span>
           </NavLink>
 
           {/* Logout Button */}

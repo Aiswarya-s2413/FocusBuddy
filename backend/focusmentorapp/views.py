@@ -19,7 +19,10 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Sum
 from decimal import Decimal
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-
+from .serializers import MentorSessionReviewSerializer
+from userapp.models import SessionReview, Mentor
+from rest_framework.permissions import IsAuthenticated
+from userapp.authentication import MentorCookieJWTAuthentication
 
 
 
@@ -862,3 +865,18 @@ class MentorWalletView(APIView):
             'total_sessions': total_sessions,
             'this_month_earnings': this_month_earnings
         }
+
+class MentorSessionReviewListView(APIView):
+    authentication_classes = [MentorCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            mentor = request.user.mentor_profile
+        except Mentor.DoesNotExist:
+            return Response({'error': 'Mentor profile not found'}, status=404)
+
+        # Get all reviews for sessions where this mentor is the mentor
+        reviews = SessionReview.objects.filter(session__mentor=mentor).select_related('session', 'session__student', 'session__mentor__user')
+        serializer = MentorSessionReviewSerializer(reviews, many=True)
+        return Response({'success': True, 'reviews': serializer.data})
