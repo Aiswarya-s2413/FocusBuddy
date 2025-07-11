@@ -105,5 +105,6 @@ urlpatterns = [
     path('pomodoro-history/<int:pk>/update/', PomodoroSessionUpdateView.as_view(), name='pomodoro-session-update'),
     path('pomodoro-history/<int:pk>/delete/', PomodoroSessionDeleteView.as_view(), name='pomodoro-session-delete'),
     
+    path('mentor-report/', MentorReportAPIView.as_view(), name='mentor-report'),
 
 ]

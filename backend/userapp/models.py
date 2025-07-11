@@ -482,6 +482,21 @@ class SessionReview(models.Model):
     def __str__(self):
         return f"Review by {self.reviewer.name} for session {self.session.id}"
 
+# --- MentorReport model for reporting mentors ---
+class MentorReport(models.Model):
+    reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mentor_reports')
+    mentor = models.ForeignKey(Mentor, on_delete=models.CASCADE, related_name='reports')
+    session = models.ForeignKey(MentorSession, on_delete=models.CASCADE, related_name='mentor_reports')
+    reason = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('reporter', 'mentor', 'session')  # One report per user per session
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Report by {self.reporter.email} on {self.mentor.user.email} (Session {self.session.id})"
+
 
 class SessionMessage(models.Model):
     session = models.ForeignKey(MentorSession, on_delete=models.CASCADE, related_name='messages')

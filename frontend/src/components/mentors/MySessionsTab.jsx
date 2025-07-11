@@ -119,6 +119,11 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
   
   // Local state to track feedback updates without rerendering
   const [localFeedbackUpdates, setLocalFeedbackUpdates] = useState({});
+  // --- Report Mentor State ---
+  const [reportDialog, setReportDialog] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [isReporting, setIsReporting] = useState(false);
+  const [reportedSessions, setReportedSessions] = useState({}); // sessionId: true
 
   const handleCancelSession = async () => {
     if (!selectedSession || !onCancelSession) return;
@@ -329,6 +334,42 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
     }))
   }), [sessions, localFeedbackUpdates]);
 
+  // --- Report Mentor Handlers ---
+  const openReportDialog = (session) => {
+    setSelectedSession(session);
+    setReportReason('');
+    setReportDialog(true);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!selectedSession || !reportReason.trim()) {
+      toast.error('Please provide a reason for reporting.');
+      return;
+    }
+    setIsReporting(true);
+    try {
+      await userAxios.post('/api/user/mentor-report/', {
+        mentor: selectedSession.mentor.id || selectedSession.mentor.mentor_id || selectedSession.mentor.mentorId,
+        session: selectedSession.id,
+        reason: reportReason.trim(),
+      });
+      setReportedSessions(prev => ({ ...prev, [selectedSession.id]: true }));
+      toast.success('Report submitted successfully.');
+      setReportDialog(false);
+      setSelectedSession(null);
+      setReportReason('');
+    } catch (error) {
+      if (error.response?.data?.error?.includes('already reported')) {
+        setReportedSessions(prev => ({ ...prev, [selectedSession.id]: true }));
+        toast.warning('You have already reported this mentor for this session.');
+      } else {
+        toast.error(error.response?.data?.error || 'Failed to submit report.');
+      }
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
   // Render session card
   const renderSessionCard = (session, isPast = false) => {
     const { date, time } = formatDateTime(session.dateTime);
@@ -414,7 +455,7 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
               </Button>
             </>
           ) : (
-            <div className="flex justify-end w-full">
+            <div className="flex flex-col sm:flex-row justify-end w-full gap-2">
               {!session.feedbackProvided ? (
                 <Button
                   variant="outline"
@@ -423,7 +464,7 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
                   <MessageSquare className="h-4 w-4 mr-1" /> Leave Feedback
                 </Button>
               ) : (
-                <div className="flex items-center text-sm text-gray-500">
+                <div className="flex items-center text-sm text-gray-500 mr-2">
                   <span className="mr-1">Your rating:</span>
                   <div className="flex">
                     {[...Array(5)].map((_, i) => (
@@ -439,6 +480,13 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
                   </div>
                 </div>
               )}
+              <Button
+                variant="destructive"
+                onClick={() => openReportDialog(session)}
+                disabled={!!reportedSessions[session.id]}
+              >
+                {reportedSessions[session.id] ? 'Reported' : 'Report Mentor'}
+              </Button>
             </div>
           )}
         </CardFooter>
@@ -598,6 +646,44 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
                 </>
               ) : (
                 'Submit Feedback'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Mentor Dialog */}
+      <Dialog open={reportDialog} onOpenChange={setReportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Report Mentor</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <p>Why are you reporting {selectedSession?.mentor?.name} for this session?</p>
+            <textarea
+              className="w-full p-2 border rounded-md h-24 resize-none"
+              placeholder="Describe the issue..."
+              value={reportReason}
+              onChange={e => setReportReason(e.target.value)}
+              disabled={isReporting}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportDialog(false)} disabled={isReporting}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-red-600 hover:bg-red-700" 
+              onClick={handleSubmitReport}
+              disabled={isReporting || !reportReason.trim()}
+            >
+              {isReporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Reporting...
+                </>
+              ) : (
+                'Submit Report'
               )}
             </Button>
           </DialogFooter>

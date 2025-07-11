@@ -706,6 +706,22 @@ class SessionReviewSerializer(serializers.ModelSerializer):
             'scheduled_date': obj.session.scheduled_date,
         }
 
+# --- MentorReportSerializer ---
+class MentorReportSerializer(serializers.ModelSerializer):
+    reporter = serializers.PrimaryKeyRelatedField(read_only=True)
+    mentor = serializers.PrimaryKeyRelatedField(queryset=Mentor.objects.all())
+    session = serializers.PrimaryKeyRelatedField(queryset=MentorSession.objects.all())
+
+    class Meta:
+        model = MentorReport
+        fields = ['id', 'reporter', 'mentor', 'session', 'reason', 'created_at']
+        read_only_fields = ['id', 'reporter', 'created_at']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            validated_data['reporter'] = request.user
+        return super().create(validated_data)
 
 
 class SessionMessageSerializer(serializers.ModelSerializer):

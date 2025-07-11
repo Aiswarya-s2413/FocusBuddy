@@ -88,7 +88,9 @@ const VideoCallPage = ({ onEndCall }) => {
           }
         });
 
-        const success = await service.initialize(sessionId, authToken, userRole);
+        // Use 'mentor' callType if userRole is 'mentor', else 'group'
+        const callType = userRole === 'mentor' ? 'mentor' : 'group';
+        const success = await service.initialize(sessionId, authToken, callType);
         if (success) {
           setWebrtcService(service);
           setConnectionStatus('connected');

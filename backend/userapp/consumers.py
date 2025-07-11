@@ -2,7 +2,7 @@ import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
-from userapp.models import FocusBuddyParticipant
+from userapp.models import FocusBuddyParticipant, FocusBuddySession, MentorSession
 
 logger = logging.getLogger(__name__)
 
@@ -30,58 +30,119 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
             await self.close(code=4001)
             return
 
-        # Host admit logic: Only allow approved participants
+        # Try FocusBuddySession first, then MentorSession
+        session = None
+        session_type = None
         try:
-            # Only check for non-hosts (host is always allowed)
-            from userapp.models import FocusBuddySession
             session = await sync_to_async(FocusBuddySession.objects.get)(id=self.session_id)
-            if session.creator_id_id != self.user.id:
-                try:
-                    participant = await sync_to_async(FocusBuddyParticipant.objects.get)(session_id=self.session_id, user_id=self.user.id)
-                    if participant.status == 'pending':
+            session_type = 'focusbuddy'
+        except FocusBuddySession.DoesNotExist:
+            try:
+                session = await sync_to_async(MentorSession.objects.get)(id=self.session_id)
+                session_type = 'mentor'
+            except MentorSession.DoesNotExist:
+                logger.error(f"[WebSocket] No session found for id {self.session_id}")
+                await self.close(code=4000)
+                return
+
+        if session_type == 'focusbuddy':
+            # Host admit logic: Only allow approved participants
+            try:
+                if session.creator_id_id != self.user.id:
+                    try:
+                        participant = await sync_to_async(FocusBuddyParticipant.objects.get)(session_id=self.session_id, user_id=self.user.id)
+                        if participant.status == 'pending':
+                            await self.accept()
+                            await self.channel_layer.group_add(self.user_group_name, self.channel_name)
+                            print(f"WebSocket: Added user {self.user.id} to group {self.user_group_name} (pending)")
+                            await self.send(text_data=json.dumps({
+                                'type': 'admission-status',
+                                'status': 'pending',
+                                'message': 'Waiting for host approval.'
+                            }))
+                            return
+                        elif participant.status == 'rejected':
+                            await self.accept()
+                            await self.send(text_data=json.dumps({
+                                'type': 'admission-status',
+                                'status': 'rejected',
+                                'message': 'Your join request was rejected by the host.'
+                            }))
+                            await self.close(code=4003)
+                            return
+                        elif participant.status != 'approved':
+                            await self.accept()
+                            await self.send(text_data=json.dumps({
+                                'type': 'admission-status',
+                                'status': participant.status,
+                                'message': 'You are not approved to join this session.'
+                            }))
+                            await self.close(code=4004)
+                            return
+                    except FocusBuddyParticipant.DoesNotExist:
                         await self.accept()
-                        # Add user to their specific group for admission notifications
-                        await self.channel_layer.group_add(self.user_group_name, self.channel_name)
-                        print(f"WebSocket: Added user {self.user.id} to group {self.user_group_name} (pending)")
                         await self.send(text_data=json.dumps({
                             'type': 'admission-status',
-                            'status': 'pending',
-                            'message': 'Waiting for host approval.'
+                            'status': 'not-registered',
+                            'message': 'You are not registered as a participant.'
                         }))
+                        await self.close(code=4005)
                         return
-                    elif participant.status == 'rejected':
-                        await self.accept()
-                        await self.send(text_data=json.dumps({
-                            'type': 'admission-status',
-                            'status': 'rejected',
-                            'message': 'Your join request was rejected by the host.'
-                        }))
-                        await self.close(code=4003)
-                        return
-                    elif participant.status != 'approved':
-                        await self.accept()
-                        await self.send(text_data=json.dumps({
-                            'type': 'admission-status',
-                            'status': participant.status,
-                            'message': 'You are not approved to join this session.'
-                        }))
-                        await self.close(code=4004)
-                        return
-                except FocusBuddyParticipant.DoesNotExist:
-                    await self.accept()
-                    await self.send(text_data=json.dumps({
-                        'type': 'admission-status',
-                        'status': 'not-registered',
-                        'message': 'You are not registered as a participant.'
-                    }))
-                    await self.close(code=4005)
-                    return
-            # If host or approved participant, proceed as before
+                # If host or approved participant, proceed as before
+                await self.accept()
+                await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+                await self.channel_layer.group_add(self.user_group_name, self.channel_name)
+                print(f"WebSocket: Added user {self.user.id} to group {self.user_group_name} (approved/host)")
+
+                if self.session_id not in active_participants:
+                    active_participants[self.session_id] = set()
+
+                other_users = list(active_participants[self.session_id])
+                active_participants[self.session_id].add(self.user.id)
+
+                await self.send(text_data=json.dumps({
+                    'type': 'authenticated',
+                    'user_id': self.user.id,
+                    'username': self.user.username
+                }))
+
+                await self.send(text_data=json.dumps({
+                    'type': 'existing-users',
+                    'users': other_users
+                }))
+
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'user_joined',
+                        'user_id': self.user.id,
+                        'user_name': self.user.username
+                    }
+                )
+
+            except Exception as e:
+                logger.error(f"[WebSocket] Error during connection setup: {e}")
+                await self.close(code=4000)
+        elif session_type == 'mentor':
+            # Mentor session: allow only mentor or student
+            # Get the actual IDs from the foreign key fields
+            mentor_user_id = await sync_to_async(lambda: session.mentor.user_id if session.mentor else None)()
+            student_id = session.student_id if hasattr(session, 'student_id') else None
+            
+            # Debug logging
+            logger.info(f"[WebSocket] Mentor session {self.session_id} - mentor_user_id: {mentor_user_id}, student_id: {student_id}")
+            logger.info(f"[WebSocket] Current user ID: {self.user.id}")
+            
+            if self.user.id not in [mentor_user_id, student_id]:
+                logger.warning(f"[WebSocket] User {self.user.id} not authorized for mentor session {self.session_id}")
+                logger.warning(f"[WebSocket] Allowed users: mentor_user_id={mentor_user_id}, student_id={student_id}")
+                await self.close(code=4002)
+                return
+            
             await self.accept()
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-            # Also add user to their specific group for admission notifications
             await self.channel_layer.group_add(self.user_group_name, self.channel_name)
-            print(f"WebSocket: Added user {self.user.id} to group {self.user_group_name} (approved/host)")
+            print(f"WebSocket: Added user {self.user.id} to group {self.user_group_name} (mentor session)")
 
             if self.session_id not in active_participants:
                 active_participants[self.session_id] = set()
@@ -108,11 +169,6 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
                     'user_name': self.user.username
                 }
             )
-
-        except Exception as e:
-            logger.error(f"[WebSocket] Error during connection setup: {e}")
-            await self.close(code=4000)
-
     async def disconnect(self, close_code):
         try:
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)

@@ -227,18 +227,19 @@ class WebRTCService {
                 console.log('Auth token available:', !!this.authToken);
                 console.log('Auth token length:', this.authToken?.length || 0);
                 
-                // Try different WebSocket URL formats
-                const wsUrls = [
-                    `ws://localhost:8000/ws/webrtc/${sessionId}/`,
-                    `ws://localhost:8000/ws/webrtc/${sessionId}/?token=${this.authToken}`,
-                    `wss://localhost:8000/ws/webrtc/${sessionId}/`,
-                ];
-
-                let wsUrl = wsUrls[0]; // Start with the basic URL
-                
-                // If running on HTTPS, try WSS first
+                // Use mentor session URL if callType is 'mentor', else default
+                let wsUrl;
+                if (this.callType === 'mentor') {
+                    wsUrl = `ws://localhost:8000/ws/mentor-session/${sessionId}/`;
+                } else {
+                    wsUrl = `ws://localhost:8000/ws/webrtc/${sessionId}/`;
+                }
                 if (window.location.protocol === 'https:') {
-                    wsUrl = `wss://localhost:8000/ws/webrtc/${sessionId}/`;
+                    if (this.callType === 'mentor') {
+                        wsUrl = `wss://localhost:8000/ws/mentor-session/${sessionId}/`;
+                    } else {
+                        wsUrl = `wss://localhost:8000/ws/webrtc/${sessionId}/`;
+                    }
                 }
 
                 console.log('WebSocket URL:', wsUrl);

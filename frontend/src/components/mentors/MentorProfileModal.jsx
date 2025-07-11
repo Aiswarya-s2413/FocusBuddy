@@ -737,14 +737,14 @@ const handleBookSession = async () => {
                       >
                         <Video className="mr-2 h-4 w-4" /> Video
                       </Button>
-                      <Button
+                      {/* <Button
                         variant={mode === "Voice" ? "default" : "outline"}
                         className={mode === "Voice" ? "bg-purple-600 hover:bg-purple-700" : ""}
                         onClick={() => setMode("Voice")}
                         disabled={isBooking}
                       >
                         <MessageCircle className="mr-2 h-4 w-4" /> Voice
-                      </Button>
+                      </Button> */}
                     </div>
                   </div>
                 </div>
