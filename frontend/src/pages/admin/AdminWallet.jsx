@@ -15,6 +15,10 @@ import {
   Building
 } from "lucide-react";
 import { adminAxios } from '../../utils/axios'
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+jsPDF.autoTable = autoTable;
+
 const AdminWallet = () => {
   const [earnings, setEarnings] = useState([]);
   const [walletSummary, setWalletSummary] = useState(null);
@@ -24,6 +28,7 @@ const AdminWallet = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [period, setPeriod] = useState("daily"); // "daily", "weekly", "monthly"
   
   const fetchWalletData = async (page = 1, size = 10) => {
     try {
@@ -62,6 +67,49 @@ const AdminWallet = () => {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const filterEarningsByPeriod = () => {
+    const now = new Date();
+    return earnings.filter(earning => {
+      const created = new Date(earning.created_at);
+      if (period === "daily") {
+        return created.toDateString() === now.toDateString();
+      }
+      if (period === "weekly") {
+        const weekAgo = new Date(now);
+        weekAgo.setDate(now.getDate() - 7);
+        return created >= weekAgo && created <= now;
+      }
+      if (period === "monthly") {
+        return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+      }
+      return true;
+    });
+  };
+
+  const handleDownloadPDF = () => {
+    const filtered = filterEarningsByPeriod();
+    const doc = new jsPDF();
+    doc.text(`Platform Transactions (${period.charAt(0).toUpperCase() + period.slice(1)})`, 14, 16);
+
+    const tableData = filtered.map(earning => [
+      earning.session?.scheduled_date || "",
+      earning.mentor_name,
+      earning.student_name,
+      earning.session_amount,
+      earning.platform_commission,
+      new Date(earning.created_at).toLocaleString()
+    ]);
+
+    autoTable(doc, {
+      head: [["Session Date", "Mentor", "Student", "Session Amount", "Platform Commission", "Created At"]],
+      body: tableData,
+      startY: 24,
+      styles: { fontSize: 8 }
+    });
+
+    doc.save(`transactions_${period}_${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
   const handleRefresh = () => {
@@ -219,6 +267,23 @@ const AdminWallet = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center gap-4 mb-4">
+        <select
+          value={period}
+          onChange={e => setPeriod(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <button
+          onClick={handleDownloadPDF}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Download PDF
+        </button>
+      </div>
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-blue-600 flex items-center">
