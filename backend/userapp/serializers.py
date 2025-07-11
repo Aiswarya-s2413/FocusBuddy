@@ -710,7 +710,7 @@ class SessionReviewSerializer(serializers.ModelSerializer):
 class MentorReportSerializer(serializers.ModelSerializer):
     reporter = serializers.PrimaryKeyRelatedField(read_only=True)
     mentor = serializers.PrimaryKeyRelatedField(queryset=Mentor.objects.all())
-    session = serializers.PrimaryKeyRelatedField(queryset=MentorSession.objects.all())
+    session = serializers.PrimaryKeyRelatedField(queryset=MentorSession.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = MentorReport

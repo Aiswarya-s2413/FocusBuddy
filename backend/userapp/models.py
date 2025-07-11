@@ -486,16 +486,16 @@ class SessionReview(models.Model):
 class MentorReport(models.Model):
     reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mentor_reports')
     mentor = models.ForeignKey(Mentor, on_delete=models.CASCADE, related_name='reports')
-    session = models.ForeignKey(MentorSession, on_delete=models.CASCADE, related_name='mentor_reports')
+    session = models.ForeignKey(MentorSession, on_delete=models.CASCADE, related_name='mentor_reports', null=True, blank=True)
     reason = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('reporter', 'mentor', 'session')  # One report per user per session
+        unique_together = ('reporter', 'mentor')  # One report per user per mentor
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Report by {self.reporter.email} on {self.mentor.user.email} (Session {self.session.id})"
+        return f"Report by {self.reporter.email} on {self.mentor.user.email}{f' (Session {self.session.id})' if self.session else ''}"
 
 
 class SessionMessage(models.Model):

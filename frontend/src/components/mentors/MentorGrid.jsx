@@ -1,10 +1,14 @@
 import React from "react";
 import { useState } from "react";
 import PropTypes from "prop-types";
-import { Star, Clock } from "lucide-react";
+import { Star, Clock, AlertTriangle } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardFooter } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
+import { Loader2 } from "lucide-react";
+import { userAxios } from "../../utils/axios";
+import { useSimpleToast } from "../../components/ui/toast";
 
 const Avatar = ({ children, className = "" }) => (
   <div className={`rounded-full bg-gray-200 flex items-center justify-center ${className}`}>
@@ -78,81 +82,164 @@ const AvatarFallback = ({ children, className = "" }) => (
 
 
 const MentorGrid = ({ mentors, onViewProfile }) => {
+  const { toast, ToastContainer } = useSimpleToast();
+  const [reportDialog, setReportDialog] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [isReporting, setIsReporting] = useState(false);
+  const [selectedMentor, setSelectedMentor] = useState(null);
+  const [reportedMentors, setReportedMentors] = useState({}); // mentorId: true
+
+  const openReportDialog = (mentor) => {
+    setSelectedMentor(mentor);
+    setReportReason("");
+    setReportDialog(true);
+  };
+
+  const handleSubmitReport = async () => {
+    if (!selectedMentor || !reportReason.trim()) {
+      toast.error("Please provide a reason for reporting.");
+      return;
+    }
+    setIsReporting(true);
+    try {
+      await userAxios.post("/mentor-report/", {
+        mentor: selectedMentor.id || selectedMentor.mentor_id || selectedMentor.mentorId,
+        reason: reportReason.trim(),
+      });
+      setReportedMentors((prev) => ({ ...prev, [selectedMentor.id]: true }));
+      toast.success("Report submitted successfully.");
+      setReportDialog(false);
+      setSelectedMentor(null);
+      setReportReason("");
+    } catch (error) {
+      if (error.response?.data?.error?.includes("already reported")) {
+        setReportedMentors((prev) => ({ ...prev, [selectedMentor.id]: true }));
+        toast.warning("You have already reported this mentor.");
+      } else {
+        toast.error(error.response?.data?.error || "Failed to submit report.");
+      }
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {mentors.map((mentor) => (
-        <Card key={mentor.id} className="overflow-hidden flex flex-col h-full">
-          <CardContent className="p-6 flex-grow">
-            <div className="flex items-start space-x-4">
-              <Avatar className="h-16 w-16 border-2 border-purple-100">
-                <AvatarImage 
-                  src={mentor.profile_image_url} 
-                  alt={mentor.name}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                  }}
-                />
-                {/* <AvatarFallback>{mentor.name?.charAt(0) || 'M'}</AvatarFallback> */}
-              </Avatar>
-              <div className="space-y-1">
-                <h3 className="font-medium text-lg">{mentor.name}</h3>
-                <p className="text-purple-600 font-medium">{mentor.expertise_level}</p>
-                <div className="flex items-center text-sm">
-                  <Star className="h-4 w-4 text-yellow-500 mr-1 fill-yellow-500" />
-                  <span>{mentor.rating || 0}</span>
-                  <span className="text-gray-500 ml-1">({mentor.total_sessions || 0} sessions)</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <p className="text-gray-600 text-sm">
-                <span className="font-medium">Experience:</span> {mentor.experience || 'Not specified'}
-              </p>
-
-              <p className="text-gray-600 text-sm">
-                <span className="font-medium">Hourly Rate:</span> Rs.{mentor.hourly_rate || 0}/hr
-              </p>
-
-              {mentor.subjects && mentor.subjects.length > 0 && (
-                <div>
-                  <span className="text-sm font-medium block mb-1">Subjects:</span>
-                  <div className="flex flex-wrap gap-1">
-                    {mentor.subjects.map((subject, index) => (
-                      <Badge key={subject.id || index} variant="outline" className="bg-purple-50">
-                        {typeof subject === 'string' ? subject : subject.name}
-                      </Badge>
-                    ))}
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {mentors.map((mentor) => (
+          <Card key={mentor.id} className="overflow-hidden flex flex-col h-full relative">
+            {/* Report Icon Button at Top Right */}
+            <button
+              className="absolute top-3 right-3 p-1 rounded-full bg-red-50 hover:bg-red-100 border border-red-200 shadow-sm z-10"
+              title={reportedMentors[mentor.id] ? 'Reported' : 'Report Mentor'}
+              onClick={() => openReportDialog(mentor)}
+              disabled={!!reportedMentors[mentor.id]}
+              style={{ cursor: reportedMentors[mentor.id] ? 'not-allowed' : 'pointer' }}
+            >
+              <AlertTriangle className={`h-5 w-5 ${reportedMentors[mentor.id] ? 'text-red-400' : 'text-red-600'}`} />
+            </button>
+            <CardContent className="p-6 flex-grow">
+              <div className="flex items-start space-x-4">
+                <Avatar className="h-16 w-16 border-2 border-purple-100">
+                  <AvatarImage 
+                    src={mentor.profile_image_url} 
+                    alt={mentor.name}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </Avatar>
+                <div className="space-y-1">
+                  <h3 className="font-medium text-lg">{mentor.name}</h3>
+                  <p className="text-purple-600 font-medium">{mentor.expertise_level}</p>
+                  <div className="flex items-center text-sm">
+                    <Star className="h-4 w-4 text-yellow-500 mr-1 fill-yellow-500" />
+                    <span>{mentor.rating || 0}</span>
+                    <span className="text-gray-500 ml-1">({mentor.total_sessions || 0} sessions)</span>
                   </div>
                 </div>
-              )}
-
-              {mentor.bio && (
+              </div>
+              <div className="mt-4 space-y-3">
                 <p className="text-gray-600 text-sm">
-                  <span className="font-medium">Bio:</span> {mentor.bio.length > 100 ? `${mentor.bio.substring(0, 100)}...` : mentor.bio}
+                  <span className="font-medium">Experience:</span> {mentor.experience || 'Not specified'}
                 </p>
-              )}
-
-              {mentor.is_available && (
-                <div className="flex items-center text-sm text-green-600">
-                  <Clock className="h-4 w-4 mr-1" />
-                  <span>Available for sessions</span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-
-          <CardFooter className="bg-gray-50 px-6 py-4 mt-auto" style={{ marginBottom: '5px' }}>
-            <Button 
-              onClick={() => onViewProfile(mentor)} 
-              className="w-full bg-purple-600 hover:bg-purple-700 h-8 py-1"
-            >
-              View Profile
+                <p className="text-gray-600 text-sm">
+                  <span className="font-medium">Hourly Rate:</span> Rs.{mentor.hourly_rate || 0}/hr
+                </p>
+                {mentor.subjects && mentor.subjects.length > 0 && (
+                  <div>
+                    <span className="text-sm font-medium block mb-1">Subjects:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {mentor.subjects.map((subject, index) => (
+                        <Badge key={subject.id || index} variant="outline" className="bg-purple-50">
+                          {typeof subject === 'string' ? subject : subject.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {mentor.bio && (
+                  <p className="text-gray-600 text-sm">
+                    <span className="font-medium">Bio:</span> {mentor.bio.length > 100 ? `${mentor.bio.substring(0, 100)}...` : mentor.bio}
+                  </p>
+                )}
+                {mentor.is_available && (
+                  <div className="flex items-center text-sm text-green-600">
+                    <Clock className="h-4 w-4 mr-1" />
+                    <span>Available for sessions</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+            <CardFooter className="bg-gray-50 px-6 py-4 mt-auto" style={{ marginBottom: '5px' }}>
+              <Button 
+                onClick={() => onViewProfile(mentor)} 
+                className="w-full bg-purple-600 hover:bg-purple-700 h-8 py-1"
+              >
+                View Profile
+              </Button>
+            </CardFooter>
+          </Card>
+        ))}
+      </div>
+      <Dialog open={reportDialog} onOpenChange={setReportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Report Mentor</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <p>Why are you reporting {selectedMentor?.name}?</p>
+            <textarea
+              className="w-full p-2 border rounded-md h-24 resize-none"
+              placeholder="Describe the issue..."
+              value={reportReason}
+              onChange={e => setReportReason(e.target.value)}
+              disabled={isReporting}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportDialog(false)} disabled={isReporting}>
+              Cancel
             </Button>
-          </CardFooter>
-        </Card>
-      ))}
-    </div>
+            <Button 
+              className="bg-red-600 hover:bg-red-700" 
+              onClick={handleSubmitReport}
+              disabled={isReporting || !reportReason.trim()}
+            >
+              {isReporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Reporting...
+                </>
+              ) : (
+                'Submit Report'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ToastContainer />
+    </>
   );
 };
 

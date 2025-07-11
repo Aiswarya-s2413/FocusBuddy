@@ -2698,9 +2698,6 @@ class MentorReportAPIView(APIView):
             # Prevent duplicate report for same user/session/mentor
             reporter = request.user
             mentor = serializer.validated_data['mentor']
-            session = serializer.validated_data['session']
-            if MentorReport.objects.filter(reporter=reporter, mentor=mentor, session=session).exists():
-                return Response({'error': 'You have already reported this mentor for this session.'}, status=400)
             serializer.save()
             return Response({'success': True, 'message': 'Report submitted successfully.'}, status=201)
         return Response({'success': False, 'errors': serializer.errors}, status=400)
