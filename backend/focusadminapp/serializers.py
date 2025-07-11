@@ -327,3 +327,22 @@ class PlatformStatsSerializer(serializers.Serializer):
     
     avg_session_rating = serializers.DecimalField(max_digits=3, decimal_places=2)
     total_revenue = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+class MentorReportListSerializer(serializers.ModelSerializer):
+    mentor_id = serializers.IntegerField(source='mentor.id', read_only=True)
+    mentor_name = serializers.CharField(source='mentor.user.name', read_only=True)
+    mentor_email = serializers.CharField(source='mentor.user.email', read_only=True)
+    mentor_is_active = serializers.BooleanField(source='mentor.user.is_active', read_only=True)
+    reporter_name = serializers.CharField(source='reporter.name', read_only=True)
+    reporter_email = serializers.CharField(source='reporter.email', read_only=True)
+    session_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MentorReport
+        fields = [
+            'id', 'mentor_id', 'mentor_name', 'mentor_email', 'mentor_is_active',
+            'reporter_name', 'reporter_email', 'session_id', 'reason', 'created_at'
+        ]
+
+    def get_session_id(self, obj):
+        return obj.session.id if obj.session else None

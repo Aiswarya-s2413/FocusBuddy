@@ -43,7 +43,7 @@ const adminMenuItems = [
   { title: "Mentor Requests", icon: CreditCard, path: "/admin/mentors" },
   { title: "Wallet", icon: BookOpen, path: "/admin/wallet" },
   { title: "Focus Buddy", icon: Users2, path: "/admin/focussessions" },
-  // { title: "Support", icon: HelpCircle, path: "/admin/support" },
+  { title: "Concerns", icon: HelpCircle, path: "/admin/mentor-reports" },
   // { title: "FAQ", icon: MessageSquare, path: "/admin/faq" },
   // { title: "Notifications", icon: Bell, path: "/admin/notifications" },
   // { title: "Settings", icon: Settings, path: "/admin/settings" },

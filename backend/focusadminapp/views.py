@@ -1495,3 +1495,27 @@ class AdminPlatformStatsView(APIView):
                 {'error': f'Failed to fetch platform stats: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+class MentorReportListAPIView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        reports = MentorReport.objects.select_related('mentor__user', 'reporter', 'session').all()
+        serializer = MentorReportListSerializer(reports, many=True)
+        return Response(serializer.data)
+
+class BlockMentorAPIView(APIView):
+    authentication_classes = [AdminCookieJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request, mentor_id):
+        try:
+            mentor = Mentor.objects.select_related('user').get(id=mentor_id)
+        except Mentor.DoesNotExist:
+            return Response({'error': 'Mentor not found'}, status=status.HTTP_404_NOT_FOUND)
+        # Toggle is_active
+        mentor.user.is_active = not mentor.user.is_active
+        mentor.user.save()
+        action = 'blocked' if not mentor.user.is_active else 'unblocked'
+        return Response({'success': True, 'message': f'Mentor {action}.', 'is_active': mentor.user.is_active})

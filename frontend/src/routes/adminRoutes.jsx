@@ -7,6 +7,7 @@ import AdminLayout from "../components/admin/AdminLayout";
 import AdminWallet from "../pages/admin/AdminWallet";
 import AdminFocusSessions from "../pages/admin/AdminFocusSessions";
 import Admin from "../pages/admin/Admin";
+import AdminMentorReports from "../pages/admin/AdminMentorReports";
 
 const ProtectedAdminRoute = ({ children }) => {
   const { admin } = useSelector((state) => state.admin);
@@ -67,6 +68,16 @@ const AdminRoutes = () => {
           </ProtectedAdminRoute>
         }
         />
+
+    <Route
+       path="/mentor-reports"
+       element={
+         <ProtectedAdminRoute>
+           <AdminLayout><AdminMentorReports /></AdminLayout>
+         </ProtectedAdminRoute>
+       }
+     />
+
       <Route
         path="/"
         element={

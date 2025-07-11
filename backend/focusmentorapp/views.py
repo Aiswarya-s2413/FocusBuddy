@@ -75,11 +75,15 @@ class MentorLoginView(APIView):
         serializer = MentorLoginSerializer(data=request.data)
         if serializer.is_valid():
             data = serializer.validated_data
+            user = data["user"]
+            if not user.is_active:
+                return Response({
+                    "error": "Your account has been blocked by the admin."
+                }, status=status.HTTP_403_FORBIDDEN)
             response = Response({
                 "message": "Login successful",
                 "user": data["user"]
             }, status=status.HTTP_200_OK)
-            
             # Set tokens in cookies
             response.set_cookie(
                 "mentor_access", data["access"], httponly=False, 

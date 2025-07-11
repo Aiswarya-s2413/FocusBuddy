@@ -100,6 +100,9 @@ class MentorLoginSerializer(serializers.Serializer):
         if not user.is_mentor:
             raise serializers.ValidationError("Not authorized as mentor")
 
+        if not user.is_active:
+            raise serializers.ValidationError("Your account has been blocked by the admin.")
+
         # Generate mentor-specific tokens
         refresh = RefreshToken.for_user(user)
         return {
