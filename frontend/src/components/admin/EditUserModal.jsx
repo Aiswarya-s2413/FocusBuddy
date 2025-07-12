@@ -5,9 +5,10 @@ import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Switch } from "../ui/switch";
 import { adminAxios } from '../../utils/axios';
-import { toast } from "react-hot-toast";
+import { useSimpleToast } from "../ui/toast";
 
 const EditUserModal = ({ isOpen, onClose, user, onUserUpdated }) => {
+  const { toast, ToastContainer } = useSimpleToast();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -39,6 +40,12 @@ const EditUserModal = ({ isOpen, onClose, user, onUserUpdated }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.log("Submitting form with data:", formData);
+    // Phone validation: must be exactly 10 digits, only numbers
+    const phoneRegex = /^\d{10}$/;
+    if (formData.phone && !phoneRegex.test(formData.phone)) {
+      toast.error("Phone number must be exactly 10 digits and contain only numbers.");
+      return;
+    }
     try {
       // Only send the fields that the backend expects
       const updateData = {
@@ -68,8 +75,10 @@ const EditUserModal = ({ isOpen, onClose, user, onUserUpdated }) => {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
+    <>
+      <ToastContainer />
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Edit User</DialogTitle>
         </DialogHeader>
@@ -126,6 +135,7 @@ const EditUserModal = ({ isOpen, onClose, user, onUserUpdated }) => {
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 };
 

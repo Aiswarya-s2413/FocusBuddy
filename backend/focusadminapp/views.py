@@ -281,10 +281,11 @@ class UserListView(APIView):
 
     def get(self, request):
         try:
-            # Get search query and pagination parameters
+            # Get search query, pagination parameters, and mentor filter
             search_query = request.query_params.get('search', '')
             page = int(request.query_params.get('page', 1))
             page_size = int(request.query_params.get('page_size', 10))
+            mentor_filter = request.query_params.get('mentor_only', '').lower() == 'true'
             
             # Filter users based on search query
             if search_query:
@@ -295,6 +296,10 @@ class UserListView(APIView):
                 )
             else:
                 users = User.objects.all()
+            
+            # Apply mentor filter if requested
+            if mentor_filter:
+                users = users.filter(is_mentor=True)
             
             # Calculate pagination
             total_users = users.count()

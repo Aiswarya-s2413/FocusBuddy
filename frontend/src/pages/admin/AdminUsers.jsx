@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Input } from "../../components/ui/input";
 import { Button } from "../../components/ui/button";
-import { Search, Edit2, Ban, CheckCircle, X, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { Search, Edit2, Ban, CheckCircle, X, ChevronLeft, ChevronRight, LogOut, Users, GraduationCap } from "lucide-react";
 import { adminAxios } from '../../utils/axios';
-import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { adminLogout } from "../../store/adminSlice";
 import EditUserModal from "../../components/admin/EditUserModal";
+import { useSimpleToast } from "../../components/ui/toast";
 import debounce from "lodash/debounce";
 
 const AdminUsers = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { toast, ToastContainer } = useSimpleToast();
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -20,6 +21,7 @@ const AdminUsers = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [mentorOnly, setMentorOnly] = useState(false);
   const [pagination, setPagination] = useState({
     total_users: 0,
     total_pages: 0,
@@ -29,12 +31,12 @@ const AdminUsers = () => {
     has_previous: false
   });
 
-  const fetchUsers = async (query = "", page = 1) => {
+  const fetchUsers = async (query = "", page = 1, mentorFilter = false) => {
     try {
       setLoading(true);
       setIsSearching(true);
       const response = await adminAxios.get(
-        `/users/?search=${query}&page=${page}&page_size=${pagination.page_size}`
+        `/users/?search=${query}&page=${page}&page_size=${pagination.page_size}&mentor_only=${mentorFilter}`
       );
       setUsers(response.data.users);
       setPagination(response.data.pagination);
@@ -51,14 +53,14 @@ const AdminUsers = () => {
   // Debounced search function
   const debouncedSearch = useCallback(
     debounce((query) => {
-      fetchUsers(query, 1); // Reset to first page on new search
+      fetchUsers(query, 1, mentorOnly); // Reset to first page on new search
     }, 500),
-    []
+    [mentorOnly]
   );
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    fetchUsers("", 1, mentorOnly);
+  }, [mentorOnly]);
 
   // Handle search input changes
   const handleSearchChange = (e) => {
@@ -70,12 +72,17 @@ const AdminUsers = () => {
   // Clear search
   const handleClearSearch = () => {
     setSearchQuery("");
-    fetchUsers("", 1);
+    fetchUsers("", 1, mentorOnly);
   };
 
   // Handle page change
   const handlePageChange = (newPage) => {
-    fetchUsers(searchQuery, newPage);
+    fetchUsers(searchQuery, newPage, mentorOnly);
+  };
+
+  // Handle mentor filter toggle
+  const handleMentorFilterToggle = () => {
+    setMentorOnly(!mentorOnly);
   };
 
   const handleBlockUser = async (userId) => {
@@ -96,72 +103,56 @@ const AdminUsers = () => {
   };
 
   const handleUserUpdated = (updatedUser) => {
-    console.log("Received updated user data:", updatedUser);
-    console.log("Current users list:", users);
-    
     setUsers(users.map(user => {
       if (user.id === updatedUser.id) {
-        console.log("Updating user:", user.id);
         return { ...user, ...updatedUser };
       }
       return user;
     }));
-    
-    // Force a re-fetch of users to ensure we have the latest data
-    fetchUsers(searchQuery, pagination.current_page);
+    toast.success("User updated successfully");
+    fetchUsers(searchQuery, pagination.current_page, mentorOnly);
   };
 
   const handleLogout = async () => {
     try {
-      // Set withCredentials to ensure cookies are included in the request
       await adminAxios.post('/logout/', {}, { withCredentials: true });
-      
-      // Dispatch the logout action to update Redux state
       dispatch(adminLogout());
-      
-      // Show success message
       toast.success('Logged out successfully');
-      
-      // Redirect to login page
       navigate('/admin/login');
     } catch (error) {
-      console.error('Logout error:', error);
-      
-      // Even if API call fails, force logout on the client side
-      dispatch(manualLogout());
+      dispatch(adminLogout());
       toast.success('Logged out successfully');
       navigate('/admin/login');
     }
   };
 
   // After fetching users:
-  // Filter out mentors and sort by latest
-  const onlyUsers = users?users.filter(user => !user.is_mentor):[];
-  const sortedUsers = onlyUsers.sort((a, b) => new Date(b.date_joined) - new Date(a.date_joined));
+  // Sort by latest (no need to filter since backend handles it)
+  const sortedUsers = users ? users.sort((a, b) => new Date(b.date_joined) - new Date(a.date_joined)) : [];
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <ToastContainer />
       <div className="mb-8">
-      <div className="flex justify-between items-center mb-4">
-  <h1 className="text-3xl font-bold">User Management</h1>
-  <div className="flex gap-3">
-    {/* <Button
-      variant="outline"
-      onClick={() => navigate("/admin/mentors")}
-      className="flex items-center gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-    >
-      <span>Mentor requests</span>
-    </Button> */}
-    {/* <Button
-      variant="outline"
-      onClick={handleLogout}
-      className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-    >
-      <LogOut className="h-4 w-4" />
-      Logout
-    </Button> */}
-  </div>
-</div>
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-3xl font-bold">
+            {mentorOnly ? "Mentor Management" : "User Management"}
+          </h1>
+          <div className="flex gap-3">
+            <Button
+              variant={mentorOnly ? "default" : "outline"}
+              onClick={handleMentorFilterToggle}
+              className={`flex items-center gap-2 ${
+                mentorOnly 
+                  ? "bg-blue-600 text-white hover:bg-blue-700" 
+                  : "text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              }`}
+            >
+              {mentorOnly ? <GraduationCap className="h-4 w-4" /> : <Users className="h-4 w-4" />}
+              {mentorOnly ? "Show All Users" : "Show Mentors Only"}
+            </Button>
+          </div>
+        </div>
         <div className="relative flex-1 max-w-md">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-5 w-5" />
@@ -216,7 +207,7 @@ const AdminUsers = () => {
                     Email
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Subjects
+                    Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -237,7 +228,17 @@ const AdminUsers = () => {
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-500">
-                        {user.subjects?.join(", ") || "No subjects selected"}
+                        {user.is_mentor ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            <GraduationCap className="h-3 w-3 mr-1" />
+                            Mentor
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <Users className="h-3 w-3 mr-1" />
+                            Student
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

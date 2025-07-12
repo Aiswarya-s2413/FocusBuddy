@@ -38,7 +38,7 @@ class AdminLoginSerializer(serializers.Serializer):
 class UserListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'email', 'name', 'is_active', 'date_joined', 'last_login']
+        fields = ['id', 'email', 'name', 'is_active', 'date_joined', 'last_login', 'is_mentor']
 
 class UserEditSerializer(serializers.ModelSerializer):
     class Meta:
