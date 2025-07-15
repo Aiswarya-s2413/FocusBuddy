@@ -96,15 +96,29 @@ const MentorGrid = ({ mentors, onViewProfile }) => {
   };
 
   const handleSubmitReport = async () => {
-    if (!selectedMentor || !reportReason.trim()) {
-      toast.error("Please provide a reason for reporting.");
+    const reason = reportReason.trim();
+
+    // Validation: minimum 4 characters (excluding spaces)
+    if (reason.replace(/\s/g, '').length < 4) {
+      toast.error("Reason must be at least 4 characters.");
       return;
     }
+    // Validation: must contain at least one letter
+    if (!/[a-zA-Z]/.test(reason)) {
+      toast.error("Reason must contain at least one letter.");
+      return;
+    }
+
+    if (!selectedMentor) {
+      toast.error("No mentor selected.");
+      return;
+    }
+
     setIsReporting(true);
     try {
       await userAxios.post("/mentor-report/", {
         mentor: selectedMentor.id || selectedMentor.mentor_id || selectedMentor.mentorId,
-        reason: reportReason.trim(),
+        reason,
       });
       setReportedMentors((prev) => ({ ...prev, [selectedMentor.id]: true }));
       toast.success("Report submitted successfully.");
@@ -131,10 +145,8 @@ const MentorGrid = ({ mentors, onViewProfile }) => {
             {/* Report Icon Button at Top Right */}
             <button
               className="absolute top-3 right-3 p-1 rounded-full bg-red-50 hover:bg-red-100 border border-red-200 shadow-sm z-10"
-              title={reportedMentors[mentor.id] ? 'Reported' : 'Report Mentor'}
+              title="Report Mentor"
               onClick={() => openReportDialog(mentor)}
-              disabled={!!reportedMentors[mentor.id]}
-              style={{ cursor: reportedMentors[mentor.id] ? 'not-allowed' : 'pointer' }}
             >
               <AlertTriangle className={`h-5 w-5 ${reportedMentors[mentor.id] ? 'text-red-400' : 'text-red-600'}`} />
             </button>

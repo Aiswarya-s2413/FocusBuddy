@@ -9,11 +9,15 @@ export const TaskForm = ({ onTaskSubmit }) => {
   const { toast } = useToast();
   const [taskTitle, setTaskTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [titleError, setTitleError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (!taskTitle.trim()) {
+    const trimmedTitle = taskTitle.trim();
+    // Check for empty
+    if (!trimmedTitle) {
+      setTitleError("Please enter a task title.");
       toast({
         title: "Task title required",
         description: "Please enter a task title.",
@@ -21,6 +25,28 @@ export const TaskForm = ({ onTaskSubmit }) => {
       });
       return;
     }
+    // Check for minimum 3 characters (excluding spaces)
+    if (trimmedTitle.replace(/\s/g, '').length < 3) {
+      setTitleError("Task title must be at least 3 characters.");
+      toast({
+        title: "Task title too short",
+        description: "Task title must be at least 3 characters.",
+        variant: "destructive"
+      });
+      return;
+    }
+    // Check for at least one alphanumeric character
+    if (!/[a-zA-Z0-9]/.test(trimmedTitle)) {
+      setTitleError("Task title must contain at least one letter or number.");
+      toast({
+        title: "Invalid task title",
+        description: "Task title must contain at least one letter or number.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setTitleError(''); // Clear error on success
 
     // Now match the backend expected format with snake_case keys
     const newTask = {
@@ -52,8 +78,14 @@ export const TaskForm = ({ onTaskSubmit }) => {
             id="task-title"
             placeholder="What are you working on?"
             value={taskTitle}
-            onChange={(e) => setTaskTitle(e.target.value)}
+            onChange={(e) => {
+              setTaskTitle(e.target.value);
+              if (titleError) setTitleError('');
+            }}
           />
+          {titleError && (
+            <p className="text-red-600 text-sm mt-1">{titleError}</p>
+          )}
         </div>
 
         <div className="space-y-2">

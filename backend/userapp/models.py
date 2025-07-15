@@ -505,8 +505,7 @@ class MentorReport(models.Model):
     reason = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        unique_together = ('reporter', 'mentor')  # One report per user per mentor
+    class Meta:  
         ordering = ['-created_at']
 
     def __str__(self):

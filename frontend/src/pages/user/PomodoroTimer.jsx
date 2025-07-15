@@ -325,10 +325,10 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
             {currentTask.description && (
               <p className="text-sm text-gray-600 mt-2">{currentTask.description}</p>
             )}
-            <div className="flex justify-between mt-2 text-sm text-gray-500">
-              <span>Estimated: {currentTask.estimated_minutes} minutes</span>
-              <span>Completed Pomodoros: {currentTask.completed_pomodoros}</span>
-            </div>
+            {/* <div className="flex justify-between mt-2 text-sm text-gray-500"> */}
+              {/* <span>Estimated: {currentTask.estimated_minutes} minutes</span> */}
+              {/* <span>Completed Pomodoros: {currentTask.completed_pomodoros}</span> */}
+            {/* </div> */}
           </div>
         
           <TimerDisplay 
@@ -386,13 +386,13 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
           </div>
           
           {/* Button to go back to task form */}
-          <button
+          {/* <button
             onClick={handleResetAndNewTask}
             className="mt-6 w-full py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
             type="button"
           >
             Create New Task
-          </button>
+          </button> */}
         </div>
       )}
     </div>
