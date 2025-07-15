@@ -20,38 +20,38 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
     const savedSettings = localStorage.getItem('pomodoroSettings');
     return savedSettings ? JSON.parse(savedSettings) : defaultSettings;
   });
-  
+
   const [time, setTime] = useState(() => {
     const savedTime = localStorage.getItem('pomodoroTime');
     return savedTime ? parseInt(savedTime, 10) : defaultSettings.focusDuration * 60;
   });
-  
+
   const [isRunning, setIsRunning] = useState(() => {
     const savedIsRunning = localStorage.getItem('pomodoroIsRunning');
     return savedIsRunning === 'true';
   });
-  
+
   const [currentTask, setCurrentTask] = useState(() => {
     const savedCurrentTask = localStorage.getItem('pomodoroCurrentTask');
     return savedCurrentTask ? JSON.parse(savedCurrentTask) : null;
   });
-  
+
   const [timerVisible, setTimerVisible] = useState(() => {
     const savedTimerVisible = localStorage.getItem('pomodoroTimerVisible');
     return savedTimerVisible === 'true';
   });
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [tasks, setTasks] = useState([]);
-  
+
   // References
   const timerRef = useRef(null);
   const totalTimeRef = useRef(() => {
     const savedTotalTime = localStorage.getItem('pomodoroTotalTime');
     return savedTotalTime ? parseInt(savedTotalTime, 10) : defaultSettings.focusDuration * 60;
   });
-  
+
   // Store last updated timestamp to calculate elapsed time during page refresh
   const lastUpdatedRef = useRef(() => {
     const savedLastUpdated = localStorage.getItem('pomodoroLastUpdated');
@@ -66,15 +66,15 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
   useEffect(() => {
     localStorage.setItem('pomodoroSettings', JSON.stringify(settings));
   }, [settings]);
-  
+
   useEffect(() => {
     localStorage.setItem('pomodoroTime', time.toString());
   }, [time]);
-  
+
   useEffect(() => {
     localStorage.setItem('pomodoroIsRunning', isRunning.toString());
   }, [isRunning]);
-  
+
   useEffect(() => {
     if (currentTask) {
       localStorage.setItem('pomodoroCurrentTask', JSON.stringify(currentTask));
@@ -82,11 +82,11 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
       localStorage.removeItem('pomodoroCurrentTask');
     }
   }, [currentTask]);
-  
+
   useEffect(() => {
     localStorage.setItem('pomodoroTimerVisible', timerVisible.toString());
   }, [timerVisible]);
-  
+
   useEffect(() => {
     if (totalTimeRef.current) {
       localStorage.setItem('pomodoroTotalTime', totalTimeRef.current.toString());
@@ -310,12 +310,12 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
           <span className="block sm:inline">{error}</span>
         </div>
       )}
-      
+
       {/* Task Form Component - Only visible when no timer is active */}
       {!timerVisible && (
         <TaskForm onTaskSubmit={handleTaskSubmit} isLoading={isLoading} />
       )}
-      
+
       {/* Timer UI - Only visible after task submission */}
       {timerVisible && currentTask && (
         <div className="bg-white rounded-xl shadow-lg p-6">
@@ -326,65 +326,65 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
               <p className="text-sm text-gray-600 mt-2">{currentTask.description}</p>
             )}
             {/* <div className="flex justify-between mt-2 text-sm text-gray-500"> */}
-              {/* <span>Estimated: {currentTask.estimated_minutes} minutes</span> */}
-              {/* <span>Completed Pomodoros: {currentTask.completed_pomodoros}</span> */}
+            {/* <span>Estimated: {currentTask.estimated_minutes} minutes</span> */}
+            {/* <span>Completed Pomodoros: {currentTask.completed_pomodoros}</span> */}
             {/* </div> */}
           </div>
-        
-          <TimerDisplay 
-            time={time} 
-            sessionType="focus" 
-            currentSession={1} 
-            totalSessions={1} 
+
+          <TimerDisplay
+            time={time}
+            sessionType="focus"
+            currentSession={1}
+            totalSessions={1}
             currentTask={currentTask}
           />
-          
-          <TimerControls 
-              isRunning={isRunning}
-              onStart={startTimer}
-              onPause={pauseTimer}
-              onReset={resetTimer}
-              onStop={stopTimer}  
-              sessionType="focus"
-              currentSessionId={null} 
-              onComplete={async () => {
-                // Mark session as completed when user clicks 'Complete'
-                await savePomodoroSession({ completed: true });
-                toast.success('Session marked as completed.');
-                if (currentTask && currentTask.id) {
-                  try {
-                    const updatedTask = {
-                      ...currentTask,
-                      completed_pomodoros: currentTask.completed_pomodoros + 1
-                    };
-                    setCurrentTask(updatedTask);
-                    onCompletePomodoro && onCompletePomodoro(currentTask.id);
-                  } catch (error) {
-                    console.error('Error updating task pomodoros:', error);
-                  }
+
+          <TimerControls
+            isRunning={isRunning}
+            onStart={startTimer}
+            onPause={pauseTimer}
+            onReset={resetTimer}
+            onStop={stopTimer}
+            sessionType="focus"
+            currentSessionId={null}
+            onComplete={async () => {
+              // Mark session as completed when user clicks 'Complete'
+              await savePomodoroSession({ completed: true });
+              toast.success('Session marked as completed.');
+              if (currentTask && currentTask.id) {
+                try {
+                  const updatedTask = {
+                    ...currentTask,
+                    completed_pomodoros: currentTask.completed_pomodoros + 1
+                  };
+                  setCurrentTask(updatedTask);
+                  onCompletePomodoro && onCompletePomodoro(currentTask.id);
+                } catch (error) {
+                  console.error('Error updating task pomodoros:', error);
                 }
-                if (settings.autoStartNextSession) {
-                  setIsRunning(true);
-                }
-                if (settings.playSoundWhenSessionEnds) {
-                  // Play sound logic would go here
-                }
-                onCompleteSession && onCompleteSession();
-                setSessionStartTime(null);
-                setCurrentTask(null);
-                setTimerVisible(false);
-              }}
-            />
-          
+              }
+              if (settings.autoStartNextSession) {
+                setIsRunning(true);
+              }
+              if (settings.playSoundWhenSessionEnds) {
+                // Play sound logic would go here
+              }
+              onCompleteSession && onCompleteSession();
+              setSessionStartTime(null);
+              setCurrentTask(null);
+              setTimerVisible(false);
+            }}
+          />
+
           <div className="mt-8 space-y-6">
-            <ProgressTracker 
-              currentSession={1} 
-              totalSessions={1} 
+            <ProgressTracker
+              currentSession={1}
+              totalSessions={1}
             />
-            
+
             <MotivationalWidget />
           </div>
-          
+
           {/* Button to go back to task form */}
           {/* <button
             onClick={handleResetAndNewTask}
@@ -413,48 +413,48 @@ export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
     const savedSettings = localStorage.getItem('pomodoroSettings');
     return savedSettings ? JSON.parse(savedSettings) : defaultSettings;
   });
-  
+
   const [time, setTime] = useState(() => {
     const savedTime = localStorage.getItem('pomodoroTime');
     return savedTime ? parseInt(savedTime, 10) : defaultSettings.focusDuration * 60;
   });
-  
+
   const [isRunning, setIsRunning] = useState(() => {
     const savedIsRunning = localStorage.getItem('pomodoroIsRunning');
     return savedIsRunning === 'true';
   });
-  
+
   const [currentTask, setCurrentTask] = useState(() => {
     const savedCurrentTask = localStorage.getItem('pomodoroCurrentTask');
     return savedCurrentTask ? JSON.parse(savedCurrentTask) : null;
   });
-  
+
   // References
   const timerRef = useRef(null);
   const totalTimeRef = useRef(() => {
     const savedTotalTime = localStorage.getItem('pomodoroTotalTime');
     return savedTotalTime ? parseInt(savedTotalTime, 10) : defaultSettings.focusDuration * 60;
   });
-  
+
   // Store last updated timestamp
   const lastUpdatedRef = useRef(() => {
     const savedLastUpdated = localStorage.getItem('pomodoroLastUpdated');
     return savedLastUpdated ? parseInt(savedLastUpdated, 10) : Date.now();
   });
-  
+
   // Store state in localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('pomodoroSettings', JSON.stringify(settings));
   }, [settings]);
-  
+
   useEffect(() => {
     localStorage.setItem('pomodoroTime', time.toString());
   }, [time]);
-  
+
   useEffect(() => {
     localStorage.setItem('pomodoroIsRunning', isRunning.toString());
   }, [isRunning]);
-  
+
   useEffect(() => {
     if (currentTask) {
       localStorage.setItem('pomodoroCurrentTask', JSON.stringify(currentTask));
@@ -543,15 +543,15 @@ export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
   // Timer controls
   const startTimer = () => setIsRunning(true);
   const pauseTimer = () => setIsRunning(false);
-  
+
   // FIXED: Update resetTimer function to properly handle reset
   const resetTimer = () => {
     pauseTimer();
-    
+
     // Reset to current session type's duration
     let resetTime;
     resetTime = settings.focusDuration * 60;
-    
+
     setTime(resetTime);
     totalTimeRef.current = resetTime;
     localStorage.setItem('pomodoroTotalTime', resetTime.toString());
@@ -564,7 +564,7 @@ export const usePomodoro = (onCompletePomodoro, onCompleteSession) => {
       ...prev,
       ...newSettings
     }));
-    
+
     // Apply settings immediately by resetting timer
     resetTimer();
   };

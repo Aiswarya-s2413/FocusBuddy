@@ -108,6 +108,7 @@ class OtpVerifyView(APIView):
     permission_classes=[]
     authentication_classes=[]
     def post(self, request):
+        logger.info("Entered OtpVerifyView.post")
         serializer = OtpVerifySerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
@@ -126,15 +127,18 @@ class OtpVerifyView(APIView):
                 user.otp = None  # Clear the OTP after successful verification
                 user.otp_created_at = None
                 user.save()
+                logger.info("OtpVerifyView.post successful")
                 return Response({"message": "OTP verified"}, status=status.HTTP_200_OK)
             except User.DoesNotExist:
                 return Response({"error": "Invalid Email or OTP"}, status=status.HTTP_400_BAD_REQUEST)
+        logger.warning("OtpVerifyView.post validation failed: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ResendOtpView(APIView):
     permission_classes=[]
     authentication_classes=[]
     def post(self, request):
+        logger.info("Entered ResendOtpView.post")
         email = request.data.get('email')
         try:
             user = User.objects.get(email=email)
@@ -151,6 +155,7 @@ class ResendOtpView(APIView):
                 recipient_list=[user.email],
                 fail_silently=False,
             )
+            logger.info("ResendOtpView.post successful")
             return Response({"message": "OTP resent successfully"}, status=status.HTTP_200_OK)
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
@@ -160,11 +165,14 @@ class SelectSubjectsView(APIView):
     permission_classes=[]
     authentication_classes=[]
     def get(self, request):
+        logger.info("Entered SelectSubjectsView.get")
         subjects = Subject.objects.all()
         serializer = SubjectSerializer(subjects, many=True)
+        logger.info("SelectSubjectsView.get successful")
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
+        logger.info("Entered SelectSubjectsView.post")
         serializer = SubjectSelectionSerializer(data=request.data)
         if serializer.is_valid():
             try:
@@ -172,15 +180,18 @@ class SelectSubjectsView(APIView):
                 subject_ids = serializer.validated_data['subjects']
                 subjects = Subject.objects.filter(id__in=subject_ids)
                 user.subjects.set(subjects)
+                logger.info("SelectSubjectsView.post successful")
                 return Response({"message": "Subjects added and user registered"}, status=status.HTTP_200_OK)
             except User.DoesNotExist:
                 return Response({"error": "User not found or not verified"}, status=status.HTTP_400_BAD_REQUEST)
+        logger.warning("SelectSubjectsView.post validation failed: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes=[]
     def post(self, request):
+        logger.info("Entered LoginView.post")
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             data = serializer.validated_data
@@ -194,6 +205,7 @@ class LoginView(APIView):
                 "refresh", data["refresh"], httponly=False, 
                 secure=False, samesite='Lax', path="/"
             )
+            logger.info("LoginView.post successful")
             return response
         logger.warning("Login failed with errors: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -247,6 +259,7 @@ class ForgotPasswordView(APIView):
     authentication_classes = []
     
     def post(self, request):
+        logger.info("Entered ForgotPasswordView.post")
         logger.info("Received forgot password request with data: %s", request.data)
         serializer = ForgotPasswordSerializer(data=request.data)
         
@@ -268,6 +281,7 @@ class ForgotPasswordView(APIView):
                         fail_silently=False,
                     )
                     logger.info("Password reset OTP email sent successfully to %s", user.email)
+                    logger.info("ForgotPasswordView.post successful")
                     return Response({
                         "message": "OTP has been sent to your email"
                     }, status=status.HTTP_200_OK)
@@ -296,6 +310,7 @@ class VerifyForgotPasswordOTPView(APIView):
     permission_classes = [AllowAny]
     authentication_classes=[]
     def post(self, request):
+        logger.info("Entered VerifyForgotPasswordOTPView.post")
         serializer = VerifyForgotPasswordOTPSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
@@ -312,16 +327,18 @@ class VerifyForgotPasswordOTPView(APIView):
                 
                 if user.otp != otp:
                     return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
-                
+                logger.info("VerifyForgotPasswordOTPView.post successful")
                 return Response({"message": "OTP verified successfully"}, status=status.HTTP_200_OK)
             except User.DoesNotExist:
                 return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
+        logger.warning("VerifyForgotPasswordOTPView.post validation failed: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
     authentication_classes=[]
     def post(self, request):
+        logger.info("Entered ResetPasswordView.post")
         serializer = ResetPasswordSerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
@@ -345,15 +362,18 @@ class ResetPasswordView(APIView):
                 user.otp = None  # Clear the OTP after successful password reset
                 user.otp_created_at = None
                 user.save()
+                logger.info("ResetPasswordView.post successful")
                 return Response({"message": "Password reset successfully"}, status=status.HTTP_200_OK)
             except User.DoesNotExist:
                 return Response({"error": "User not found"}, status=status.HTTP_400_BAD_REQUEST)
+        logger.warning("ResetPasswordView.post validation failed: %s", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class LogoutView(APIView):
     
 
     def post(self, request):
+        logger.info("Entered LogoutView.post")
         response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
         
         # Clear the JWT cookies with exact same parameters as when setting them
@@ -370,7 +390,7 @@ class LogoutView(APIView):
         
         # For debugging
         print("Clearing cookies:", request.COOKIES)
-        
+        logger.info("LogoutView.post successful")
         return response
 
 
@@ -378,7 +398,9 @@ class UpdateProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        logger.info("Entered UpdateProfileView.get")
         user = request.user
+        logger.info("UpdateProfileView.get successful")
         return Response({
             "id": user.id,
             "name": user.name,
@@ -386,6 +408,7 @@ class UpdateProfileView(APIView):
         }, status=status.HTTP_200_OK)
 
     def put(self, request):
+        logger.info("Entered UpdateProfileView.put")
         try:
             # Get token from cookies
             access_token = request.COOKIES.get('access')
@@ -416,13 +439,14 @@ class UpdateProfileView(APIView):
 
             user.name = new_name
             user.save()
-
+            logger.info("UpdateProfileView.put successful")
             return Response(
                 {"message": "Profile updated successfully", "user": {"name": user.name, "email": user.email}},
                 status=status.HTTP_200_OK
             )
 
         except Exception as e:
+            logger.error(f"Error in UpdateProfileView.put: {str(e)}", exc_info=True)
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

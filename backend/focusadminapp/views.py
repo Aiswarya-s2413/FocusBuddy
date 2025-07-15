@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 @permission_classes([AllowAny])
 class AdminLoginView(APIView):
     def post(self, request):
-        
+        logger.info("Entered AdminLoginView.post")
         logger.info(f"Admin login attempt for email: {request.data.get('email', 'unknown')}")
         
         serializer = AdminLoginSerializer(data=request.data, context={'request': request})
@@ -85,7 +85,7 @@ class AdminLoginView(APIView):
                 return response
                 
             except Exception as e:
-                logger.error(f"Error during login process: {str(e)}")
+                logger.error(f"Error during login process: {str(e)}", exc_info=True)
                 return Response({
                     "error": "Login failed",
                     "detail": "An error occurred during authentication"
@@ -97,6 +97,7 @@ class AdminLoginView(APIView):
 class AdminLogoutView(APIView):
     authentication_classes = [AdminCookieJWTAuthentication]
     def post(self, request):
+        logger.info("Entered AdminLogoutView.post")
         try:
         
             
@@ -133,7 +134,7 @@ class AdminLogoutView(APIView):
             return response
             
         except Exception as e:
-            logger.error(f"Error during logout: {str(e)}")
+            logger.error(f"Error during logout: {str(e)}", exc_info=True)
             # Still try to delete cookies even if there's an error
             response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
             
@@ -167,6 +168,7 @@ class AdminCheckAuthView(APIView):
     authentication_classes = [AdminCookieJWTAuthentication]  
     
     def get(self, request):
+        logger.info("Entered AdminCheckAuthView.get")
         try:
             # Get token from cookies
             access_token = request.COOKIES.get('admin_access')
@@ -223,7 +225,7 @@ class AdminCheckAuthView(APIView):
                     status=status.HTTP_401_UNAUTHORIZED
                 )
         except Exception as e:
-            logger.error(f"Error checking authentication: {str(e)}")
+            logger.error(f"Error checking authentication: {str(e)}", exc_info=True)
             return Response(
                 {"error": "An error occurred while checking authentication"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -231,6 +233,7 @@ class AdminCheckAuthView(APIView):
 
 class AdminRefreshTokenView(APIView):
     def post(self, request):
+        logger.info("Entered AdminRefreshTokenView.post")
         # Get refresh token from admin_refresh cookie
         refresh_token = request.COOKIES.get('admin_refresh')
         
@@ -250,26 +253,27 @@ class AdminRefreshTokenView(APIView):
                 'message': 'Token refreshed successfully'
             })
             
-            # Set the new access token in cookie
+            
             response.set_cookie(
                 'admin_access',
                 access_token,
                 max_age=60 * 15,  # 15 minutes
                 httponly=True,
-                secure=True,  # Set to False if not using HTTPS in development
+                secure=True,  
                 samesite='Lax'
             )
             
+            logger.info("AdminRefreshTokenView.post successful")
             return response
             
         except TokenError as e:
-            logger.error(f"Token refresh failed: {str(e)}")
+            logger.error(f"Token refresh failed: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'Invalid refresh token'}, 
                 status=status.HTTP_401_UNAUTHORIZED
             )
         except Exception as e:
-            logger.error(f"Unexpected error during token refresh: {str(e)}")
+            logger.error(f"Unexpected error during token refresh: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'Token refresh failed'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -280,6 +284,7 @@ class UserListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered UserListView.get")
         try:
             # Get search query, pagination parameters, and mentor filter
             search_query = request.query_params.get('search', '')
@@ -313,6 +318,7 @@ class UserListView(APIView):
             # Serialize the data
             serializer = UserListSerializer(paginated_users, many=True)
             
+            logger.info("UserListView.get successful")
             return Response({
                 "users": serializer.data,
                 "pagination": {
@@ -326,7 +332,7 @@ class UserListView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error listing users: {str(e)}")
+            logger.error(f"Error listing users: {str(e)}", exc_info=True)
             return Response(
                 {"error": "An error occurred while listing users"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -337,6 +343,7 @@ class UserEditView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def put(self, request, user_id):
+        logger.info("Entered UserEditView.put")
         try:
             try:
                 user = User.objects.get(id=user_id)
@@ -349,6 +356,7 @@ class UserEditView(APIView):
             serializer = UserEditSerializer(user, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
+                logger.info("UserEditView.put successful")
                 return Response({
                     "message": "User updated successfully",
                     "user": serializer.data
@@ -356,7 +364,7 @@ class UserEditView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
-            logger.error(f"Error updating user: {str(e)}")
+            logger.error(f"Error updating user: {str(e)}", exc_info=True)
             return Response(
                 {"error": "An error occurred while updating user"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -367,6 +375,7 @@ class UserBlockView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def post(self, request, user_id):
+        logger.info("Entered UserBlockView.post")
         try:
             try:
                 user = User.objects.get(id=user_id)
@@ -381,6 +390,7 @@ class UserBlockView(APIView):
             user.save()
 
             action = "blocked" if not user.is_active else "unblocked"
+            logger.info(f"User {user.email} blocked/unblocked by {request.user.email}")
             return Response({
                 "message": f"User {action} successfully",
                 "user": {
@@ -391,7 +401,7 @@ class UserBlockView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error blocking/unblocking user: {str(e)}")
+            logger.error(f"Error blocking/unblocking user: {str(e)}", exc_info=True)
             return Response(
                 {"error": "An error occurred while blocking/unblocking user"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -403,6 +413,7 @@ class AdminJournalListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered AdminJournalListView.get")
         try:
             # Get query parameters
             search_query = request.query_params.get('search', '')
@@ -428,6 +439,7 @@ class AdminJournalListView(APIView):
             # Serialize
             serializer = JournalListSerializer(paginated_journals, many=True)
 
+            logger.info("AdminJournalListView.get successful")
             return Response({
                 "journals": serializer.data,
                 "pagination": {
@@ -441,7 +453,7 @@ class AdminJournalListView(APIView):
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"Error listing journals: {str(e)}")
+            logger.error(f"Error listing journals: {str(e)}", exc_info=True)
             return Response(
                 {"error": "An error occurred while listing journals"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -453,10 +465,12 @@ class AdminJournalDetailView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
     
     def get(self, request, journal_id):
+        logger.info("Entered AdminJournalDetailView.get")
         try:
             journal = Journal.objects.select_related('user').get(pk=journal_id)
             serializer = JournalDetailSerializer(journal)
             print(serializer.data)
+            logger.info("AdminJournalDetailView.get successful")
             return Response(serializer.data)
         except Journal.DoesNotExist:
             return Response(
@@ -464,6 +478,7 @@ class AdminJournalDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
+            logger.error(f"Error in AdminJournalDetailView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'An error occurred while fetching the journal'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -474,6 +489,7 @@ class AdminBlockJournalView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
     
     def post(self, request, journal_id):
+        logger.info("Entered AdminBlockJournalView.post")
         try:
             journal = Journal.objects.get(pk=journal_id)
             # Toggle the is_blocked status
@@ -481,6 +497,7 @@ class AdminBlockJournalView(APIView):
             journal.save()
             
             action = "blocked" if journal.is_blocked else "unblocked"
+            logger.info(f"Journal {journal_id} blocked/unblocked by {request.user.email}")
             return Response({
                 'message': f'Journal successfully {action}',
                 'is_blocked': journal.is_blocked
@@ -491,6 +508,7 @@ class AdminBlockJournalView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
+            logger.error(f"Error in AdminBlockJournalView.post: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'An error occurred while updating the journal'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -501,6 +519,7 @@ class MentorApprovalListView(APIView):
 
     def get(self, request):
         """List mentors with filtering, search and pagination"""
+        logger.info("Entered MentorApprovalListView.get")
         try:
             # Get query parameters
             search_query = request.query_params.get('search', '')
@@ -535,6 +554,7 @@ class MentorApprovalListView(APIView):
             # Serialize the data
             serializer = MentorApprovalSerializer(paginated_mentors, many=True)
             
+            logger.info("MentorApprovalListView.get successful")
             return Response({
                 'mentors': serializer.data,
                 'pagination': {
@@ -548,7 +568,7 @@ class MentorApprovalListView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error listing mentors: {str(e)}")
+            logger.error(f"Error listing mentors: {str(e)}", exc_info=True)
             return Response(
                 {"error": "An error occurred while listing mentors"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -560,6 +580,7 @@ class MentorDetailView(APIView):
 
     def get(self, request, mentor_id):
         """Get detailed mentor information"""
+        logger.info("Entered MentorDetailView.get")
         try:
             try:
                 mentor = Mentor.objects.select_related('user', 'approved_by').get(id=mentor_id)
@@ -570,10 +591,11 @@ class MentorDetailView(APIView):
                 )
             
             serializer = MentorDetailSerializer(mentor)
+            logger.info("MentorDetailView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error getting mentor detail: {str(e)}")
+            logger.error(f"Error getting mentor detail: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'An error occurred while fetching mentor details'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -585,6 +607,7 @@ class ApproveMentorView(APIView):
 
     def post(self, request, mentor_id):
         """Approve a mentor application"""
+        logger.info("Entered ApproveMentorView.post")
         try:
             try:
                 mentor = Mentor.objects.select_related('user').get(id=mentor_id)
@@ -629,6 +652,7 @@ class ApproveMentorView(APIView):
                 approval_request.save()
             
             logger.info(f"Mentor approved: {mentor.user.name} by {request.user.email}")
+            logger.info("ApproveMentorView.post successful")
             return Response({
                 'message': f'Mentor application for {mentor.user.name} has been approved successfully',
                 'mentor_id': mentor.id,
@@ -636,7 +660,7 @@ class ApproveMentorView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error approving mentor: {str(e)}")
+            logger.error(f"Error approving mentor: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to approve mentor: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -647,6 +671,7 @@ class RejectMentorView(APIView):
 
     def post(self, request, mentor_id):
         """Reject a mentor application"""
+        logger.info("Entered RejectMentorView.post")
         try:
             # Validate mentor_id
             if not mentor_id or not str(mentor_id).isdigit():
@@ -704,7 +729,7 @@ class RejectMentorView(APIView):
             try:
                 mentor.save()
             except Exception as save_error:
-                logger.error(f"Error saving mentor rejection: {str(save_error)}")
+                logger.error(f"Error saving mentor rejection: {str(save_error)}", exc_info=True)
                 return Response(
                     {'error': 'Failed to save rejection status'}, 
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -743,7 +768,7 @@ class RejectMentorView(APIView):
             
             # Log successful rejection
             logger.info(f"Mentor rejected: {mentor.user.name} (ID: {mentor.id}) by {request.user.email}")
-            
+            logger.info("RejectMentorView.post successful")
             # Return success response
             return Response({
                 'message': f'Mentor application for {mentor.user.name} has been rejected successfully',
@@ -767,6 +792,7 @@ class MentorApprovalStatsView(APIView):
 
     def get(self, request):
         """Get statistics for mentor approvals"""
+        logger.info("Entered MentorApprovalStatsView.get")
         try:
             stats = {
                 'total_mentors': Mentor.objects.count(),
@@ -775,10 +801,11 @@ class MentorApprovalStatsView(APIView):
                 'rejected_mentors': Mentor.objects.filter(approval_status='rejected').count(),
             }
             
+            logger.info("MentorApprovalStatsView.get successful")
             return Response(stats, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error getting mentor stats: {str(e)}")
+            logger.error(f"Error getting mentor stats: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to get stats: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -789,6 +816,7 @@ class AdminWalletView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered AdminWalletView.get")
         try:
             # Pagination parameters
             page = request.GET.get('page', 1)
@@ -839,9 +867,11 @@ class AdminWalletView(APIView):
                 'pagination': pagination_info
             }
 
+            logger.info("AdminWalletView.get successful")
             return Response(data, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.error(f"Error in AdminWalletView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch admin wallet data: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -894,6 +924,7 @@ class AdminFocusBuddySessionListView(APIView):
 
     def get(self, request):
         """List all focus buddy sessions with search, filter, and pagination"""
+        logger.info("Entered AdminFocusBuddySessionListView.get")
         try:
             # Get query parameters
             search_query = request.query_params.get('search', '')
@@ -934,6 +965,7 @@ class AdminFocusBuddySessionListView(APIView):
             # Serialize the sessions
             serializer = FocusBuddySessionSerializer(paginated_sessions, many=True)
             
+            logger.info("AdminFocusBuddySessionListView.get successful")
             return Response({
                 'sessions': serializer.data,
                 'pagination': {
@@ -947,13 +979,13 @@ class AdminFocusBuddySessionListView(APIView):
             }, status=status.HTTP_200_OK)
             
         except ValueError as e:
-            logger.error(f"Invalid parameter in focus sessions list: {str(e)}")
+            logger.error(f"Invalid parameter in focus sessions list: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'Invalid pagination parameters'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(f"Error listing focus buddy sessions: {str(e)}")
+            logger.error(f"Error listing focus buddy sessions: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'An error occurred while listing focus buddy sessions'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -965,6 +997,7 @@ class AdminFocusBuddySessionDetailView(APIView):
 
     def get(self, request, session_id):
         """Get detailed information about a specific focus buddy session"""
+        logger.info("Entered AdminFocusBuddySessionDetailView.get")
         try:
             try:
                 session = FocusBuddySession.objects.select_related('creator_id').get(id=session_id)
@@ -975,10 +1008,11 @@ class AdminFocusBuddySessionDetailView(APIView):
                 )
             
             serializer = FocusBuddySessionDetailSerializer(session)
+            logger.info("AdminFocusBuddySessionDetailView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error getting focus buddy session detail: {str(e)}")
+            logger.error(f"Error getting focus buddy session detail: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'An error occurred while fetching session details'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -990,6 +1024,7 @@ class AdminFocusBuddySessionStatsView(APIView):
 
     def get(self, request):
         """Get statistics for focus buddy sessions"""
+        logger.info("Entered AdminFocusBuddySessionStatsView.get")
         try:
             from django.utils import timezone
             from datetime import timedelta
@@ -1049,10 +1084,11 @@ class AdminFocusBuddySessionStatsView(APIView):
                 'top_creators': list(top_creators)
             }
             
+            logger.info("AdminFocusBuddySessionStatsView.get successful")
             return Response(stats, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error getting focus buddy session stats: {str(e)}")
+            logger.error(f"Error getting focus buddy session stats: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'An error occurred while fetching session statistics'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1064,6 +1100,7 @@ class AdminEndFocusBuddySessionView(APIView):
 
     def post(self, request, session_id):
         """Admin action to end a focus buddy session"""
+        logger.info("Entered AdminEndFocusBuddySessionView.post")
         try:
             try:
                 session = FocusBuddySession.objects.get(id=session_id)
@@ -1088,7 +1125,7 @@ class AdminEndFocusBuddySessionView(APIView):
             session.end_session(reason=reason)
             
             logger.info(f"Focus buddy session {session_id} ended by admin {request.user.email}, reason: {reason}")
-            
+            logger.info("AdminEndFocusBuddySessionView.post successful")
             return Response({
                 'message': f'Focus buddy session ended successfully',
                 'session_id': session.id,
@@ -1097,7 +1134,7 @@ class AdminEndFocusBuddySessionView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error ending focus buddy session: {str(e)}")
+            logger.error(f"Error ending focus buddy session: {str(e)}", exc_info=True)
             return Response(
                 {'error': 'An error occurred while ending the session'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1111,6 +1148,7 @@ class AdminDashboardView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered AdminDashboardView.get")
         try:
             # Get key metrics
             metrics = self.get_key_metrics()
@@ -1129,9 +1167,11 @@ class AdminDashboardView(APIView):
             }
             
             serializer = AdminDashboardSerializer(dashboard_data)
+            logger.info("AdminDashboardView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.error(f"Error in AdminDashboardView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch dashboard data: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1299,6 +1339,7 @@ class AdminUsageGraphView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered AdminUsageGraphView.get")
         period = request.GET.get('period', 'daily')
         
         try:
@@ -1306,9 +1347,11 @@ class AdminUsageGraphView(APIView):
             usage_data = dashboard_view.get_usage_data(period)
             
             serializer = UsageDataSerializer(usage_data)
+            logger.info("AdminUsageGraphView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.error(f"Error in AdminUsageGraphView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch usage data: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1323,14 +1366,17 @@ class AdminRecentActivityView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered AdminRecentActivityView.get")
         try:
             dashboard_view = AdminDashboardView()
             activities = dashboard_view.get_recent_activities()
             
             serializer = RecentActivitySerializer(activities, many=True)
+            logger.info("AdminRecentActivityView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.error(f"Error in AdminRecentActivityView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch recent activities: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1345,14 +1391,17 @@ class AdminMetricsView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered AdminMetricsView.get")
         try:
             dashboard_view = AdminDashboardView()
             metrics = dashboard_view.get_key_metrics()
             
             serializer = AdminMetricsSerializer(metrics)
+            logger.info("AdminMetricsView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.error(f"Error in AdminMetricsView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch metrics: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1367,6 +1416,7 @@ class AdminUserListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered AdminUserListView.get")
         try:
             users = User.objects.annotate(
                 total_focus_sessions=Count('focus_participations'),
@@ -1385,6 +1435,7 @@ class AdminUserListView(APIView):
             
             serializer = UserActivitySerializer(paginated_users, many=True)
             
+            logger.info("AdminUserListView.get successful")
             return Response({
                 'users': serializer.data,
                 'total_count': users.count(),
@@ -1394,6 +1445,7 @@ class AdminUserListView(APIView):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.error(f"Error in AdminUserListView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch users: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1409,6 +1461,7 @@ class AdminPlatformStatsView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        logger.info("Entered AdminPlatformStatsView.get")
         try:
             now = timezone.now()
             today = now.date()
@@ -1493,9 +1546,11 @@ class AdminPlatformStatsView(APIView):
             }
             
             serializer = PlatformStatsSerializer(stats)
+            logger.info("AdminPlatformStatsView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
+            logger.error(f"Error in AdminPlatformStatsView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch platform stats: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1506,21 +1561,33 @@ class MentorReportListAPIView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        reports = MentorReport.objects.select_related('mentor__user', 'reporter', 'session').all()
-        serializer = MentorReportListSerializer(reports, many=True)
-        return Response(serializer.data)
+        logger.info("Entered MentorReportListAPIView.get")
+        try:
+            reports = MentorReport.objects.select_related('mentor__user', 'reporter', 'session').all()
+            serializer = MentorReportListSerializer(reports, many=True)
+            logger.info("MentorReportListAPIView.get successful")
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error in MentorReportListAPIView.get: {str(e)}", exc_info=True)
+            return Response({"error": "Failed to fetch mentor reports"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class BlockMentorAPIView(APIView):
     authentication_classes = [AdminCookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def post(self, request, mentor_id):
+        logger.info("Entered BlockMentorAPIView.post")
         try:
             mentor = Mentor.objects.select_related('user').get(id=mentor_id)
         except Mentor.DoesNotExist:
+            logger.error("Mentor not found in BlockMentorAPIView.post")
             return Response({'error': 'Mentor not found'}, status=status.HTTP_404_NOT_FOUND)
         # Toggle is_active
         mentor.user.is_active = not mentor.user.is_active
         mentor.user.save()
         action = 'blocked' if not mentor.user.is_active else 'unblocked'
+        logger.info(f"Mentor {mentor.user.email} blocked/unblocked by {request.user.email}")
         return Response({'success': True, 'message': f'Mentor {action}.', 'is_active': mentor.user.is_active})
+        except Exception as e:
+            logger.error(f"Error in BlockMentorAPIView.post: {str(e)}", exc_info=True)
+            return Response({'error': 'Failed to block/unblock mentor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

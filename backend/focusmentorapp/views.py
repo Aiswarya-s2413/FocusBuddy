@@ -19,10 +19,6 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Sum
 from decimal import Decimal
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from .serializers import MentorSessionReviewSerializer
-from userapp.models import SessionReview, Mentor
-from rest_framework.permissions import IsAuthenticated
-from userapp.authentication import MentorCookieJWTAuthentication
 
 
 
@@ -46,6 +42,7 @@ class MentorSignupView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        logger.info("Entered MentorSignupView.post")
         serializer = MentorSignupSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -65,6 +62,7 @@ class MentorSignupView(APIView):
                 "mentor_refresh", str(refresh), httponly=True, 
                 secure=False, samesite="Lax", path="/"
             )
+            logger.info("MentorSignupView.post successful")
             return response
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -72,6 +70,7 @@ class MentorLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        logger.info("Entered MentorLoginView.post")
         serializer = MentorLoginSerializer(data=request.data)
         if serializer.is_valid():
             data = serializer.validated_data
@@ -88,6 +87,7 @@ class MentorLoginView(APIView):
                 "mentor_refresh", data["refresh"], httponly=False, 
                 secure=False, samesite="Lax", path="/"
             )
+            logger.info("MentorLoginView.post successful")
             return response
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -95,6 +95,7 @@ class MentorLogoutView(APIView):
     permission_classes = [AllowAny]  # Changed from requiring authentication
     
     def post(self, request):
+        logger.info("Entered MentorLogoutView.post")
         try:
             response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
             
@@ -105,21 +106,20 @@ class MentorLogoutView(APIView):
             # Try to logout if user is authenticated, but don't require it
             if request.user.is_authenticated:
                 logout(request)
-                
+            logger.info("MentorLogoutView.post successful")
             return response
         except Exception as e:
-            logger.error(f"Error during logout: {str(e)}")
-            
+            logger.error(f"Error during logout: {str(e)}", exc_info=True)
             # Still try to delete cookies even if there's an error
             response = Response({"message": "Logged out with warnings"}, status=status.HTTP_200_OK)
             response.delete_cookie('mentor_access', path='/', samesite='Lax')
             response.delete_cookie('mentor_refresh', path='/', samesite='Lax')
-            
             return response
 
 
 class MentorCheckAuthView(APIView):
     def get(self, request):
+        logger.info("Entered MentorCheckAuthView.get")
         try:
             # Get token from cookies
             access_token = request.COOKIES.get('mentor_access')
@@ -134,6 +134,7 @@ class MentorCheckAuthView(APIView):
                 # Validate token
                 AccessToken(access_token)
                 # If token is valid, return success response
+                logger.info("MentorCheckAuthView.get successful")
                 return Response({
                     "message": "Authentication successful",
                     "user": {
@@ -148,7 +149,7 @@ class MentorCheckAuthView(APIView):
                     status=status.HTTP_401_UNAUTHORIZED
                 )
         except Exception as e:
-            logger.error(f"Error checking authentication: {str(e)}")
+            logger.error(f"Error checking authentication: {str(e)}", exc_info=True)
             return Response(
                 {"error": "An error occurred while checking authentication"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -156,6 +157,7 @@ class MentorCheckAuthView(APIView):
 
 class MentorRefreshTokenView(APIView):
     def post(self, request):
+        logger.info("Entered MentorRefreshTokenView.post")
         try:
             # Get refresh token from cookies
             refresh_token = request.COOKIES.get('mentor_refresh')
@@ -181,7 +183,7 @@ class MentorRefreshTokenView(APIView):
                     "mentor_access", access_token, httponly=True, 
                     secure=False, samesite="Lax", path="/"
                 )
-                
+                logger.info("MentorRefreshTokenView.post successful")
                 return response
             except (InvalidToken, TokenError) as e:
                 return Response(
@@ -189,7 +191,7 @@ class MentorRefreshTokenView(APIView):
                     status=status.HTTP_401_UNAUTHORIZED
                 )
         except Exception as e:
-            logger.error(f"Error refreshing token: {str(e)}")
+            logger.error(f"Error refreshing token: {str(e)}", exc_info=True)
             return Response(
                 {"error": "An error occurred while refreshing token"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -199,6 +201,7 @@ class MentorOtpVerifyView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        logger.info("Entered MentorOtpVerifyView.post")
         serializer = MentorOtpVerifySerializer(data=request.data)
         if serializer.is_valid():
             email = serializer.validated_data['email']
@@ -217,6 +220,7 @@ class MentorOtpVerifyView(APIView):
                 user.otp = None  # Clear the OTP after successful verification
                 user.otp_created_at = None
                 user.save()
+                logger.info("MentorOtpVerifyView.post successful")
                 return Response({"message": "OTP verified"}, status=status.HTTP_200_OK)
             except User.DoesNotExist:
                 return Response({"error": "Invalid Email or OTP"}, status=status.HTTP_400_BAD_REQUEST)
@@ -227,6 +231,7 @@ class MentorResendOtpView(APIView):
     authentication_classes = []
     
     def post(self, request):
+        logger.info("Entered MentorResendOtpView.post")
         email = request.data.get('email')
         try:
             # Get mentor user specifically
@@ -249,7 +254,7 @@ class MentorResendOtpView(APIView):
                 recipient_list=[user.email],
                 fail_silently=False,
             )
-            
+            logger.info("MentorResendOtpView.post successful")
             return Response({"message": "Mentor OTP resent successfully"}, status=status.HTTP_200_OK)
             
         except User.DoesNotExist:
@@ -259,19 +264,22 @@ class MentorSelectSubjectsView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        logger.info("Entered MentorSelectSubjectsView.get")
         try:
             subjects = Subject.objects.all()
             # Create a simple list of subjects with id and name
             subject_list = [{'id': subject.id, 'name': subject.name} for subject in subjects]
+            logger.info("MentorSelectSubjectsView.get successful")
             return Response(subject_list, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"Error fetching subjects: {str(e)}")
+            logger.error(f"Error fetching subjects: {str(e)}", exc_info=True)
             return Response(
                 {"error": "Failed to fetch subjects"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     def post(self, request):
+        logger.info("Entered MentorSelectSubjectsView.post")
         serializer = MentorSubjectSelectionSerializer(data=request.data)
         if serializer.is_valid():
             try:
@@ -279,11 +287,12 @@ class MentorSelectSubjectsView(APIView):
                 subject_ids = serializer.validated_data['subjects']
                 subjects = Subject.objects.filter(id__in=subject_ids)
                 user.subjects.set(subjects)
+                logger.info("MentorSelectSubjectsView.post successful")
                 return Response({"message": "Subjects added successfully"}, status=status.HTTP_200_OK)
             except User.DoesNotExist:
                 return Response({"error": "Mentor not found or not verified"}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
-                logger.error(f"Error saving subjects: {str(e)}")
+                logger.error(f"Error saving subjects: {str(e)}", exc_info=True)
                 return Response(
                     {"error": "Failed to save subjects"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -294,6 +303,7 @@ class MentorForgotPasswordView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        logger.info("Entered MentorForgotPasswordView.post")
         serializer = MentorForgotPasswordSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -305,9 +315,10 @@ class MentorForgotPasswordView(APIView):
                     recipient_list=[user.email],
                     fail_silently=False,
                 )
+                logger.info("MentorForgotPasswordView.post successful")
                 return Response({"message": "OTP has been sent to your email"}, status=status.HTTP_200_OK)
             except Exception as e:
-                logger.error(f"Failed to send OTP email: {str(e)}")
+                logger.error(f"Failed to send OTP email: {str(e)}", exc_info=True)
                 return Response(
                     {"error": "Failed to send OTP email. Please try again."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -318,8 +329,10 @@ class MentorVerifyForgotPasswordOTPView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        logger.info("Entered MentorVerifyForgotPasswordOTPView.post")
         serializer = MentorVerifyForgotPasswordOTPSerializer(data=request.data)
         if serializer.is_valid():
+            logger.info("MentorVerifyForgotPasswordOTPView.post successful")
             return Response({"message": "OTP verified successfully"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -327,9 +340,11 @@ class MentorResetPasswordView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        logger.info("Entered MentorResetPasswordView.post")
         serializer = MentorResetPasswordSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
+            logger.info("MentorResetPasswordView.post successful")
             return Response({"message": "Password reset successfully"}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -340,6 +355,7 @@ class MentorProfileUploadView(APIView):
     
     def get(self, request):
         """Get current mentor profile data"""
+        logger.info("Entered MentorProfileUploadView.get")
         try:
             # Ensure the user has a mentor profile
             mentor, created = Mentor.objects.get_or_create(user=request.user)
@@ -348,11 +364,12 @@ class MentorProfileUploadView(APIView):
             if not request.user.is_mentor:
                 request.user.is_mentor = True
                 request.user.save()
-                
+            
             serializer = MentorProfileUploadSerializer(mentor)
+            logger.info("MentorProfileUploadView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"Error fetching mentor profile: {str(e)}")
+            logger.error(f"Error fetching mentor profile: {str(e)}", exc_info=True)
             return Response(
                 {"error": "Failed to fetch mentor profile data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -361,6 +378,7 @@ class MentorProfileUploadView(APIView):
     @transaction.atomic
     def put(self, request):
         """Update mentor profile"""
+        logger.info("Entered MentorProfileUploadView.put")
         try:
             # Get or create mentor profile
             mentor, created = Mentor.objects.get_or_create(user=request.user)
@@ -390,12 +408,12 @@ class MentorProfileUploadView(APIView):
                     data['hourly_rate'] = json_data['hourly_rate']
                     
                 
-            
             # Process the data
             serializer = MentorProfileUploadSerializer(mentor, data=data, partial=True)
             
             if serializer.is_valid():
                 serializer.save()
+                logger.info("MentorProfileUploadView.put successful")
                 return Response({
                     "message": "Profile updated successfully",
                     "profile": serializer.data
@@ -404,7 +422,7 @@ class MentorProfileUploadView(APIView):
                 logger.error(f"Validation errors: {serializer.errors}")
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Error updating mentor profile: {str(e)}")
+            logger.error(f"Error updating mentor profile: {str(e)}", exc_info=True)
             return Response(
                 {"error": f"An error occurred while updating the profile: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -412,6 +430,7 @@ class MentorProfileUploadView(APIView):
             
     @transaction.atomic
     def post(self, request):
+        logger.info("Entered MentorProfileUploadView.post (calls put)")
         return self.put(request)
 
 class MentorProfileDisplayView(APIView):
@@ -421,6 +440,7 @@ class MentorProfileDisplayView(APIView):
     
     def get(self, request, mentor_id=None):
         """Get mentor profile data"""
+        logger.info("Entered MentorProfileDisplayView.get")
         try:
             if mentor_id:
                 # Get specific mentor profile (for viewing others)
@@ -442,10 +462,11 @@ class MentorProfileDisplayView(APIView):
                     request.user.save()
             
             serializer = MentorProfileDisplaySerializer(mentor)
+            logger.info("MentorProfileDisplayView.get successful")
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error fetching mentor profile: {str(e)}")
+            logger.error(f"Error fetching mentor profile: {str(e)}", exc_info=True)
             return Response(
                 {"error": "Failed to fetch mentor profile data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -454,6 +475,7 @@ class MentorProfileDisplayView(APIView):
     @transaction.atomic
     def put(self, request):
         """Update current user's mentor profile"""
+        logger.info("Entered MentorProfileDisplayView.put")
         try:
             # Get current user's mentor profile
             mentor = get_object_or_404(Mentor, user=request.user)
@@ -488,6 +510,7 @@ class MentorProfileDisplayView(APIView):
             
             if serializer.is_valid():
                 updated_mentor = serializer.save()
+                logger.info("MentorProfileDisplayView.put successful")
                 return Response({
                     "message": "Profile updated successfully",
                     "profile": serializer.data
@@ -497,7 +520,7 @@ class MentorProfileDisplayView(APIView):
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 
         except Exception as e:
-            logger.error(f"Error updating mentor profile: {str(e)}")
+            logger.error(f"Error updating mentor profile: {str(e)}", exc_info=True)
             return Response(
                 {"error": f"An error occurred while updating the profile: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -509,8 +532,10 @@ class MentorAvailabilityView(APIView):
     
     def get(self, request):
         """Get mentor's availability"""
+        logger.info("Entered MentorAvailabilityView.get")
         try:
             mentor = get_object_or_404(Mentor, user=request.user)
+            logger.info("MentorAvailabilityView.get successful")
             return Response({
                 'success': True,
                 'availability': mentor.availability
@@ -523,12 +548,14 @@ class MentorAvailabilityView(APIView):
     
     def put(self, request):
         """Complete replacement of mentor's availability"""
+        logger.info("Entered MentorAvailabilityView.put")
         try:
             mentor = get_object_or_404(Mentor, user=request.user)
             serializer = MentorAvailabilitySerializer(mentor, data=request.data)
             
             if serializer.is_valid():
                 updated_mentor = serializer.save()
+                logger.info("MentorAvailabilityView.put successful")
                 return Response({
                     'success': True,
                     'message': 'Availability updated successfully',
@@ -548,12 +575,14 @@ class MentorAvailabilityView(APIView):
     
     def patch(self, request):
         """Partial update of mentor's availability"""
+        logger.info("Entered MentorAvailabilityView.patch")
         try:
             mentor = get_object_or_404(Mentor, user=request.user)
             serializer = MentorAvailabilitySerializer(mentor, data=request.data, partial=True)
             
             if serializer.is_valid():
                 updated_mentor = serializer.save()
+                logger.info("MentorAvailabilityView.patch successful")
                 return Response({
                     'success': True,
                     'message': 'Availability updated successfully',
@@ -581,6 +610,7 @@ class MentorSessionListView(APIView):
     
     def get(self, request):
         """Get list of mentor sessions for the authenticated user"""
+        logger.info("Entered MentorSessionListView.get")
         user = request.user
         
         # Check if user is a mentor
@@ -606,7 +636,7 @@ class MentorSessionListView(APIView):
         
         # Serialize the data
         serializer = MentorSessionSerializer(sessions, many=True)
-        
+        logger.info("MentorSessionListView.get successful")
         return Response({
             'success': True,
             'sessions': serializer.data
@@ -645,15 +675,17 @@ class MentorSessionDetailView(APIView):
     
     def get(self, request, pk):
         """Retrieve a specific mentor session"""
+        logger.info("Entered MentorSessionDetailView.get")
         try:
             session = self.get_session(request, pk)
             serializer = MentorSessionSerializer(session)
-            
+            logger.info("MentorSessionDetailView.get successful")
             return Response({
                 'success': True,
                 'session': serializer.data
             })
         except Exception as e:
+            logger.error(f"Error in MentorSessionDetailView.get: {str(e)}", exc_info=True)
             return Response({
                 'success': False,
                 'message': 'Session not found or access denied'
@@ -661,12 +693,14 @@ class MentorSessionDetailView(APIView):
     
     def put(self, request, pk):
         """Complete update of a mentor session"""
+        logger.info("Entered MentorSessionDetailView.put")
         try:
             session = self.get_session(request, pk)
             serializer = MentorSessionSerializer(session, data=request.data)
             
             if serializer.is_valid():
                 updated_session = serializer.save()
+                logger.info("MentorSessionDetailView.put successful")
                 return Response({
                     'success': True,
                     'message': 'Session updated successfully',
@@ -679,6 +713,7 @@ class MentorSessionDetailView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
+            logger.error(f"Error in MentorSessionDetailView.put: {str(e)}", exc_info=True)
             return Response({
                 'success': False,
                 'message': 'Session not found or access denied'
@@ -686,12 +721,14 @@ class MentorSessionDetailView(APIView):
     
     def patch(self, request, pk):
         """Partial update of a mentor session"""
+        logger.info("Entered MentorSessionDetailView.patch")
         try:
             session = self.get_session(request, pk)
             serializer = MentorSessionSerializer(session, data=request.data, partial=True)
             
             if serializer.is_valid():
                 updated_session = serializer.save()
+                logger.info("MentorSessionDetailView.patch successful")
                 return Response({
                     'success': True,
                     'message': 'Session updated successfully',
@@ -704,6 +741,7 @@ class MentorSessionDetailView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
             
         except Exception as e:
+            logger.error(f"Error in MentorSessionDetailView.patch: {str(e)}", exc_info=True)
             return Response({
                 'success': False,
                 'message': 'Session not found or access denied'
@@ -715,12 +753,15 @@ class StartMentorSessionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, session_id):
+        logger.info("Entered StartMentorSessionView.patch")
         try:
             session = MentorSession.objects.get(id=session_id, mentor__user=request.user)
         except MentorSession.DoesNotExist:
+            logger.error("Session not found or unauthorized in StartMentorSessionView.patch")
             return Response({"error": "Session not found or unauthorized"}, status=404)
 
         if session.status != 'confirmed':
+            logger.warning("Attempt to start non-confirmed session in StartMentorSessionView.patch")
             return Response({"error": "Only confirmed sessions can be started"}, status=400)
 
         # Update session status and timing
@@ -733,7 +774,7 @@ class StartMentorSessionView(APIView):
         session.meeting_password = request.data.get("meeting_password", "")
 
         session.save()
-
+        logger.info("StartMentorSessionView.patch successful")
         return Response({
             "success": True,
             "message": "Session started successfully",
@@ -748,16 +789,20 @@ class CancelMentorSessionView(APIView):
     authentication_classes = [MentorCookieJWTAuthentication]
 
     def post(self, request, session_id):
+        logger.info("Entered CancelMentorSessionView.post")
         try:
             session = MentorSession.objects.get(id=session_id, mentor__user=request.user)
         except MentorSession.DoesNotExist:
+            logger.error("Session not found or unauthorized in CancelMentorSessionView.post")
             return Response({"error": "Session not found or unauthorized"}, status=404)
 
         if session.status in ['completed', 'cancelled']:
+            logger.warning(f"Attempt to cancel a {session.status} session in CancelMentorSessionView.post")
             return Response({"error": f"Cannot cancel a {session.status} session"}, status=400)
 
         session.cancel_session(cancelled_by_user=request.user, reason=request.data.get("reason"))
         serializer = MentorSessionSerializer(session)
+        logger.info("CancelMentorSessionView.post successful")
         return Response(serializer.data)
 
 class MentorWalletView(APIView):
@@ -765,9 +810,11 @@ class MentorWalletView(APIView):
     authentication_classes = [MentorCookieJWTAuthentication]
 
     def get(self, request):
+        logger.info("Entered MentorWalletView.get")
         try:
             mentor = request.user.mentor_profile
         except Mentor.DoesNotExist:
+            logger.error("Mentor profile not found in MentorWalletView.get")
             return Response(
                 {'error': 'Mentor profile not found'}, 
                 status=status.HTTP_404_NOT_FOUND
@@ -821,10 +868,11 @@ class MentorWalletView(APIView):
                 'earnings_count': paginator.count,
                 'pagination': pagination_info
             }
-
+            logger.info("MentorWalletView.get successful")
             return Response(data, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.error(f"Error in MentorWalletView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch wallet data: {str(e)}'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -870,12 +918,15 @@ class MentorSessionReviewListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        logger.info("Entered MentorSessionReviewListView.get")
         try:
             mentor = request.user.mentor_profile
         except Mentor.DoesNotExist:
+            logger.error("Mentor profile not found in MentorSessionReviewListView.get")
             return Response({'error': 'Mentor profile not found'}, status=404)
 
         # Get all reviews for sessions where this mentor is the mentor
         reviews = SessionReview.objects.filter(session__mentor=mentor).select_related('session', 'session__student', 'session__mentor__user')
         serializer = MentorSessionReviewSerializer(reviews, many=True)
+        logger.info("MentorSessionReviewListView.get successful")
         return Response({'success': True, 'reviews': serializer.data})
