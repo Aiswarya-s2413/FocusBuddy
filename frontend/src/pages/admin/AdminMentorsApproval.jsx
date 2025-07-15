@@ -184,6 +184,7 @@ const AdminMentorsApproval = () => {
   });
 
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isConfirmRejectModalOpen, setIsConfirmRejectModalOpen] = useState(false); // NEW
   const [rejectionReason, setRejectionReason] = useState("");
   const [mentorToReject, setMentorToReject] = useState(null);
 
@@ -409,6 +410,7 @@ const handleRejectWithReason = async () => {
   
   await handleRejectMentor(mentorToReject.id, rejectionReason);
   setIsRejectModalOpen(false);
+  setIsConfirmRejectModalOpen(false); // Close confirm modal if open
   setMentorToReject(null);
   setRejectionReason("");
 };
@@ -781,10 +783,36 @@ const handleRejectWithReason = async () => {
             Cancel
           </Button>
           <Button
-            onClick={handleRejectWithReason}
+            onClick={() => setIsConfirmRejectModalOpen(true)}
             className="flex-1 bg-red-600 hover:bg-red-700 text-white"
           >
             Reject Application
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+{/* Confirmation Modal for Rejection */}
+{isConfirmRejectModalOpen && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg max-w-sm w-full">
+      <div className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Confirm Rejection</h3>
+        <p className="mb-6">Are you sure you want to reject {mentorToReject?.name}'s application?</p>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setIsConfirmRejectModalOpen(false)}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleRejectWithReason}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+          >
+            Yes, Reject
           </Button>
         </div>
       </div>

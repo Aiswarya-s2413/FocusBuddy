@@ -202,7 +202,7 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
                 'answer': self.handle_answer,
                 'ice-candidate': self.handle_ice_candidate,
                 'media-state': self.handle_media_state,
-                'chat-message': self.handle_chat_message,  # This is correct
+                'chat-message': self.handle_chat_message,  
             }
 
             if msg_type in handler_map:

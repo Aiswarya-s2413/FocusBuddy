@@ -44,7 +44,7 @@ const Signup = () => {
 
   // Validation helpers
   const isOnlySymbolsOrSpaces = (str) => /^[^a-zA-Z0-9]*$/.test(str) || /^\s*$/.test(str);
-  const isValidEmail = (email) => /@gmail\.com$/.test(email);
+  // const isValidEmail = (email) => /@gmail\.com$/.test(email);
   const isValidPhone = (phone) => /^\d{10}$/.test(phone);
 
   const validateField = (id, value) => {
@@ -58,9 +58,9 @@ const Signup = () => {
         case "name":
           if (value.trim().length < 4) error = "Name must be at least 4 letters.";
           break;
-        case "email":
-          if (!isValidEmail(value)) error = "Email must be a valid @gmail.com address.";
-          break;
+        // case "email":
+        //   if (!isValidEmail(value)) error = "Email must be a valid @gmail.com address.";
+        //   break;
         case "phone":
           if (!isValidPhone(value)) error = "Phone must be exactly 10 digits.";
           break;
