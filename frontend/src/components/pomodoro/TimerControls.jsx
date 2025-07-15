@@ -9,6 +9,7 @@ export const TimerControls = ({
   onPause,
   onReset,
   onStop,
+  onComplete, // <-- Add new prop
   currentSessionId,
 }) => {
   const handleStop = async () => {
@@ -16,7 +17,7 @@ export const TimerControls = ({
       if (currentSessionId) {
         // Call the backend API to complete the session
         await userAxios.post(`sessions/${currentSessionId}/complete/`);
-        console.log('Session completed successfully');
+        console.log('Session stopped successfully');
       }
       
       // Call the parent component's onStop function
@@ -24,11 +25,18 @@ export const TimerControls = ({
         onStop();
       }
     } catch (error) {
-      console.error('Error completing session:', error);
+      console.error('Error stopping session:', error);
       // Still call onStop even if API call fails
       if (onStop) {
         onStop();
       }
+    }
+  };
+
+  // New handler for complete button
+  const handleComplete = () => {
+    if (onComplete) {
+      onComplete();
     }
   };
 
@@ -52,6 +60,16 @@ export const TimerControls = ({
         >
           <Square className="mr-2 h-4 w-4" />
           Stop
+        </Button>
+
+        {/* Complete Button */}
+        <Button
+          variant="outline"
+          className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#E8F5E9]"
+          onClick={handleComplete}
+          disabled={!isRunning} // Only enable when timer is running
+        >
+          ✓ Complete
         </Button>
         
         <Button

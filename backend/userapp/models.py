@@ -35,7 +35,22 @@ class Task(models.Model):
                 self.estimated_pomodoros = (self.estimated_minutes + 24) // 25  # Round up
             else:
                 self.estimated_pomodoros = 1  # Default to 1 pomodoro if no estimate
+
+        # Check if is_completed is being set to True and was previously False
+        is_completed_changed = False
+        if self.pk is not None:
+            orig = Task.objects.filter(pk=self.pk).first()
+            if orig and not orig.is_completed and self.is_completed:
+                is_completed_changed = True
+        elif self.is_completed:
+            # New task being created as completed
+            is_completed_changed = True
+
         super().save(*args, **kwargs)
+
+        # If is_completed changed to True, update related PomodoroSession objects
+        if is_completed_changed:
+            self.sessions.filter(is_completed=False).update(is_completed=True)
 
 class PomodoroSession(models.Model):
     SESSION_TYPES = [

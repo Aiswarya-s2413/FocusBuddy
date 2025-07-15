@@ -189,6 +189,10 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
         duration_minutes: completed ? settings.focusDuration : durationMinutes,
         is_completed: completed,
       });
+      // Mark the task's pomodoro as completed if requested
+      if (completed && currentTask.id) {
+        await userAxios.post(`/tasks/${currentTask.id}/complete_pomodoro/`);
+      }
     } catch (err) {
       setError('Failed to save Pomodoro session.');
       console.error('Pomodoro session save error:', err);
@@ -207,9 +211,6 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
           ...currentTask,
           completed_pomodoros: currentTask.completed_pomodoros + 1
         };
-        await userAxios.patch(`/tasks/${currentTask.id}/`, {
-          completed_pomodoros: updatedTask.completed_pomodoros
-        });
         setCurrentTask(updatedTask);
         onCompletePomodoro && onCompletePomodoro(currentTask.id);
       } catch (error) {
@@ -346,6 +347,33 @@ const PomodoroTimer = ({ onCompletePomodoro, onCompleteSession }) => {
               onStop={stopTimer}  
               sessionType="focus"
               currentSessionId={null} 
+              onComplete={async () => {
+                // Mark session as completed when user clicks 'Complete'
+                await savePomodoroSession({ completed: true });
+                toast.success('Session marked as completed.');
+                if (currentTask && currentTask.id) {
+                  try {
+                    const updatedTask = {
+                      ...currentTask,
+                      completed_pomodoros: currentTask.completed_pomodoros + 1
+                    };
+                    setCurrentTask(updatedTask);
+                    onCompletePomodoro && onCompletePomodoro(currentTask.id);
+                  } catch (error) {
+                    console.error('Error updating task pomodoros:', error);
+                  }
+                }
+                if (settings.autoStartNextSession) {
+                  setIsRunning(true);
+                }
+                if (settings.playSoundWhenSessionEnds) {
+                  // Play sound logic would go here
+                }
+                onCompleteSession && onCompleteSession();
+                setSessionStartTime(null);
+                setCurrentTask(null);
+                setTimerVisible(false);
+              }}
             />
           
           <div className="mt-8 space-y-6">
