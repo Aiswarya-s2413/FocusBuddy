@@ -1571,23 +1571,3 @@ class MentorReportListAPIView(APIView):
             logger.error(f"Error in MentorReportListAPIView.get: {str(e)}", exc_info=True)
             return Response({"error": "Failed to fetch mentor reports"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class BlockMentorAPIView(APIView):
-    authentication_classes = [AdminCookieJWTAuthentication]
-    permission_classes = [IsAuthenticated, IsAdminUser]
-
-    def post(self, request, mentor_id):
-        logger.info("Entered BlockMentorAPIView.post")
-        try:
-            mentor = Mentor.objects.select_related('user').get(id=mentor_id)
-        except Mentor.DoesNotExist:
-            logger.error("Mentor not found in BlockMentorAPIView.post")
-            return Response({'error': 'Mentor not found'}, status=status.HTTP_404_NOT_FOUND)
-        # Toggle is_active
-        mentor.user.is_active = not mentor.user.is_active
-        mentor.user.save()
-        action = 'blocked' if not mentor.user.is_active else 'unblocked'
-        logger.info(f"Mentor {mentor.user.email} blocked/unblocked by {request.user.email}")
-        return Response({'success': True, 'message': f'Mentor {action}.', 'is_active': mentor.user.is_active})
-        except Exception as e:
-            logger.error(f"Error in BlockMentorAPIView.post: {str(e)}", exc_info=True)
-            return Response({'error': 'Failed to block/unblock mentor'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

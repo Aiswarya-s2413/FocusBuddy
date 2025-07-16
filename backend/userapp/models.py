@@ -198,6 +198,12 @@ class Mentor(models.Model):
 
     class Meta:
         ordering = ['-rating']
+        indexes = [
+            models.Index(fields=['is_approved', 'approval_status', 'is_available']),
+            models.Index(fields=['expertise_level']),
+            models.Index(fields=['hourly_rate']),
+            models.Index(fields=['rating']),
+        ]
 
     def __str__(self):
         return f"{self.user.name}'s Mentor Profile"
@@ -278,6 +284,12 @@ class Journal(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)  
     updated_at = models.DateTimeField(auto_now=True)
     is_blocked = models.BooleanField(default=False)      
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'date']),
+            models.Index(fields=['is_blocked']),
+        ]
 
     def __str__(self):
         return f"{self.user.name} - {self.date} ({self.mood})"
@@ -372,6 +384,11 @@ class MentorSession(models.Model):
     class Meta:
         ordering = ['-scheduled_date', '-scheduled_time']
         unique_together = ['mentor', 'scheduled_date', 'scheduled_time']
+        indexes = [
+            models.Index(fields=['mentor', 'scheduled_date', 'scheduled_time']),
+            models.Index(fields=['student', 'scheduled_date']),
+            models.Index(fields=['status']),
+        ]
     
     def __str__(self):
         return f"{self.student.name} - {self.mentor.user.name} ({self.scheduled_date} {self.scheduled_time})"
@@ -601,6 +618,11 @@ class FocusBuddySession(models.Model):
     
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['creator_id', 'status']),
+            models.Index(fields=['status']),
+            models.Index(fields=['session_type']),
+        ]
     
     def __str__(self):
         title = self.title or f"{self.duration_minutes}min Focus Session"

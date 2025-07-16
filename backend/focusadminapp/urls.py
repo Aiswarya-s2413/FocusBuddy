@@ -29,5 +29,4 @@ urlpatterns = [
     path('platform-stats/', AdminPlatformStatsView.as_view(), name='admin_platform_stats'),
     path('users-stats/', AdminUserListView.as_view(), name='admin_users'),
     path('mentor-reports/', MentorReportListAPIView.as_view(), name='mentor-report-list'),
-    path('block-mentor/<int:mentor_id>/', BlockMentorAPIView.as_view(), name='block-mentor'),
 ]
