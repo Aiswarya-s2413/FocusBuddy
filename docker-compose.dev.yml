@@ -9,7 +9,7 @@ services:
       - ./backend:/app
       - backend_static:/app/staticfiles
     environment:
-      - DJANGO_SETTINGS_MODULE=backend.settings_docker
+      - DJANGO_SETTINGS_MODULE=backend.settings
       - DEBUG=True
     ports:
       - "8000:8000"
@@ -26,7 +26,7 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - DJANGO_SETTINGS_MODULE=backend.settings_docker
+      - DJANGO_SETTINGS_MODULE=backend.settings
       - DEBUG=True
     depends_on:
       db:
@@ -41,7 +41,7 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      - DJANGO_SETTINGS_MODULE=backend.settings_docker
+      - DJANGO_SETTINGS_MODULE=backend.settings
       - DEBUG=True
     depends_on:
       db:
