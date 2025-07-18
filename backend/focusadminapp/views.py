@@ -22,6 +22,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.db.models import Count, Sum, Avg, Q
 from django.utils import timezone
 from datetime import datetime, timedelta
+from django.core.cache import cache
 
 
 logger = logging.getLogger(__name__)
@@ -1140,7 +1141,7 @@ class AdminEndFocusBuddySessionView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-class AdminDashboardView(APIView):
+class AdminDashboardView(APIView): #cached
     """
     Main admin dashboard view that provides all the data needed for the dashboard
     """
@@ -1150,26 +1151,39 @@ class AdminDashboardView(APIView):
     def get(self, request):
         logger.info("Entered AdminDashboardView.get")
         try:
+            # Use a cache key unique to the admin user and period param
+            user_id = getattr(request.user, 'id', 'anon')
+            period = request.GET.get('period', 'daily')
+            cache_key = f"admin_dashboard_{user_id}_{period}_noactivities"
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                logger.info("Returning cached dashboard data (no activities)")
+                # Always fetch recent activities live
+                recent_activities = self.get_recent_activities()
+                dashboard_data = {
+                    'metrics': cached_data['metrics'],
+                    'usage_data': cached_data['usage_data'],
+                    'recent_activities': recent_activities
+                }
+                serializer = AdminDashboardSerializer(dashboard_data)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
             # Get key metrics
             metrics = self.get_key_metrics()
-            
             # Get usage data
-            usage_data = self.get_usage_data(request.GET.get('period', 'daily'))
-            
-            # Get recent activities
+            usage_data = self.get_usage_data(period)
+            # Always fetch recent activities live
             recent_activities = self.get_recent_activities()
-            
-            # Combine all data
             dashboard_data = {
                 'metrics': metrics,
                 'usage_data': usage_data,
                 'recent_activities': recent_activities
             }
-            
+            # Only cache metrics and usage_data
+            cache.set(cache_key, {'metrics': metrics, 'usage_data': usage_data}, timeout=120)
             serializer = AdminDashboardSerializer(dashboard_data)
-            logger.info("AdminDashboardView.get successful")
+            logger.info("AdminDashboardView.get successful (no activities cached)")
             return Response(serializer.data, status=status.HTTP_200_OK)
-            
         except Exception as e:
             logger.error(f"Error in AdminDashboardView.get: {str(e)}", exc_info=True)
             return Response(
