@@ -83,18 +83,18 @@ Follow the steps below to set up FocusBuddy on your local machine.
 
 🔐 2. Set Up Environment Variables
 
-      Set up the .env file in the frontend as well as backend  
+Set up the .env file in the frontend as well as backend  
 
 🐳 3. Run Using Docker (Recommended)
 
-      This will spin up the entire stack (Backend, Frontend, PostgreSQL, Redis, Celery) using Docker:
+This will spin up the entire stack (Backend, Frontend, PostgreSQL, Redis, Celery) using Docker:
       
       ./scripts/dev.sh start
-      Behind the scenes: This script runs docker-compose up --build
+Behind the scenes: This script runs docker-compose up --build
 
 ⚙️ 4. Manual Setup (Without Docker - Optional)
 
-      🔹 Backend Setup
+🔹 Backend Setup
 
           cd backend
           python3 -m venv env
@@ -103,7 +103,7 @@ Follow the steps below to set up FocusBuddy on your local machine.
           python manage.py migrate
           python manage.py runserver
 
-      🔸 Frontend Setup
+🔸 Frontend Setup
 
           cd frontend
           npm install
@@ -116,25 +116,35 @@ Once the project is up and running, you can access the following interfaces:
 
 🌐 Frontend (React App)
 
-    URL: http://localhost:5173
+URL: 
+            
+      http://localhost:5173
     
-    Description: Main user interface with focus tools, mentor sessions, journals, and more.
+Description: Main user interface with focus tools, mentor sessions, journals, and more.
 
 📡 Backend API (Django + DRF)
 
-    User Endpoints: http://localhost:8000/api/user/
-    
-    Mentor Endpoints: http://localhost:8000/api/mentor/
-    
-    Admin Endpoints: http://localhost:8000/api/admin/
+User Endpoints: 
 
-    These endpoints are secured using JWT authentication and support Google OAuth login as well.
+      http://localhost:8000/api/user/
+    
+Mentor Endpoints: 
+
+      http://localhost:8000/api/mentor/
+    
+Admin Endpoints: 
+
+      http://localhost:8000/api/admin/
+
+These endpoints are secured using JWT authentication and support Google OAuth login as well.
 
 🛠️ Django Admin Panel
 
-    URL: http://localhost:8000/admin/
+URL: 
+      
+      http://localhost:8000/admin/
     
-    Use: Superusers can manage users, mentors, journals, sessions, etc.
+Use: Superusers can manage users, mentors, journals, sessions, etc.
 
 ---
 
