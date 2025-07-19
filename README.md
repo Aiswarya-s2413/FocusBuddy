@@ -78,7 +78,7 @@ Follow the steps below to set up FocusBuddy on your local machine.
 
 📦 1. Clone the Repository
 
-      git clone https://github.com/yourusername/FocusBuddy.git
+      git clone https://github.com/Aiswarya-s2413/FocusBuddy.git
       cd FocusBuddy
 
 🔐 2. Set Up Environment Variables
