@@ -20,46 +20,46 @@
 
 ### 🔷 Frontend
 
-      - **React** – component-based UI  
-      - **Tailwind CSS** – utility-first CSS framework  
-      - **Vite** – fast frontend tooling and bundler  
+      - React – component-based UI  
+      - Tailwind CSS – utility-first CSS framework  
+      - Vite – fast frontend tooling and bundler  
 
 ### 🔶 Backend
 
-      - **Django** – robust Python web framework  
-      - **Django REST Framework (DRF)** – for building RESTful APIs  
-      - **Celery** – asynchronous task queue for background jobs  
+      - Django – robust Python web framework  
+      - Django REST Framework (DRF) – for building RESTful APIs  
+      - Celery – asynchronous task queue for background jobs  
 
 ### 🔃 Real-Time & WebRTC
 
-      - **Django Channels** – WebSocket support for real-time features  
-      - **WebRTC** – peer-to-peer video/audio calling  
+      - Django Channels – WebSocket support for real-time features  
+      - WebRTC – peer-to-peer video/audio calling  
 
 ### 🧩 Authentication
 
-      - **JWT (JSON Web Tokens)** – secure API authentication  
-      - **Google OAuth** – social login integration  
+      - JWT (JSON Web Tokens) – secure API authentication  
+      - Google OAuth – social login integration  
 
 ### 🗄️ Database
 
-      - **PostgreSQL**
+      - PostgreSQL
 
 ### 🐳 DevOps
 
-      - **Docker** – containerization  
-      - **Docker Compose** – multi-container orchestration  
+      - Docker – containerization  
+      - Docker Compose – multi-container orchestration  
 
 ---
 
 ## 📁 Project Structure Overview
 
-FocusBuddy/
-├── backend/ # Django backend with APIs, Celery, WebSockets
-├── frontend/ # React frontend using Vite and Tailwind CSS
-├── scripts/ # Dev and setup scripts
-├── docker-compose.yml # Multi-container orchestration
-├── .env.example # Environment variable template
-└── README.md
+      FocusBuddy/
+      ├── backend/ # Django backend with APIs, Celery, WebSockets
+      ├── frontend/ # React frontend using Vite and Tailwind CSS
+      ├── scripts/ # Dev and setup scripts
+      ├── docker-compose.yml # Multi-container orchestration
+      ├── .env.example # Environment variable template
+      └── README.md
 
 ---
 
