@@ -37,7 +37,7 @@ const VerifyOTP = () => {
     e.preventDefault();
     setError(null);
     try {
-      const response = await axios.post("http://localhost:8000/api/user/verify-otp/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/verify-otp/", {
         email,
         otp,
       });
@@ -52,7 +52,7 @@ const VerifyOTP = () => {
 
   const handleResend = async () => {
     try {
-      await axios.post("http://localhost:8000/api/user/resend-otp/", { email });
+      await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/resend-otp/", { email });
       setTimer(60);
       setCanResend(false);
       setError(null);
