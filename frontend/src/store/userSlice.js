@@ -31,7 +31,7 @@ export const signupUser = createAsyncThunk(
   'user/signupUser',
   async (userData, { rejectWithValue }) => {
     try {
-      const response = await axios.post('http://13.236.92.61/api/user/signup/', userData, { withCredentials: true });
+      const response = await axios.post('https://api.focusbuddy.aiswaryasathyan.space/api/user/signup/', userData, { withCredentials: true });
       return response.data;
     } catch (error) {
       if (error.response) {
@@ -48,7 +48,7 @@ export const loginUser = createAsyncThunk(
   'user/loginUser',
   async (credentials, { rejectWithValue }) => {
     try {
-      const response = await axios.post('http://13.236.92.61/api/user/login/', credentials, { withCredentials: true });
+      const response = await axios.post('https://api.focusbuddy.aiswaryasathyan.space/api/user/login/', credentials, { withCredentials: true });
       // Save user to localStorage
       localStorage.setItem('user', JSON.stringify(response.data.user));
       return response.data;
@@ -70,7 +70,7 @@ export const updateProfile = createAsyncThunk(
   async (name, { rejectWithValue, getState, dispatch }) => {
     try {
       const response = await axios.put(
-        'http://13.236.92.61/api/user/update-profile/',
+        'https://api.focusbuddy.aiswaryasathyan.space/api/user/update-profile/',
         { name },
         { 
           withCredentials: true,
@@ -101,7 +101,7 @@ export const updateProfile = createAsyncThunk(
           
           // Retry the original request with the new token
           const retryResponse = await axios.put(
-            'http://13.236.92.61/api/user/update-profile/',
+            'https://api.focusbuddy.aiswaryasathyan.space/api/user/update-profile/',
             { name },
             { 
               withCredentials: true,
@@ -139,7 +139,7 @@ export const refreshToken = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await axios.post(
-        'http://13.236.92.61/api/token/refresh/',
+        'https://api.focusbuddy.aiswaryasathyan.space/api/token/refresh/',
         {},  // Your backend might require the refresh token in the body
         { withCredentials: true }  // Important to include cookies
       );
