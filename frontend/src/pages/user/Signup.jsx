@@ -131,7 +131,7 @@ const Signup = () => {
     try {
       console.log("=== MAKING API CALL ===");
       
-      const signupResponse = await axios.post("http://localhost:8000/api/user/signup/", {
+      const signupResponse = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/signup/", {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
