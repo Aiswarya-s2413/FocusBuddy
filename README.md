@@ -114,11 +114,12 @@ Behind the scenes: This script runs docker-compose up --build
 ##🧪 Usage
 Once the project is up and running, you can access the following interfaces:
 
-🌐 Frontend (React App)
+🌐 Frontend 
 
 URL: 
             
-      http://localhost:5173
+      Local:http://localhost:5173
+      Live:https://focusbuddy.aiswaryasathyan.space
     
 Description: Main user interface with focus tools, mentor sessions, journals, and more.
 
@@ -126,15 +127,18 @@ Description: Main user interface with focus tools, mentor sessions, journals, an
 
 User Endpoints: 
 
-      http://localhost:8000/api/user/
+      Local:http://localhost:8000/api/user/
+      Live:https://api.focusbuddy.aiswaryasathyan.space/api/user/
     
 Mentor Endpoints: 
 
-      http://localhost:8000/api/mentor/
+      Local:http://localhost:8000/api/mentor/
+      Live:https://api.focusbuddy.aiswaryasathyan.space/api/mentor/
     
 Admin Endpoints: 
 
-      http://localhost:8000/api/admin/
+      Local:http://localhost:8000/api/admin/
+      Live:https://api.focusbuddy.aiswaryasathyan.space/api/admin/
 
 These endpoints are secured using JWT authentication and support Google OAuth login as well.
 
@@ -142,7 +146,8 @@ These endpoints are secured using JWT authentication and support Google OAuth lo
 
 URL: 
       
-      http://localhost:8000/admin/
+      Local:http://localhost:8000/admin/
+      Live:https://api.focusbuddy.aiswaryasathyan.space/admin
     
 Use: Superusers can manage users, mentors, journals, sessions, etc.
 
