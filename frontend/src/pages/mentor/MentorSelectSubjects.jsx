@@ -15,7 +15,7 @@ const MentorSelectSubjects = () => {
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
-        const response = await axios.get("http://localhost:8000/api/mentor/select-subjects/");
+        const response = await axios.get("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/select-subjects/");
         setSubjects(response.data);
         setLoading(false);
       } catch (err) {
@@ -44,7 +44,7 @@ const MentorSelectSubjects = () => {
 
     try {
       const email = localStorage.getItem("email");
-      const response = await axios.post("http://localhost:8000/api/mentor/select-subjects/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/select-subjects/", {
         email,
         subjects: selectedSubjects,
       });

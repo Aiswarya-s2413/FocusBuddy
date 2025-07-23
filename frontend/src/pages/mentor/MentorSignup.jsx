@@ -105,7 +105,7 @@ const MentorSignup = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:8000/api/mentor/signup/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/signup/", {
         name,
         email,
         phone,

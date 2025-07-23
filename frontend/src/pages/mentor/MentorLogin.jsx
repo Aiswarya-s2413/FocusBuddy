@@ -44,7 +44,7 @@ const MentorLogin = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:8000/api/mentor/login/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/login/", {
         email,
         password,
       }, { withCredentials: true });

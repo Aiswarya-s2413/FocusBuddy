@@ -40,7 +40,7 @@ const MentorVerifyOtp = () => {
     setError(null);
 
     try {
-      const response = await axios.post("http://localhost:8000/api/mentor/verify-otp/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/verify-otp/", {
         email,
         otp,
       });
@@ -61,7 +61,7 @@ const MentorVerifyOtp = () => {
 
     try {
       // Assuming you have a resend OTP endpoint
-      const response = await axios.post("http://localhost:8000/api/mentor/resend-otp/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/resend-otp/", {
         email,
       });
 

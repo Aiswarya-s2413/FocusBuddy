@@ -93,7 +93,7 @@ const ForgotPassword = () => {
     setMessage("");
     
     try {
-      const response = await axios.post("http://localhost:8000/api/user/forgot-password/", { email });
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/forgot-password/", { email });
       if (response.status === 200) {
         setMessage("OTP has been sent to your email");
         setStep(2);
@@ -113,7 +113,7 @@ const ForgotPassword = () => {
     setMessage("");
     
     try {
-      const response = await axios.post("http://localhost:8000/api/user/verify-forgot-password-otp/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/verify-forgot-password-otp/", {
         email,
         otp,
       });
@@ -164,7 +164,7 @@ const ForgotPassword = () => {
     setMessage("");
     
     try {
-      const response = await axios.post("http://localhost:8000/api/user/reset-password/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/reset-password/", {
         email,
         otp,
         new_password: newPassword,
@@ -187,7 +187,7 @@ const ForgotPassword = () => {
     setMessage("");
     
     try {
-      const response = await axios.post("http://localhost:8000/api/user/forgot-password/", { email });
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/forgot-password/", { email });
       if (response.status === 200) {
         setMessage("New OTP has been sent to your email");
         setTimeLeft(60);

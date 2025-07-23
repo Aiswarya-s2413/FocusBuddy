@@ -26,7 +26,7 @@ const MentorForgotPassword = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post("http://localhost:8000/api/mentor/forgot-password/", { email });
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/forgot-password/", { email });
       if (response.status === 200) {
         setMessage("OTP has been sent to your email");
         setStep(2);
@@ -43,7 +43,7 @@ const MentorForgotPassword = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post("http://localhost:8000/api/mentor/verify-forgot-password-otp/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/verify-forgot-password-otp/", {
         email,
         otp,
       });
@@ -87,7 +87,7 @@ const MentorForgotPassword = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post("http://localhost:8000/api/mentor/reset-password/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/mentor/reset-password/", {
         email,
         otp,
         new_password: newPassword,

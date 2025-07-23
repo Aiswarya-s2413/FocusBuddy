@@ -25,7 +25,7 @@ const SelectSubjects = () => {
   useEffect(() => {
     const fetchSubjects = async () => {
       try {
-        const response = await axios.get("http://localhost:8000/api/user/select-subjects/");
+        const response = await axios.get("https://api.focusbuddy.aiswaryasathyan.space/api/user/select-subjects/");
         setSubjects(response.data);
         setLoading(false);
       } catch (err) {
@@ -53,7 +53,7 @@ const SelectSubjects = () => {
     }
 
     try {
-      const response = await axios.post("http://localhost:8000/api/user/select-subjects/", {
+      const response = await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/select-subjects/", {
         email,
         subjects: selectedSubjects,
       });
