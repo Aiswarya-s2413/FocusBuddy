@@ -242,6 +242,12 @@ class WebRTCService {
                     }
                 }
 
+                // === ADD THIS BLOCK ===
+                if (this.authToken) {
+                    wsUrl += (wsUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(this.authToken);
+                }
+                // ======================
+
                 console.log('WebSocket URL:', wsUrl);
                 console.log('Current location:', window.location.href);
                 console.log('Protocol:', window.location.protocol);
