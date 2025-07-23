@@ -16,8 +16,8 @@ const MentorLayout = ({ children }) => {
   useEffect(() => {
     const token = getCookie('mentor_access') || getCookie('access');
     const wsUrl = token
-      ? `ws://localhost:8000/ws/mentor/notifications/?token=${token}`
-      : 'ws://localhost:8000/ws/mentor/notifications/';
+      ? `wss://api.focusbuddy.aiswaryasathyan.space/ws/mentor/notifications/?token=${token}`
+      : 'wss://api.focusbuddy.aiswaryasathyan.space/ws/mentor/notifications/';
     const ws = new WebSocket(wsUrl);
     ws.onopen = () => {
       console.log('Mentor notification WebSocket connected');

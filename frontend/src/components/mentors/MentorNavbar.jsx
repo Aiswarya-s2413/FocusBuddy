@@ -12,7 +12,7 @@ const MentorNavbar = () => {
     try {
       // Make sure withCredentials is true to send cookies with the request
       await axios.post(
-        "http://localhost:8000/api/mentor/logout/",
+        "https://api.focusbuddy.aiswaryasathyan.space/api/mentor/logout/",
         {},
         {
           withCredentials: true,

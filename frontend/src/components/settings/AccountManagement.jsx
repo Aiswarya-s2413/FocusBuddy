@@ -13,7 +13,7 @@ const AccountManagement = () => {
   const handleLogout = async () => {
     try {
       // Add withCredentials: true to include cookies in the request
-      await axios.post("http://localhost:8000/api/user/logout/", {}, {
+      await axios.post("https://api.focusbuddy.aiswaryasathyan.space/api/user/logout/", {}, {
         withCredentials: true
       });
       dispatch(logout());

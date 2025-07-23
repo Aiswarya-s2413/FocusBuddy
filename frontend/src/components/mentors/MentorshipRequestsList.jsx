@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 
 // Create axios instance outside component to avoid re-initialization
 const apiClient = axios.create({
-  baseURL: "http://localhost:8000/api/mentor",
+  baseURL: "https://api.focusbuddy.aiswaryasathyan.space/api/mentor",
   withCredentials: true,
   timeout: 10000, // 10 second timeout
 });
