@@ -230,15 +230,15 @@ class WebRTCService {
                 // Use mentor session URL if callType is 'mentor', else default
                 let wsUrl;
                 if (this.callType === 'mentor') {
-                    wsUrl = `ws://localhost:8000/ws/mentor-session/${sessionId}/`;
+                    wsUrl = `wss://api.focusbuddy.aiswaryasathyan.space/ws/mentor-session/${sessionId}/`;
                 } else {
-                    wsUrl = `ws://localhost:8000/ws/webrtc/${sessionId}/`;
+                    wsUrl = `wss://api.focusbuddy.aiswaryasathyan.space/ws/webrtc/${sessionId}/`;
                 }
                 if (window.location.protocol === 'https:') {
                     if (this.callType === 'mentor') {
-                        wsUrl = `wss://localhost:8000/ws/mentor-session/${sessionId}/`;
+                        wsUrl = `wss://api.focusbuddy.aiswaryasathyan.space/ws/mentor-session/${sessionId}/`;
                     } else {
-                        wsUrl = `wss://localhost:8000/ws/webrtc/${sessionId}/`;
+                        wsUrl = `wss://api.focusbuddy.aiswaryasathyan.space/ws/webrtc/${sessionId}/`;
                     }
                 }
 
@@ -731,9 +731,9 @@ class WebRTCService {
     async testWebSocketConnection(sessionId) {
         return new Promise((resolve) => {
             const testUrls = [
-                `ws://localhost:8000/ws/webrtc/${sessionId}/`,
-                `ws://127.0.0.1:8000/ws/webrtc/${sessionId}/`,
-                `wss://localhost:8000/ws/webrtc/${sessionId}/`,
+                `wss://api.focusbuddy.aiswaryasathyan.space/ws/webrtc/${sessionId}/`,
+                `wss://api.focusbuddy.aiswaryasathyan.space/ws/webrtc/${sessionId}/`,
+                `wss://api.focusbuddy.aiswaryasathyan.space/ws/webrtc/${sessionId}/`,
             ];
 
             console.log('=== Testing WebSocket URLs ===');
