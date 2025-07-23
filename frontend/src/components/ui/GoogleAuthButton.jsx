@@ -35,7 +35,7 @@ const GoogleAuthButton = ({ onSuccess, onError, buttonText = "Continue with Goog
   };
 
   return (
-    <div className="w-full google-auth-container">
+    <div className="flex justify-center w-full">
       <GoogleLogin
         onSuccess={handleGoogleAuth}
         onError={handleGoogleError}
@@ -45,34 +45,12 @@ const GoogleAuthButton = ({ onSuccess, onError, buttonText = "Continue with Goog
         theme="outline"
         size="large"
         logo_alignment="left"
-        width="100%"
       />
-      
       {isLoading && (
         <div className="flex justify-center items-center mt-2">
           <div className="text-sm text-gray-600">Authenticating...</div>
         </div>
       )}
-
-      {/* CSS to make it match your form styling */}
-      <style jsx global>{`
-        .google-auth-container > div {
-          width: 100% !important;
-        }
-        
-        .google-auth-container iframe {
-          width: 100% !important;
-          height: 44px !important;
-        }
-        
-        .google-auth-container [role="button"] {
-          width: 100% !important;
-          height: 44px !important;
-          border-radius: 6px !important;
-          border: 1px solid #d1d5db !important;
-          font-weight: 500 !important;
-        }
-      `}</style>
     </div>
   );
 };
