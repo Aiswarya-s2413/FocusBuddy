@@ -45,6 +45,11 @@ class WebRTCService {
     }
 
     async initialize(sessionId, authToken = null, callType = 'group') {
+        // Defensive: prevent double initialization for the same session and callType
+        if (this.sessionId === sessionId && this.callType === callType && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            console.warn('[WebRTCService] Already initialized for this session and callType:', { sessionId, callType });
+            return true;
+        }
         try {
             this.sessionId = sessionId;
             this.callType = callType;
