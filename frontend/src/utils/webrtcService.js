@@ -222,11 +222,11 @@ class WebRTCService {
                     this.authToken = this.getAuthToken();
                 }
 
-                console.log('=== WebSocket Connection Debug ===');
-                console.log('Session ID:', sessionId);
-                console.log('Auth token available:', !!this.authToken);
-                console.log('Auth token length:', this.authToken?.length || 0);
-                
+                // --- Add logging for callType and sessionId ---
+                console.log('WebRTCService: callType =', this.callType);
+                console.log('WebRTCService: sessionId =', sessionId);
+                // ---------------------------------------------
+
                 // Use mentor session URL if callType is 'mentor', else default
                 let wsUrl;
                 if (this.callType === 'mentor') {
@@ -234,13 +234,7 @@ class WebRTCService {
                 } else {
                     wsUrl = `wss://api.focusbuddy.aiswaryasathyan.space/ws/webrtc/${sessionId}/`;
                 }
-                if (window.location.protocol === 'https:') {
-                    if (this.callType === 'mentor') {
-                        wsUrl = `wss://api.focusbuddy.aiswaryasathyan.space/ws/mentor-session/${sessionId}/`;
-                    } else {
-                        wsUrl = `wss://api.focusbuddy.aiswaryasathyan.space/ws/webrtc/${sessionId}/`;
-                    }
-                }
+                // --- Remove duplicate wsUrl logic below ---
 
                 // === ADD THIS BLOCK ===
                 if (this.authToken) {

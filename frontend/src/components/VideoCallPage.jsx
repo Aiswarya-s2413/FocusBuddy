@@ -50,6 +50,11 @@ const VideoCallPage = ({ onEndCall }) => {
         const userRole = getUserRole();
         const service = new WebRTCService();
 
+        // --- Set callType and log it ---
+        const callType = (userRole === 'mentor' || userRole === 'student') ? 'mentor' : 'group';
+        console.log('VideoCallPage: callType =', callType, 'sessionId =', sessionId);
+        // -------------------------------
+
         service.on('localStream', (stream) => {
           setLocalStream(stream);
           if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -88,20 +93,7 @@ const VideoCallPage = ({ onEndCall }) => {
           }
         });
 
-        // --- FIX: Detect mentor session for both mentor and student ---
-        // For now, assume all sessions with a sessionId and a mentor role or a prop/route indicate mentor session
-        // Replace this logic with your actual session type detection as needed
-        let isMentorSession = false;
-        // Example: if you have a prop or route param, use that
-        // isMentorSession = props.isMentorSession || false;
-        // For now, if userRole is 'mentor' OR (optionally) if sessionId is for a mentor session, set true
-        if (userRole === 'mentor' || userRole === 'student') {
-          isMentorSession = true;
-        }
-        // If you have a better way to detect, replace the above
-        const callType = isMentorSession ? 'mentor' : 'group';
-        // --- END FIX ---
-
+        // --- Use callType from above ---
         const success = await service.initialize(sessionId, authToken, callType);
         if (success) {
           setWebrtcService(service);
