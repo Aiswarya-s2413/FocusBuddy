@@ -2,7 +2,7 @@ import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
-from userapp.models import FocusBuddyParticipant, FocusBuddySession, MentorSession
+from .models import FocusBuddyParticipant, FocusBuddySession, MentorSession
 
 logger = logging.getLogger(__name__)
 
@@ -362,17 +362,24 @@ class WebRTCConsumer(AsyncWebsocketConsumer):
 
 class MentorNotificationConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        headers = dict(self.scope.get('headers', []))
+        host = headers.get(b'host', b'').decode()
+        logger.warning(f"WebSocket Host header: {host}")
         user = self.scope["user"]
+        logger.info(f"[MentorNotificationConsumer] user={user}, id={getattr(user, 'id', None)}, is_authenticated={getattr(user, 'is_authenticated', False)}")
         is_authenticated = user.is_authenticated
         has_mentor_profile = False
         if is_authenticated:
             from userapp.models import Mentor
             has_mentor_profile = await sync_to_async(Mentor.objects.filter(user_id=user.id).exists)()
+            logger.info(f"[MentorNotificationConsumer] Mentor profile exists: {has_mentor_profile}")
         if is_authenticated and has_mentor_profile:
             self.group_name = f"mentor_notify_{user.id}"
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
+            logger.info(f"[MentorNotificationConsumer] Connection accepted for user {user.id}")
         else:
+            logger.warning("[MentorNotificationConsumer] Closing connection: not authenticated or no mentor profile")
             await self.close()
 
     async def disconnect(self, close_code):
