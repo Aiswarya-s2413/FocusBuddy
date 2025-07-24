@@ -44,6 +44,7 @@ const VideoCallPage = ({ onEndCall }) => {
   };
 
   useEffect(() => {
+    console.log('VideoCallPage mounted', { sessionId });
     const initializeWebRTC = async () => {
       try {
         const authToken = getCookie('access');
@@ -114,6 +115,7 @@ const VideoCallPage = ({ onEndCall }) => {
     if (sessionId) initializeWebRTC();
 
     return () => {
+      console.log('VideoCallPage unmounted', { sessionId });
       if (webrtcService) webrtcService.cleanup();
       if (timerRef.current) clearInterval(timerRef.current);
     };
