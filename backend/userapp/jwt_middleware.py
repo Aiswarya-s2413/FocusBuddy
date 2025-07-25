@@ -6,6 +6,8 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from asgiref.sync import sync_to_async
+import jwt
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +15,17 @@ logger = logging.getLogger(__name__)
 def get_user_from_jwt(raw_token):
     User = get_user_model()
     try:
-        logger.debug(f"[JWT] Attempting to decode token: {raw_token[:20]}...")
-        
+        # Log the full token and current server time
+        logger.error(f"[DEBUG] Received token: {raw_token}")
+        logger.error(f"[DEBUG] Server UTC time: {datetime.utcnow().isoformat()}")
+
+        # Decode payload without verifying signature
+        try:
+            payload = jwt.decode(raw_token, options={"verify_signature": False})
+            logger.error(f"[DEBUG] Token payload: {payload}")
+        except Exception as e:
+            logger.error(f"[DEBUG] Could not decode token payload: {e}")
+
         # Validate and decode the token
         token = AccessToken(raw_token)
         user_id = token.get("user_id")

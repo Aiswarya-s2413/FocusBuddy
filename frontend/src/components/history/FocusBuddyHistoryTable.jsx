@@ -184,7 +184,7 @@ const FocusBuddyHistoryTable = () => {
       <div className="flex items-center space-x-4 p-4 bg-slate-50 rounded-lg">
         <Filter className="h-5 w-5 text-slate-500" />
         <div className="flex space-x-4">
-          <div>
+          {/* <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
             <select
               value={filters.status}
@@ -197,7 +197,7 @@ const FocusBuddyHistoryTable = () => {
               <option value="cancelled">Cancelled</option>
               <option value="expired">Expired</option>
             </select>
-          </div>
+          </div> */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
             <select
