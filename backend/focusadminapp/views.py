@@ -66,7 +66,7 @@ class AdminLoginView(APIView):
                     access_token,
                     max_age=60 * 15,  # 15 minutes
                     httponly=True,
-                    secure=False,  # Set to True in production with HTTPS
+                    secure=False,  
                     samesite="Lax",
                     path="/",
                     domain=None  
@@ -76,7 +76,7 @@ class AdminLoginView(APIView):
                     refresh_token,
                     max_age=60 * 60 * 24 * 7,  # 7 days
                     httponly=True,
-                    secure=False,  # Set to True in production with HTTPS
+                    secure=False,
                     samesite="Lax",
                     path="/",
                     domain=None  

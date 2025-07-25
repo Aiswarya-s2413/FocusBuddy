@@ -1,9 +1,10 @@
 import React, { useEffect } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { checkAuthStatus } from "../../store/adminSlice";
 import { Bell, MessageSquare } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "../../components/ui/sidebar";
 import AdminSidebar from "./AdminSidebar";
+import { useNavigate } from "react-router-dom";
 
 const AdminLayout = ({ children }) => {
   const dispatch = useDispatch();
@@ -11,6 +12,16 @@ const AdminLayout = ({ children }) => {
   useEffect(() => {
     dispatch(checkAuthStatus());
   }, [dispatch]);
+
+  const isAuthenticated = useSelector(state => state.admin.isAuthenticated);
+  const loading = useSelector(state => state.admin.loading);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && isAuthenticated === false) {
+      navigate('/admin/login');
+    }
+  }, [isAuthenticated, loading, navigate]);
 
   return (
     <SidebarProvider>
