@@ -29,9 +29,9 @@ const MentorNavbar = () => {
         description: "You have been successfully logged out."
       });
 
-      // Clear any local state related to authentication if needed
-      localStorage.removeItem('mentorInfo'); // If you store any auth info in localStorage
-      sessionStorage.removeItem('mentorInfo'); // If you store any auth info in sessionStorage
+      // Clear local state 
+      localStorage.removeItem('mentor'); 
+      sessionStorage.removeItem('mentorInfo');
 
       navigate("/mentor/login");
     } catch (err) {
@@ -39,7 +39,7 @@ const MentorNavbar = () => {
 
       // Even if the server logout fails, we can still clear client-side auth data
       // and redirect to login page
-      localStorage.removeItem('mentorInfo');
+      localStorage.removeItem('mentor');
       sessionStorage.removeItem('mentorInfo');
 
       // Show a toast but still redirect to login
