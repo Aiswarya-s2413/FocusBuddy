@@ -1,9 +1,17 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { useDispatch } from "react-redux";
+import { checkAuthStatus } from "../../store/adminSlice";
 import { Bell, MessageSquare } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "../../components/ui/sidebar";
 import AdminSidebar from "./AdminSidebar";
 
 const AdminLayout = ({ children }) => {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(checkAuthStatus());
+  }, [dispatch]);
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-slate-50">
