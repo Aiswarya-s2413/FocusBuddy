@@ -13,15 +13,7 @@ const AdminLayout = ({ children }) => {
     dispatch(checkAuthStatus());
   }, [dispatch]);
 
-  const isAuthenticated = useSelector(state => state.admin.isAuthenticated);
-  const loading = useSelector(state => state.admin.loading);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!loading && isAuthenticated === false) {
-      navigate('/admin/login');
-    }
-  }, [isAuthenticated, loading, navigate]);
+  // Removed isAuthenticated/loading/navigate/redirect logic
 
   return (
     <SidebarProvider>
