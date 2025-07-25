@@ -12,10 +12,10 @@ import AdminMentorReports from "../pages/admin/AdminMentorReports";
 const ProtectedAdminRoute = ({ children }) => {
   const { isAuthenticated, loading } = useSelector((state) => state.admin);
 
-  if (loading) {
-    // Optionally, show a loading spinner here
-    return <div>Loading...</div>;
-  }
+  // if (loading) {
+  //   // Optionally, show a loading spinner here
+  //   return <div>Loading...</div>;
+  // }
 
   if (!isAuthenticated) {
     return <Navigate to="/admin/login" replace />;
