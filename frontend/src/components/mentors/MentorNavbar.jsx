@@ -9,6 +9,7 @@ const MentorNavbar = () => {
   const { toast } = useToast();
 
   const handleLogout = async () => {
+    console.log("Logout button clicked");
     try {
       // Make sure withCredentials is true to send cookies with the request
       await axios.post(
@@ -31,6 +32,7 @@ const MentorNavbar = () => {
 
       // Clear local state 
       localStorage.removeItem('mentor'); 
+      console.log("mentor removed from local storage");
       sessionStorage.removeItem('mentorInfo');
 
       navigate("/mentor/login");
