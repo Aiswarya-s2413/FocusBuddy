@@ -126,16 +126,36 @@ export const refreshToken = createAsyncThunk(
   }
 );
 
-const adminSlice = createSlice({
-  name: 'admin',
-  initialState: {
+// Load admin state from localStorage on startup
+const loadAdminInitialState = () => {
+  try {
+    const savedAdmin = localStorage.getItem('admin');
+    if (savedAdmin) {
+      return {
+        loading: false,
+        success: true,
+        error: null,
+        message: '',
+        admin: JSON.parse(savedAdmin),
+        isAuthenticated: true,
+      };
+    }
+  } catch (error) {
+    console.error('Error loading admin state from localStorage:', error);
+  }
+  return {
     loading: false,
     success: false,
     error: null,
     message: '',
     admin: null,
     isAuthenticated: false,
-  },
+  };
+};
+
+const adminSlice = createSlice({
+  name: 'admin',
+  initialState: loadAdminInitialState(),
   reducers: {
     clearError: (state) => {
       state.error = null;
@@ -150,6 +170,15 @@ const adminSlice = createSlice({
       state.error = null;
       state.isAuthenticated = false;
       state.loading = false;
+      localStorage.removeItem('admin');
+    },
+    hydrateAdminFromLocalStorage: (state) => {
+      const savedAdmin = localStorage.getItem('admin');
+      if (savedAdmin) {
+        state.admin = JSON.parse(savedAdmin);
+        state.isAuthenticated = true;
+        state.success = true;
+      }
     },
   },
   extraReducers: (builder) => {
@@ -168,6 +197,8 @@ const adminSlice = createSlice({
         state.message = action.payload.message;
         state.isAuthenticated = true;
         state.error = null;
+        // Save admin to localStorage
+        localStorage.setItem('admin', JSON.stringify(action.payload.user));
       })
       .addCase(adminLogin.rejected, (state, action) => {
         state.loading = false;
@@ -188,6 +219,7 @@ const adminSlice = createSlice({
         state.error = null;
         state.isAuthenticated = false;
         state.loading = false;
+        localStorage.removeItem('admin');
       })
       .addCase(adminLogout.rejected, (state) => {
         // Clear state even if logout request failed
@@ -197,6 +229,7 @@ const adminSlice = createSlice({
         state.error = null;
         state.isAuthenticated = false;
         state.loading = false;
+        localStorage.removeItem('admin');
       })
       
       // Check auth status cases
@@ -231,5 +264,5 @@ const adminSlice = createSlice({
   },
 });
 
-export const { clearError, clearMessage, clearAuthState } = adminSlice.actions;
+export const { clearError, clearMessage, clearAuthState, hydrateAdminFromLocalStorage } = adminSlice.actions;
 export default adminSlice.reducer;
