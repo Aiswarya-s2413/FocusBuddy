@@ -4,16 +4,17 @@ import { checkAuthStatus } from "../../store/adminSlice";
 import { Bell, MessageSquare } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "../../components/ui/sidebar";
 import AdminSidebar from "./AdminSidebar";
-import { useNavigate } from "react-router-dom";
 
 const AdminLayout = ({ children }) => {
   const dispatch = useDispatch();
+  const isAuthenticated = useSelector(state => state.admin.isAuthenticated);
+  const loading = useSelector(state => state.admin.loading);
 
   useEffect(() => {
-    dispatch(checkAuthStatus());
-  }, [dispatch]);
-
-  // Removed isAuthenticated/loading/navigate/redirect logic
+    if (!isAuthenticated && !loading) {
+      dispatch(checkAuthStatus());
+    }
+  }, [dispatch, isAuthenticated, loading]);
 
   return (
     <SidebarProvider>
