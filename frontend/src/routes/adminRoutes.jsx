@@ -10,12 +10,14 @@ import Admin from "../pages/admin/Admin";
 import AdminMentorReports from "../pages/admin/AdminMentorReports";
 
 const ProtectedAdminRoute = ({ children }) => {
-  const { admin } = useSelector((state) => state.admin);
+  const { isAuthenticated, loading } = useSelector((state) => state.admin);
 
-  console.log('ProtectedAdminRoute - Admin:', admin);
+  if (loading) {
+    // Optionally, show a loading spinner here
+    return <div>Loading...</div>;
+  }
 
-  if (!admin) {
-    console.log('Redirecting to /admin/login');
+  if (!isAuthenticated) {
     return <Navigate to="/admin/login" replace />;
   }
 
