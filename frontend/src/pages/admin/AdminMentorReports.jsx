@@ -30,11 +30,11 @@ const AdminMentorReports = () => {
     setLoading(false);
   };
 
-  const handleBlockUser = async (userId) => {
+  const handleBlockUser = async (mentorId) => {
     try {
-      const response = await adminAxios.post(`/users/${userId}/block/`);
-      setUsers(users.map(user => 
-        user.id === userId ? { ...user, is_active: !user.is_active } : user
+      const response = await adminAxios.post(`/users/${mentorId}/block/`);
+      setReports(reports.map(report => 
+        report.mentor_id === mentorId ? { ...report, mentor_is_active: !report.mentor_is_active } : report
       ));
       toast.success(response.data.message);
     } catch (err) {
@@ -120,8 +120,8 @@ const AdminMentorReports = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reported By</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64">Reason</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reported At</th>
-                {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th> */}
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -153,7 +153,7 @@ const AdminMentorReports = () => {
                     <Button
                       variant={r.mentor_is_active ? "destructive" : "default"}
                       className={r.mentor_is_active ? "bg-red-600 hover:bg-red-700 text-white" : "bg-green-600 hover:bg-green-700 text-white"}
-                      onClick={() => toggleMentorBlock(r.mentor_id, r.mentor_is_active)}
+                      onClick={() => handleBlockUser(r.mentor_id)}
                     >
                       {r.mentor_is_active ? "Block" : "Unblock"}
                     </Button>
