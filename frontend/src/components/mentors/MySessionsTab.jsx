@@ -394,7 +394,7 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
                 </div>
                 <div className="flex items-center text-sm">
                   {session.amount}
-                  <span className="capitalize">{session.mode}</span>
+                  <span className="capitalize">{session.amount}</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <Clock className="h-4 w-4 mr-2 text-gray-500" />
