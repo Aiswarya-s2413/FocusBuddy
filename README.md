@@ -119,7 +119,6 @@ Once the project is up and running, you can access the following interfaces:
 URL: 
             
       Local:http://localhost:5173
-      Live:https://focusbuddy.aiswaryasathyan.space
     
 Description: Main user interface with focus tools, mentor sessions, journals, and more.
 
@@ -128,17 +127,14 @@ Description: Main user interface with focus tools, mentor sessions, journals, an
 User Endpoints: 
 
       Local:http://localhost:8000/api/user/
-      Live:https://api.focusbuddy.aiswaryasathyan.space/api/user/
     
 Mentor Endpoints: 
 
       Local:http://localhost:8000/api/mentor/
-      Live:https://api.focusbuddy.aiswaryasathyan.space/api/mentor/
     
 Admin Endpoints: 
 
       Local:http://localhost:8000/api/admin/
-      Live:https://api.focusbuddy.aiswaryasathyan.space/api/admin/
 
 These endpoints are secured using JWT authentication and support Google OAuth login as well.
 
@@ -147,15 +143,9 @@ These endpoints are secured using JWT authentication and support Google OAuth lo
 URL: 
       
       Local:http://localhost:8000/admin/
-      Live:https://api.focusbuddy.aiswaryasathyan.space/admin
     
 Use: Superusers can manage users, mentors, journals, sessions, etc.
 
----
-
-🤝 Contributing
-Contributions are welcome!
-Feel free to open issues or submit pull requests to improve features, fix bugs, or suggest enhancements.
 
 ---
 
