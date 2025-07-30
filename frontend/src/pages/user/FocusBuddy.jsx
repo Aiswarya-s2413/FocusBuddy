@@ -18,7 +18,8 @@ import {
   Calendar,
   Phone,
   PhoneOff,
-  Check
+  Check,
+  ArrowLeft
 } from "lucide-react";
 import { Toggle } from "../../components/ui/toggle";
 import {
@@ -738,6 +739,280 @@ const getVideoGridLayout = () => {
   }
 };
 
+  // Full-screen video layout when session is active
+  if (sessionStarted && currentSession) {
+    return (
+      <div className="fixed inset-0 bg-black z-50">
+        {/* Session Header */}
+        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent z-10 p-6">
+          <div className="flex justify-between items-center text-white">
+            <div className="flex items-center space-x-4">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="text-white hover:bg-white/20 p-2"
+                onClick={leaveSession}
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div>
+                <h3 className="font-semibold text-lg">{currentSession.title}</h3>
+                <div className="flex items-center space-x-3 text-sm text-gray-300">
+                  <Badge className={`${getSessionTypeColor(currentSession.session_type)} border-0`}>
+                    {currentSession.session_type}
+                  </Badge>
+                  <span>•</span>
+                  <span className="flex items-center">
+                    <Users className="h-3 w-3 mr-1" />
+                    {currentSession.participant_count || participants.length}/{currentSession.max_participants}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="text-3xl font-light">
+              {formatTime(timeRemaining)}
+            </div>
+          </div>
+        </div>
+
+        {/* Video Grid - Full Screen */}
+        <div className="h-full flex items-center justify-center p-6 pt-24">
+          {(() => {
+            const layout = getVideoGridLayout();
+            const myUserId = JSON.parse(localStorage.getItem('user'))?.id;
+            
+            return (
+              <div className={layout.containerClass.replace('mb-4', 'h-full')}>
+                {/* Render remote participants */}
+                {participants.filter(p => p.id !== myUserId).map(p => (
+                  <div key={p.id} className={layout.videoClass.replace('rounded-xl', 'rounded-2xl').replace('h-80', 'h-full').replace('h-72', 'h-full').replace('h-60', 'h-full').replace('h-52', 'h-full').replace('h-[500px]', 'h-full')}>
+                    <video
+                      ref={el => {
+                        if (el && p.stream) {
+                          el.srcObject = p.stream;
+                          console.log('Attached stream to video element for user', p.id, p.stream);
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-4 left-4">
+                      <Badge className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-lg text-sm px-3 py-1">
+                        {p.user_name || `User ${p.id}`}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+                {/* Render local video */}
+                <div className={layout.videoClass.replace('rounded-xl', 'rounded-2xl').replace('h-80', 'h-full').replace('h-72', 'h-full').replace('h-60', 'h-full').replace('h-52', 'h-full').replace('h-[500px]', 'h-full')}>
+                  <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+                  <div className="absolute bottom-4 left-4">
+                    <Badge className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-lg text-sm px-3 py-1">
+                      You
+                    </Badge>
+                  </div>
+                  <div className="absolute top-4 right-4 flex space-x-2">
+                    {!isVideoOn && (
+                      <div className="bg-red-500 bg-opacity-90 rounded-full p-2 shadow-lg">
+                        <VideoOff className="h-4 w-4 text-white" />
+                      </div>
+                    )}
+                    {!isAudioOn && (
+                      <div className="bg-red-500 bg-opacity-90 rounded-full p-2 shadow-lg">
+                        <MicOff className="h-4 w-4 text-white" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Bottom Controls */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent z-10 p-6">
+          <div className="flex justify-center items-center space-x-4">
+            <Button 
+              variant="outline" 
+              size="lg"
+              className={`${isVideoOn 
+                ? 'border-2 border-white/30 text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm' 
+                : 'bg-red-500/90 border-2 border-red-400 text-white hover:bg-red-600/90 backdrop-blur-sm'
+              } transition-all duration-200 shadow-lg`}
+              onClick={toggleVideo}
+            >
+              {isVideoOn ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="lg"
+              className={`${isAudioOn 
+                ? 'border-2 border-white/30 text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm' 
+                : 'bg-red-500/90 border-2 border-red-400 text-white hover:bg-red-600/90 backdrop-blur-sm'
+              } transition-all duration-200 shadow-lg`}
+              onClick={toggleAudio}
+            >
+              {isAudioOn ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />}
+            </Button>
+            
+            <Popover open={chatOpen} onOpenChange={setChatOpen}>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  className="border-2 border-white/30 text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all duration-200 shadow-lg relative"
+                >
+                  <span className="relative">
+                    <MessageCircle className="h-6 w-6" />
+                    {unreadMessages > 0 && (
+                      <Badge className="absolute -top-3 -right-3 bg-red-500 text-white text-xs px-2 py-1 min-w-[24px] h-6 flex items-center justify-center">
+                        {unreadMessages}
+                      </Badge>
+                    )}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 mb-4">
+                <div className="space-y-4">
+                  <h3 className="font-medium text-[#6E59A5]">Chat</h3>
+                  <div className="h-40 overflow-y-auto bg-gray-50 rounded p-2 text-xs">
+                    {messages.length === 0 ? (
+                      <p className="text-gray-500 text-center">No messages yet</p>
+                    ) : (
+                      messages.map((msg, index) => (
+                        <p key={index} className="mb-1">
+                          <strong>{msg.sender_name}:</strong> {msg.message}
+                        </p>
+                      ))
+                    )}
+                  </div>
+                  <div className="flex space-x-2">
+                    <Input 
+                      placeholder="Type a message..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                      className="text-sm"
+                    />
+                    <Button 
+                      size="sm" 
+                      className="bg-[#9b87f5] hover:bg-[#7E69AB]"
+                      onClick={sendMessage}
+                      disabled={!newMessage.trim()}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+            
+            {/* Host: Pending Requests Button */}
+            {isHost && (
+              <Button 
+                variant="outline"
+                size="lg"
+                className="border-2 border-orange-300/50 text-orange-300 bg-orange-500/10 hover:bg-orange-500/20 backdrop-blur-sm transition-all duration-200 shadow-lg relative"
+                onClick={() => setShowPendingRequestsDialog(true)}
+                disabled={pendingParticipants.length === 0}
+              >
+                <UserPlus className="h-6 w-6" />
+                {pendingParticipants.length > 0 && (
+                  <Badge className="absolute -top-3 -right-3 bg-red-500 text-white text-xs px-2 py-1 min-w-[24px] h-6 flex items-center justify-center">
+                    {pendingParticipants.length}
+                  </Badge>
+                )}
+              </Button>
+            )}
+            
+            <Button 
+              variant="destructive"
+              size="lg"
+              className="bg-red-500/90 hover:bg-red-600/90 text-white shadow-lg transition-all duration-200 backdrop-blur-sm border-2 border-red-400/50"
+              onClick={leaveSession}
+              disabled={loading}
+            >
+              <X className="h-5 w-5 mr-2" />
+              Leave
+            </Button>
+          </div>
+        </div>
+
+        {/* Pending Requests Dialog */}
+        <Dialog open={showPendingRequestsDialog} onOpenChange={setShowPendingRequestsDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center text-orange-600">
+                <UserPlus className="h-5 w-5 mr-2" />
+                Pending Join Requests ({pendingParticipants.length})
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {pendingParticipants.length === 0 ? (
+                <div className="text-center py-8">
+                  <UserPlus className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-500">No pending join requests</p>
+                </div>
+              ) : (
+                pendingParticipants.map(participant => (
+                  <div key={participant.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <Avatar className="h-10 w-10 mr-3">
+                        <AvatarFallback className="bg-blue-100 text-blue-600">
+                          {participant.user_name?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-gray-900">{participant.user_name}</p>
+                        <p className="text-sm text-gray-500">Wants to join your session</p>
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button 
+                        size="sm" 
+                        className="bg-green-500 hover:bg-green-600 text-white"
+                        onClick={() => {
+                          handleAdmit(participant.id);
+                          if (pendingParticipants.length === 1) {
+                            setShowPendingRequestsDialog(false);
+                          }
+                        }}
+                      >
+                        Admit
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="destructive"
+                        onClick={() => {
+                          handleReject(participant.id);
+                          if (pendingParticipants.length === 1) {
+                            setShowPendingRequestsDialog(false);
+                          }
+                        }}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowPendingRequestsDialog(false)}
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  // Regular UI when no session is active
   return (
     <div className="min-h-screen bg-[#F8F6FB]">
       <div className="container mx-auto px-4 py-8">
@@ -846,344 +1121,87 @@ const getVideoGridLayout = () => {
           </div>
         )}
         
-        {/* Active Session */}
-        {sessionStarted && currentSession && (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-8">
-            <div className="bg-[#F0EBFF] p-4 flex justify-between items-center">
-              <div className="mr-4">
-                <h3 className="font-semibold text-[#6E59A5]">{currentSession.title}</h3>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Badge className={getSessionTypeColor(currentSession.session_type)}>
-                    {currentSession.session_type}
-                  </Badge>
-                  <span>•</span>
-                  <span className="flex items-center">
-                    <Users className="h-3 w-3 mr-1" />
-                    {currentSession.participant_count || participants.length}/{currentSession.max_participants}
-                  </span>
-                </div>
-              </div>
-              <div className="text-2xl font-light text-[#7E69AB]">
-                {formatTime(timeRemaining)}
-              </div>
-            </div>
-            
-
-
-            {/* Video Grid */}
-              {(() => {
-                const layout = getVideoGridLayout();
-                // Get current user ID
-                const myUserId = JSON.parse(localStorage.getItem('user'))?.id;
-                console.log('Rendering participants:', participants, 'myUserId:', myUserId);
-                return (
-                  <div className={layout.containerClass}>
-                    {/* Render remote participants */}
-                    {participants.filter(p => p.id !== myUserId).map(p => (
-                      <div key={p.id} className={layout.videoClass}>
-                        <video
-                          ref={el => {
-                            if (el && p.stream) {
-                              el.srcObject = p.stream;
-                              console.log('Attached stream to video element for user', p.id, p.stream);
-                            }
-                          }}
-                          autoPlay
-                          playsInline
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute bottom-3 left-3">
-                          <Badge className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-lg">
-                            {p.user_name || `User ${p.id}`}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
-                    {/* Render local video separately */}
-                    <div className={layout.videoClass}>
-                      <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-                      <div className="absolute bottom-3 left-3">
-                        <Badge className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-lg">
-                          You
-                        </Badge>
-                      </div>
-                      <div className="absolute top-3 right-3 flex space-x-1">
-                        {!isVideoOn && (
-                          <div className="bg-red-500 bg-opacity-80 rounded-full p-1">
-                            <VideoOff className="h-3 w-3 text-white" />
-                          </div>
-                        )}
-                        {!isAudioOn && (
-                          <div className="bg-red-500 bg-opacity-80 rounded-full p-1">
-                            <MicOff className="h-3 w-3 text-white" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              
-              {/* Controls */}
-              <div className="flex flex-wrap justify-between items-center bg-gray-50 rounded-xl p-4">
-                <div className="flex space-x-3">
-                  <Button 
-                    variant="outline" 
-                    size="lg"
-                    className={`${isVideoOn 
-                      ? 'border-2 border-purple-300 text-purple-600 bg-white hover:bg-purple-50' 
-                      : 'bg-red-100 border-2 border-red-300 text-red-600 hover:bg-red-50'
-                    } transition-all duration-200 shadow-sm`}
-                    onClick={toggleVideo}
-                  >
-                    {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="lg"
-                    className={`${isAudioOn 
-                      ? 'border-2 border-purple-300 text-purple-600 bg-white hover:bg-purple-50' 
-                      : 'bg-red-100 border-2 border-red-300 text-red-600 hover:bg-red-50'
-                    } transition-all duration-200 shadow-sm`}
-                    onClick={toggleAudio}
-                  >
-                    {isAudioOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
-                  </Button>
-                  <Popover open={chatOpen} onOpenChange={setChatOpen}>
-                    <PopoverTrigger asChild>
-                      <Button 
-                        variant="outline"
-                        size="lg"
-                        className="border-2 border-purple-300 text-purple-600 bg-white hover:bg-purple-50 transition-all duration-200 shadow-sm relative"
-                      >
-                        <span className="relative">
-                          <MessageCircle className="h-5 w-5" />
-                          {unreadMessages > 0 && (
-                            <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center">
-                              {unreadMessages}
-                            </Badge>
-                          )}
-                        </span>
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80">
-                      <div className="space-y-4">
-                        <h3 className="font-medium text-[#6E59A5]">Chat</h3>
-                        <div className="h-40 overflow-y-auto bg-gray-50 rounded p-2 text-xs">
-                          {messages.length === 0 ? (
-                            <p className="text-gray-500 text-center">No messages yet</p>
-                          ) : (
-                            messages.map((msg, index) => (
-                              <p key={index} className="mb-1">
-                                <strong>{msg.sender_name}:</strong> {msg.message}
-                              </p>
-                            ))
-                          )}
-                        </div>
-                        <div className="flex space-x-2">
-                          <Input 
-                            placeholder="Type a message..."
-                            value={newMessage}
-                            onChange={(e) => setNewMessage(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                            className="text-sm"
-                          />
-                          <Button 
-                            size="sm" 
-                            className="bg-[#9b87f5] hover:bg-[#7E69AB]"
-                            onClick={sendMessage}
-                            disabled={!newMessage.trim()}
-                          >
-                            <Send className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  
-                  {/* Host: Pending Requests Button */}
-                  {isHost && (
-                    <Button 
-                      variant="outline"
-                      size="lg"
-                      className="border-2 border-orange-300 text-orange-600 bg-white hover:bg-orange-50 transition-all duration-200 shadow-sm relative"
-                      onClick={() => setShowPendingRequestsDialog(true)}
-                      disabled={pendingParticipants.length === 0}
-                    >
-                      <UserPlus className="h-5 w-5" />
-                      {pendingParticipants.length > 0 && (
-                        <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 min-w-[20px] h-5 flex items-center justify-center">
-                          {pendingParticipants.length}
-                        </Badge>
-                      )}
-                    </Button>
-                  )}
-                </div>
-                <Button 
-                  variant="destructive"
-                  size="lg"
-                  className="bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all duration-200"
-                  onClick={leaveSession}
-                  disabled={loading}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Leave Session
-                </Button>
-              </div>
-          </div>
-        )}
-        
-        {/* Available Sessions */}
-        {!sessionStarted && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-[#6E59A5]">Active Sessions</h2>
-            
-            {!loading && Array.isArray(sessions) && sessions.length === 0 ? (
-              <Card>
-                <CardContent className="text-center py-12">
-                  <Users className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No active sessions</h3>
-                  <p className="text-gray-600 mb-4">Be the first to create a focus session!</p>
-                  <Button 
-                    className="bg-[#9b87f5] hover:bg-[#7E69AB] text-white"
-                    onClick={() => setShowCreateDialog(true)}
-                  >
-                    Create Session
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : !loading && Array.isArray(sessions) ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {sessions.map((session) => (
-                  <Card key={session.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <CardTitle className="text-lg text-[#6E59A5]">{session.title}</CardTitle>
-                          <p className="text-sm text-gray-600">by {session.creator_name}</p>
-                        </div>
-                        <Badge className={getSessionTypeColor(session.session_type)}>
-                          {session.session_type}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center text-gray-600">
-                            <Users className="h-4 w-4 mr-1" />
-                            {session.participant_count || 0}/{session.max_participants}
-                          </span>
-                          <span className="flex items-center text-gray-600">
-                            <Clock className="h-4 w-4 mr-1" />
-                            {formatDuration(session.started_at, session.ends_at)}
-                          </span>
-                        </div>
-                        
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500">
-                            {session.duration_minutes} min session
-                          </span>
-                          <Button 
-                            size="sm"
-                            className="bg-[#9b87f5] hover:bg-[#7E69AB] text-white"
-                            onClick={() => joinSession(session.id)}
-                            disabled={loading || !session.can_join || session.is_full}
-                          >
-                            <UserPlus className="h-4 w-4 mr-1" />
-                            {session.is_full ? 'Full' : 'Join'}
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        )}
+        {/* Pending Approval State */}
         {pendingApproval && (
           <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4 text-center">
             Waiting for host approval to join the session...
           </div>
         )}
+        
+        {/* Rejected State */}
         {rejected && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-center">
             Your join request was rejected by the host.
           </div>
         )}
-
-        {/* Pending Requests Dialog */}
-        <Dialog open={showPendingRequestsDialog} onOpenChange={setShowPendingRequestsDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center text-orange-600">
-                <UserPlus className="h-5 w-5 mr-2" />
-                Pending Join Requests ({pendingParticipants.length})
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {pendingParticipants.length === 0 ? (
-                <div className="text-center py-8">
-                  <UserPlus className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <p className="text-gray-500">No pending join requests</p>
-                </div>
-              ) : (
-                pendingParticipants.map(participant => (
-                  <div key={participant.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-center">
-                      <Avatar className="h-10 w-10 mr-3">
-                        <AvatarFallback className="bg-blue-100 text-blue-600">
-                          {participant.user_name?.charAt(0) || 'U'}
-                        </AvatarFallback>
-                      </Avatar>
+        
+        {/* Available Sessions */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold text-[#6E59A5]">Active Sessions</h2>
+          
+          {!loading && Array.isArray(sessions) && sessions.length === 0 ? (
+            <Card>
+              <CardContent className="text-center py-12">
+                <Users className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No active sessions</h3>
+                <p className="text-gray-600 mb-4">Be the first to create a focus session!</p>
+                <Button 
+                  className="bg-[#9b87f5] hover:bg-[#7E69AB] text-white"
+                  onClick={() => setShowCreateDialog(true)}
+                >
+                  Create Session
+                </Button>
+              </CardContent>
+            </Card>
+          ) : !loading && Array.isArray(sessions) ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sessions.map((session) => (
+                <Card key={session.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-medium text-gray-900">{participant.user_name}</p>
-                        <p className="text-sm text-gray-500">Wants to join your session</p>
+                        <CardTitle className="text-lg text-[#6E59A5]">{session.title}</CardTitle>
+                        <p className="text-sm text-gray-600">by {session.creator_name}</p>
+                      </div>
+                      <Badge className={getSessionTypeColor(session.session_type)}>
+                        {session.session_type}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center text-gray-600">
+                          <Users className="h-4 w-4 mr-1" />
+                          {session.participant_count || 0}/{session.max_participants}
+                        </span>
+                        <span className="flex items-center text-gray-600">
+                          <Clock className="h-4 w-4 mr-1" />
+                          {formatDuration(session.started_at, session.ends_at)}
+                        </span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-500">
+                          {session.duration_minutes} min session
+                        </span>
+                        <Button 
+                          size="sm"
+                          className="bg-[#9b87f5] hover:bg-[#7E69AB] text-white"
+                          onClick={() => joinSession(session.id)}
+                          disabled={loading || !session.can_join || session.is_full}
+                        >
+                          <UserPlus className="h-4 w-4 mr-1" />
+                          {session.is_full ? 'Full' : 'Join'}
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex space-x-2">
-                      <Button 
-                        size="sm" 
-                        className="bg-green-500 hover:bg-green-600 text-white"
-                        onClick={() => {
-                          handleAdmit(participant.id);
-                          if (pendingParticipants.length === 1) {
-                            setShowPendingRequestsDialog(false);
-                          }
-                        }}
-                      >
-                        Admit
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="destructive"
-                        onClick={() => {
-                          handleReject(participant.id);
-                          if (pendingParticipants.length === 1) {
-                            setShowPendingRequestsDialog(false);
-                          }
-                        }}
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowPendingRequestsDialog(false)}
-              >
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
+          ) : null}
+        </div>
       </div>
       <ToastContainer/>
     </div>

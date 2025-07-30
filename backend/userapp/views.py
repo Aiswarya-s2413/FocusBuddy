@@ -2712,7 +2712,7 @@ class RejectParticipantView(APIView):
         return Response({'message': 'Participant rejected.', 'participant': serializer.data}, status=200)
 
 # --- MentorReportAPIView ---
-from rest_framework.exceptions import ValidationError
+
 class MentorReportAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
