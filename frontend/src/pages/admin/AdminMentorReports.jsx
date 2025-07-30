@@ -30,16 +30,18 @@ const AdminMentorReports = () => {
     setLoading(false);
   };
 
-  const toggleMentorBlock = async (mentor_id, currentlyActive) => {
-    const action = currentlyActive ? "block" : "unblock";
+  const handleBlockUser = async (userId) => {
     try {
-      await adminAxios.post(`block-mentor/${mentor_id}/`);
-      toast.success(`Mentor ${action}ed!`);
-      fetchReports();
+      const response = await adminAxios.post(`/users/${userId}/block/`);
+      setUsers(users.map(user => 
+        user.id === userId ? { ...user, is_active: !user.is_active } : user
+      ));
+      toast.success(response.data.message);
     } catch (err) {
-      toast.error(`Failed to ${action} mentor`);
+      toast.error(err.response?.data?.error || "Failed to update user status");
     }
   };
+
 
   useEffect(() => {
     fetchReports();
@@ -140,7 +142,7 @@ const AdminMentorReports = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">{new Date(r.created_at).toLocaleString()}</div>
                   </td>
-                  {/* <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap">
                     {r.mentor_is_active ? (
                       <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Active</span>
                     ) : (
@@ -155,7 +157,7 @@ const AdminMentorReports = () => {
                     >
                       {r.mentor_is_active ? "Block" : "Unblock"}
                     </Button>
-                  </td> */}
+                  </td>
                 </tr>
               ))}
             </tbody>
