@@ -397,6 +397,11 @@ class MentorSerializer(serializers.ModelSerializer):
     def get_rating(self, obj):
         return float(obj.rating)
 
+class SessionPaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionPayment
+        fields=['amount']
+
 class MentorSessionSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True)
     mentor_name = serializers.CharField(source='mentor.user.name', read_only=True)
@@ -404,6 +409,7 @@ class MentorSessionSerializer(serializers.ModelSerializer):
     subjects_data = serializers.SerializerMethodField(read_only=True)
     session_datetime = serializers.SerializerMethodField(read_only=True)
     is_upcoming = serializers.SerializerMethodField(read_only=True)
+    payment=SessionPaymentSerializer(read_only=True)
     
     class Meta:
         model = MentorSession
@@ -415,7 +421,7 @@ class MentorSessionSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'confirmed_at', 'started_at', 'ended_at',
             'cancelled_at', 'cancelled_by', 'cancellation_reason',
             'student_name', 'mentor_name', 'mentor_profile_image', 'subjects_data',
-            'session_datetime', 'is_upcoming'
+            'session_datetime', 'is_upcoming', 'payment'
         ]
         read_only_fields = [
             'created_at', 'updated_at', 'confirmed_at', 'started_at', 
