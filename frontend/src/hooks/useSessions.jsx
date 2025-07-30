@@ -58,7 +58,8 @@ export const useSessions = () => {
       // Additional fields from backend
       scheduledDate: sessionData.scheduled_date,
       scheduledTime: sessionData.scheduled_time,
-      isUpcoming: sessionData.is_upcoming
+      isUpcoming: sessionData.is_upcoming,
+      payment: sessionData.payment
     };
   }, []);
 
