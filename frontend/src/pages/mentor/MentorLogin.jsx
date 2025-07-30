@@ -58,7 +58,20 @@ const MentorLogin = () => {
         navigate("/mentor/upload-profile");
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Login failed. Please try again.");
+      console.log("Login error:", err.response?.data); 
+      
+      // Handle different error response structures
+      if (err.response?.data?.non_field_errors) {
+        setError(err.response.data.non_field_errors[0]);
+      } else if (err.response?.data?.error) {
+        setError(err.response.data.error);
+      } else if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else if (typeof err.response?.data === 'string') {
+        setError(err.response.data);
+      } else {
+        setError("Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
