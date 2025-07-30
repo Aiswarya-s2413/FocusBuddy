@@ -369,7 +369,7 @@ console.log('Payment amount:', session.payment?.amount);
       <Card key={session.id}>
         <CardContent className="p-6">
           <div className="flex items-start gap-4">
-            <Avatar className="h-17 w-17 border-2 border-purple-100">
+            <Avatar className="h-13 w-13 border-2 border-purple-100">
               <AvatarImage 
                 src={session.mentor.profilePicture || session.mentor.profile_image_url} 
                 alt={session.mentor.name}
