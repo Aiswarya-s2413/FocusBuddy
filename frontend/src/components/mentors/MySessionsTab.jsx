@@ -361,6 +361,9 @@ const MySessionsTab = ({ sessions, pagination, onCancelSession, onSubmitFeedback
   // Render session card
   const renderSessionCard = (session, isPast = false) => {
     const { date, time } = formatDateTime(session.dateTime);
+    console.log('Session object:', session);
+console.log('Payment:', session.payment);
+console.log('Payment amount:', session.payment?.amount);
     
     return (
       <Card key={session.id}>
