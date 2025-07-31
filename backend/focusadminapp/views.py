@@ -1141,55 +1141,68 @@ class AdminEndFocusBuddySessionView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-class AdminDashboardView(APIView): #cached
+class AdminDashboardView(APIView):#cached
     """
     Main admin dashboard view that provides all the data needed for the dashboard
     """
     authentication_classes = [AdminCookieJWTAuthentication]
     permission_classes = [IsAuthenticated, IsAdminUser]
 
+    # Cache settings
+    CACHE_TIMEOUT = 18000  # 5 hour
+    METRICS_CACHE_KEY = "admin_dashboard_metrics"
+    USAGE_CACHE_KEY_PREFIX = "admin_dashboard_usage"
+
     def get(self, request):
         logger.info("Entered AdminDashboardView.get")
         try:
-            # Use a cache key unique to the admin user and period param
-            user_id = getattr(request.user, 'id', 'anon')
             period = request.GET.get('period', 'daily')
-            cache_key = f"admin_dashboard_{user_id}_{period}_noactivities"
-            cached_data = cache.get(cache_key)
-            if cached_data:
-                logger.info("Returning cached dashboard data (no activities)")
+            
+            # Try to get cached data
+            metrics = cache.get(self.METRICS_CACHE_KEY)
+            usage_data = cache.get(f"{self.USAGE_CACHE_KEY_PREFIX}_{period}")
+            
+            if metrics and usage_data:
+                logger.info("Returning cached dashboard data")
                 # Always fetch recent activities live
                 recent_activities = self.get_recent_activities()
                 dashboard_data = {
-                    'metrics': cached_data['metrics'],
-                    'usage_data': cached_data['usage_data'],
+                    'metrics': metrics,
+                    'usage_data': usage_data,
                     'recent_activities': recent_activities
                 }
                 serializer = AdminDashboardSerializer(dashboard_data)
                 return Response(serializer.data, status=status.HTTP_200_OK)
 
-            # Get key metrics
-            metrics = self.get_key_metrics()
-            # Get usage data
-            usage_data = self.get_usage_data(period)
-            # Always fetch recent activities live
+            # Get fresh data only for what's not cached
+            if not metrics:
+                metrics = self.get_key_metrics()
+                cache.set(self.METRICS_CACHE_KEY, metrics, timeout=self.CACHE_TIMEOUT)
+                
+            if not usage_data:
+                usage_data = self.get_usage_data(period)
+                cache.set(f"{self.USAGE_CACHE_KEY_PREFIX}_{period}", usage_data, timeout=self.CACHE_TIMEOUT)
+            
+            # Always get fresh recent activities
             recent_activities = self.get_recent_activities()
+
             dashboard_data = {
                 'metrics': metrics,
                 'usage_data': usage_data,
                 'recent_activities': recent_activities
             }
-            # Only cache metrics and usage_data
-            cache.set(cache_key, {'metrics': metrics, 'usage_data': usage_data}, timeout=120)
+            
             serializer = AdminDashboardSerializer(dashboard_data)
-            logger.info("AdminDashboardView.get successful (no activities cached)")
+            logger.info("AdminDashboardView.get successful with fresh data")
             return Response(serializer.data, status=status.HTTP_200_OK)
+            
         except Exception as e:
             logger.error(f"Error in AdminDashboardView.get: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'Failed to fetch dashboard data: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
     def get_key_metrics(self):
         """Get key platform metrics"""

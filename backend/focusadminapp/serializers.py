@@ -329,7 +329,7 @@ class PlatformStatsSerializer(serializers.Serializer):
     total_revenue = serializers.DecimalField(max_digits=10, decimal_places=2)
 
 class MentorReportListSerializer(serializers.ModelSerializer):
-    mentor_id = serializers.IntegerField(source='mentor.id', read_only=True)
+    mentor_id = serializers.IntegerField(source='mentor.user.id', read_only=True)
     mentor_name = serializers.CharField(source='mentor.user.name', read_only=True)
     mentor_email = serializers.CharField(source='mentor.user.email', read_only=True)
     mentor_is_active = serializers.BooleanField(source='mentor.user.is_active', read_only=True)
