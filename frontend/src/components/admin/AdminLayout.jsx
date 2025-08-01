@@ -13,7 +13,7 @@ const AdminLayout = ({ children }) => {
     // Run token refresh every 14 minutes
     useEffect(() => {
       const interval = setInterval(() => {
-        fetch("/api/admin/token/refresh/", {
+        fetch("/api/admin/refresh-token/", {
           method: "POST",
           credentials: "include",
         })
