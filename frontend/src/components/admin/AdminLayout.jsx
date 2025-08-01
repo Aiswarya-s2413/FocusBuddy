@@ -10,6 +10,30 @@ const AdminLayout = ({ children }) => {
   const isAuthenticated = useSelector(state => state.admin.isAuthenticated);
   const loading = useSelector(state => state.admin.loading);
 
+    // Run token refresh every 14 minutes
+    useEffect(() => {
+      const interval = setInterval(() => {
+        fetch("/api/admin/token/refresh/", {
+          method: "POST",
+          credentials: "include",
+        })
+          .then((res) => {
+            if (!res.ok) {
+              throw new Error("Failed to refresh token");
+            }
+            return res.json();
+          })
+          .then((data) => {
+            console.log("Token refreshed:", data.message);
+          })
+          .catch((err) => {
+            console.error("Token refresh failed:", err);
+          });
+      }, 14 * 60 * 1000); // 14 minutes
+  
+      return () => clearInterval(interval);
+    }, []);
+
   useEffect(() => {
     if (!isAuthenticated && !loading) {
       dispatch(checkAuthStatus());
