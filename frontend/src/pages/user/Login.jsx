@@ -314,7 +314,7 @@ useEffect(() => {
         </Card>
         <ToastContainer />
         <div className="absolute top-4 left-4 md:left-8">
-          <Link to="/" className="text-sm text-black-600 hover:text-black-700 font-large hover:underline">Back to Home</Link>
+          <Link to="/" className="text-sm text-white hover:text-white-600 hover:text-white-700 font-large hover:underline">Back to Home</Link>
         </div>
       </div>
     </div>
