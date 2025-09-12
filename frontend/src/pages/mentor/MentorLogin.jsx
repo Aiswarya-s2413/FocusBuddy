@@ -167,7 +167,9 @@ const MentorLogin = () => {
           </p>
         </CardFooter>
       </Card>
-
+      <div className="absolute top-4 left-4 md:left-8">
+                <Link to="/" className="text-sm text-purple-600 hover:text-purple-700 font-large hover:underline">Back to Home</Link>
+              </div>
       <style jsx>{`
         @keyframes slide-in {
           from {

@@ -142,6 +142,9 @@ const MentorSignup = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
+       <div className="absolute top-4 left-4 md:left-8">
+                      <Link to="/" className="text-sm text-purple-600 hover:text-purple-700 font-large hover:underline">Back to Home</Link>
+                    </div>
       <Card className="w-full max-w-md">
         <CardHeader>
           <h2 className="text-2xl font-semibold text-center flex items-center justify-center gap-2 text-gray-900">

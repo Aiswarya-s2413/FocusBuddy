@@ -333,6 +333,9 @@ const Signup = () => {
 
       {/* Right Side - Signup Form */}
       <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
+        <div className="absolute top-4 left-4 md:left-8">
+                  <Link to="/" className="text-sm text-white hover:text-white-600 hover:text-white-700 font-large hover:underline">Back to Home</Link>
+                </div>
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="flex items-center justify-center space-x-2 mb-4">
