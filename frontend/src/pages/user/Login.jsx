@@ -216,6 +216,9 @@ useEffect(() => {
 
       {/* Right Side - Login Form */}
       <div className="flex-1 flex items-center justify-center px-4 py-8 bg-gray-50">
+      <div className="absolute top-4 left-4 md:left-8">
++          <Link to="/" className="text-sm text-purple-600 hover:text-purple-700 font-medium hover:underline">Back to Home</Link>
++        </div>
         <Card className="w-full max-w-md shadow-xl border-0">
           <CardHeader className="text-center pb-6">
             <div className="flex items-center justify-center gap-3 mb-2">
