@@ -532,8 +532,7 @@ const handleBookSession = async () => {
     const durationHours = getDurationInMinutes(duration) / 60;
     const baseAmount = rate * durationHours;
     const platformFee = baseAmount * 0.10;
-    const taxAmount = baseAmount * 0.18;
-    return (baseAmount + platformFee + taxAmount).toFixed(2);
+    return (baseAmount + platformFee).toFixed(2);
   };
 
   // Check if a date should be disabled (no availability for that day)
@@ -763,7 +762,7 @@ const handleBookSession = async () => {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Total Price (incl. fees & tax):</span>
+                      <span className="text-gray-600">Total Price :</span>
                       <span className="font-medium">Rs.{calculatePrice()}</span>
                     </div>
                   </div>
