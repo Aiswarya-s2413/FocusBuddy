@@ -64,7 +64,7 @@ class SignupView(APIView):
             try:
                 user = serializer.save()
                 otp = user.otp
-                print(f"OTP: {otp}")
+                
                 logger.info(f"User created/updated successfully: {user.email}")
                 
                 try:
@@ -100,7 +100,7 @@ class SignupView(APIView):
                 )
         
         logger.warning("Serializer validation failed: %s", serializer.errors)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST) 
 
 class OtpVerifyView(APIView):
     permission_classes=[]

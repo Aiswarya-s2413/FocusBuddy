@@ -532,7 +532,7 @@ const handleBookSession = async () => {
     const durationHours = getDurationInMinutes(duration) / 60;
     const baseAmount = rate * durationHours;
     const platformFee = baseAmount * 0.10;
-    return (baseAmount + platformFee).toFixed(2);
+    return (baseAmount ).toFixed(2);
   };
 
   // Check if a date should be disabled (no availability for that day)
