@@ -53,12 +53,13 @@ module.exports = {
         sans: ["Inter", ...fontFamily.sans],
       },
       
-      // Animations and keyframes
+      // Animations and keyframes (with the new 'float' animation added)
       animation: {
         'fade-in-up': 'fade-in-up 0.8s ease-out forwards',
         'scale-in': 'scale-in 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards',
         'ping-slow': 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
         'blob': 'blob 7s infinite',
+        'float': 'float 10s ease-in-out infinite',
       },
       keyframes: {
         'fade-in-up': {
@@ -74,6 +75,11 @@ module.exports = {
           '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
           '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
           '100%': { transform: 'translate(0px, 0px) scale(1)' },
+        },
+        'float': {
+          '0%': { transform: 'translateY(0px) translateX(0px)' },
+          '50%': { transform: 'translateY(-10px) translateX(10px)' },
+          '100%': { transform: 'translateY(0px) translateX(0px)' },
         }
       }
     },

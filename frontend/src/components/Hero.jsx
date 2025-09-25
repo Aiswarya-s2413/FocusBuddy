@@ -17,15 +17,23 @@ const Hero = () => {
   return (
     <section className="relative min-h-[90vh] flex items-center justify-center py-20 overflow-hidden bg-white">
       
-      {/* Background - Soft, animated blobs in shades of purple and pink */}
+      {/* Background - The main abstract blobs and floating elements */}
       <div className="absolute inset-0 z-0 opacity-15">
         <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-theme-purple rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob"></div>
         <div className="absolute top-[50%] left-[50%] w-80 h-80 bg-theme-pink rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob animation-delay-2000"></div>
         <div className="absolute bottom-[-20%] right-[-10%] w-72 h-72 bg-focusbuddy-purple rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob animation-delay-4000"></div>
       </div>
       
+      {/* Subtle Floating Shapes (New Addition) */}
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        <div className="absolute top-[20%] left-[10%] w-4 h-4 bg-focusbuddy-purple rounded-full opacity-60 animate-float animation-delay-1500"></div>
+        <div className="absolute top-[60%] right-[5%] w-6 h-6 border-2 border-theme-pink rounded-full opacity-60 animate-float animation-delay-3000"></div>
+        <div className="absolute bottom-[15%] left-[5%] w-3 h-3 bg-theme-purple rounded-full opacity-60 animate-float animation-delay-4500"></div>
+        <div className="absolute top-[40%] right-[20%] w-2 h-2 border-2 border-focusbuddy-purple rounded-full opacity-60 animate-float animation-delay-6000"></div>
+      </div>
+
       {/* Hero Content - Centered and visually appealing */}
-      <div className="container mx-auto max-w-4xl relative z-10 px-4">
+      <div className="container mx-auto max-w-4xl relative z-20 px-4">
         <div className="text-center animate-fade-in-up">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold mb-6 text-gray-900 leading-tight">
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-theme-purple to-focusbuddy-purple">Boost Focus,</span> Track Moods, Reflect Daily
