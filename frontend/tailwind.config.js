@@ -44,7 +44,7 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
 
-        // New colors for the white and purple theme
+        // Colors for the white and purple theme
         'focusbuddy-purple': '#A855F7',
         'theme-purple': '#8B5CF6',
         'theme-pink': '#EC4899',
@@ -53,13 +53,12 @@ module.exports = {
         sans: ["Inter", ...fontFamily.sans],
       },
       
-      // Animations and keyframes (with the new 'float' animation added)
+      // Animations and keyframes (with the new 'bg-wave-slow' animation added)
       animation: {
         'fade-in-up': 'fade-in-up 0.8s ease-out forwards',
         'scale-in': 'scale-in 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards',
         'ping-slow': 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
-        'blob': 'blob 7s infinite',
-        'float': 'float 10s ease-in-out infinite',
+        'bg-wave-slow': 'bg-wave-slow 15s ease-in-out infinite',
       },
       keyframes: {
         'fade-in-up': {
@@ -70,16 +69,13 @@ module.exports = {
           '0%': { transform: 'scale(0.8)', opacity: '0' },
           '100%': { transform: 'scale(1)', opacity: '1' },
         },
-        blob: {
-          '0%': { transform: 'translate(0px, 0px) scale(1)' },
-          '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
-          '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
-          '100%': { transform: 'translate(0px, 0px) scale(1)' },
+        'ping-slow': {
+          '0%, 100%': { transform: 'scale(1)', opacity: '0.2' },
+          '50%': { transform: 'scale(1.2)', opacity: '0.4' }
         },
-        'float': {
-          '0%': { transform: 'translateY(0px) translateX(0px)' },
-          '50%': { transform: 'translateY(-10px) translateX(10px)' },
-          '100%': { transform: 'translateY(0px) translateX(0px)' },
+        'bg-wave-slow': {
+          '0%, 100%': { 'background-size': '200% 200%', 'background-position': 'left top' },
+          '50%': { 'background-size': '200% 200%', 'background-position': 'right bottom' }
         }
       }
     },
