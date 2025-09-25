@@ -44,16 +44,16 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
 
-        // New colors from the updated hero component
-        'focusbuddy-blue': '#4F46E5',
-        'focusbuddy-green': '#22C55E',
+        // New colors for the white and purple theme
         'focusbuddy-purple': '#A855F7',
+        'theme-purple': '#8B5CF6',
+        'theme-pink': '#EC4899',
       },
       fontFamily: {
         sans: ["Inter", ...fontFamily.sans],
       },
       
-      // Add the new animations and keyframes here
+      // Animations and keyframes
       animation: {
         'fade-in-up': 'fade-in-up 0.8s ease-out forwards',
         'scale-in': 'scale-in 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards',
